@@ -15,14 +15,14 @@ from __future__ import annotations
 import html
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from .models import Finding, Lead, Service
 from .policy import Policy
-from .runner import Runner
+from .runner import Runner, have
 from .scope import Scope
-from .tools import net, snmp
+from .tools import iis, net, snmp, sslscan
 
 
 @dataclass
@@ -30,6 +30,10 @@ class ProbeContext:
     scope: Scope
     policy: Policy
     runner: Runner
+    # Optional model client. None means "no model available", which every
+    # consumer must handle by falling back to deterministic analysis rather
+    # than skipping the check -- see extscan/llm/__init__.py.
+    llm: object | None = None
 
 
 ProbeFn = Callable[[ProbeContext, Service], tuple[list[Finding], list[Lead]]]
@@ -564,6 +568,35 @@ def ssh_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead
                       "only; distributions backport fixes without changing the banner.",
         tags=["ssh"],
     )]
+    return findings, []
+
+
+# ---------------------------------------------------------------------------
+# IIS / ASP.NET
+# ---------------------------------------------------------------------------
+
+@register("iis", lambda s: s.is_http and iis.looks_like_iis(s),
+          "IIS/ASP.NET checks: diagnostic handlers, WebDAV, 8.3 names, error pages.")
+def iis_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
+    return iis.probe_iis(svc, ctx.scope, ctx.policy.http)
+
+
+# ---------------------------------------------------------------------------
+# sslscan
+# ---------------------------------------------------------------------------
+
+@register("sslscan", lambda s: s.proto == "tcp" and s.is_tls,
+          "Cipher-level TLS audit via sslscan (skipped when not installed).")
+def sslscan_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
+    """Cipher enumeration, which the built-in TLS probe cannot do.
+
+    Python's ssl module only offers what the local OpenSSL build supports, so
+    it cannot prove a server accepts RC4. sslscan links its own crypto and can.
+    Absent, this is a no-op: the built-in probe already covered protocols.
+    """
+    if not have("sslscan"):
+        return [], []
+    _res, findings = sslscan.run(ctx.runner, ctx.scope, svc.host, svc.port)
     return findings, []
 
 

@@ -1,0 +1,30 @@
+{
+  "profile": "standard",
+
+  "llm": {
+    "enabled": true,
+    "provider": "bedrock",
+    "model": "anthropic.claude-opus-5-5",
+    "aws_region": "eu-west-2",
+    "effort": "medium",
+    "max_tokens": 1500,
+
+    "max_input_chars": 40000,
+
+    "retry_attempts": 3,
+    "retry_base_delay": 2.0,
+    "retry_budget_sec": 90,
+    "circuit_failure_threshold": 3,
+    "circuit_cooldown_sec": 120
+  },
+
+  "recon": {
+    "sources": ["crt.sh", "subfinder"],
+    "max_names": 2000
+  },
+
+  "nmap": {
+    "chunk_size": 32,
+    "host_timeout": "30m"
+  }
+}

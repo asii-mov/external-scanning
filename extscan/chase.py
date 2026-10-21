@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 from urllib.parse import urljoin, urlsplit
 
 from .models import Finding, Lead
@@ -148,7 +148,6 @@ def chase_openapi(ctx: ProbeContext, lead: Lead) -> ChaseResult:
 
     host = urlsplit(spec_url).hostname or lead.host
     port = lead.port
-    tentative = False
 
     try:
         spec = json.loads(resp.text)
@@ -333,6 +332,21 @@ def chase_openapi(ctx: ProbeContext, lead: Lead) -> ChaseResult:
             tags=["openapi", "scope", "asset-discovery"],
         ))
 
+    # Optional model commentary, as a separate clearly-labelled finding. The
+    # deterministic findings above are complete without it.
+    if ctx.llm is not None and ctx.policy.llm.analyse_openapi:
+        from .llm.analyst import analyse_openapi
+
+        commentary = analyse_openapi(
+            ctx.llm, host=host, port=port, spec_url=spec_url,
+            spec_text=resp.text,
+            operation_summary=(f"{len(operations)} operations, {len(unauth)} with no "
+                               f"declared auth, {len(unauth_writes)} of those writes"),
+            deterministic_severity="high" if unauth_writes else "medium",
+        )
+        if commentary is not None:
+            findings.append(commentary)
+
     note = (f"parsed {spec_url}: {len(operations)} operations, "
             f"{len(unauth)} without declared auth ({len(unauth_writes)} writes)")
     return ChaseResult(findings, leads, note=note)
@@ -407,7 +421,6 @@ def chase_graphql(ctx: ProbeContext, lead: Lead) -> ChaseResult:
 
 def _post_json(url: str, body: str, ctx: ProbeContext) -> net.Response:
     """POST a JSON body. Kept separate because net.fetch is GET-shaped."""
-    import socket
     import ssl
     import urllib.error
     import urllib.request
@@ -418,7 +431,8 @@ def _post_json(url: str, body: str, ctx: ProbeContext) -> net.Response:
         return net.Response(url=url, status=0, error=f"scope refusal: {exc}")
 
     hp = ctx.policy.http
-    req = urllib.request.Request(url, data=body.encode(), method="POST")
+    # Scheme restricted to http/https by assert_url above.
+    req = urllib.request.Request(url, data=body.encode(), method="POST")  # noqa: S310
     req.add_header("Content-Type", "application/json")
     req.add_header("User-Agent", hp.user_agent)
     handlers: list = [urllib.request.HTTPSHandler(context=net._ssl_context(hp))]
@@ -433,12 +447,12 @@ def _post_json(url: str, body: str, ctx: ProbeContext) -> net.Response:
     except urllib.error.HTTPError as exc:
         try:
             payload = exc.read(hp.max_body_bytes)
-        except Exception:                            # noqa: BLE001
+        except Exception:
             payload = b""
         return net.Response(url=url, status=exc.status, reason=exc.reason or "",
                             headers={k.lower(): v for k, v in (exc.headers or {}).items()},
                             body=payload)
-    except (urllib.error.URLError, socket.timeout, TimeoutError, ssl.SSLError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, ssl.SSLError, OSError) as exc:
         return net.Response(url=url, status=0, error=f"{type(exc).__name__}: {exc}")
 
 
@@ -501,7 +515,7 @@ def chase_web_paths(ctx: ProbeContext, lead: Lead) -> ChaseResult:
         evidence=(f"GET {url} -> {resp.status} {resp.reason}\n"
                   f"content-type: {resp.content_type}  length: {len(resp.body)}\n\n"
                   + _redact(resp.text[:1500])
-                  + (("\n\nlinks:\n" + "\n".join(f"  {l}" for l in links)) if links else "")),
+                  + (("\n\nlinks:\n" + "\n".join(f"  {link}" for link in links)) if links else "")),
         review_required=True,
         review_reason="An auditor should judge whether the content disclosed here matters "
                       "for this client.",
@@ -650,8 +664,8 @@ def chase_snmp_walk(ctx: ProbeContext, lead: Lead) -> ChaseResult:
         evidence_lines.append(f"{label}:")
         evidence_lines += [f"  {oid} = {value}" for oid, value in rows[:25]]
 
-    addresses = [v for oid, v in collected.get("ipAdEntAddr", [])]
-    interfaces = [v for oid, v in collected.get("ifDescr", [])]
+    addresses = [value for _oid, value in collected.get("ipAdEntAddr", [])]
+    interfaces = [value for _oid, value in collected.get("ifDescr", [])]
 
     return ChaseResult([Finding(
         title=f"SNMP discloses internal network topology on {lead.host}",
@@ -723,6 +737,6 @@ def chase(ctx: ProbeContext, lead: Lead) -> ChaseResult:
         return handler(ctx, lead)
     except ScopeError as exc:
         return ChaseResult([], [], note=f"scope refusal: {exc}")
-    except Exception as exc:                          # noqa: BLE001
+    except Exception as exc:
         # One bad lead must not abort the run; record and move on.
         return ChaseResult([], [], note=f"handler error: {type(exc).__name__}: {exc}")

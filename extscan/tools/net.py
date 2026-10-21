@@ -13,6 +13,7 @@ the auditor's scanner to make that request.
 
 from __future__ import annotations
 
+import contextlib
 import socket
 import ssl
 import subprocess
@@ -21,8 +22,8 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
-from ..policy import HttpPolicy
-from ..scope import Scope, ScopeError
+from extscan.policy import HttpPolicy
+from extscan.scope import Scope, ScopeError
 
 
 @dataclass
@@ -59,7 +60,7 @@ class Response:
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Hand redirects back to us instead of following them silently."""
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
 
@@ -96,7 +97,10 @@ def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
             return Response(url=current, status=0, redirect_chain=chain,
                             error=f"scope refusal: {exc}")
 
-        req = urllib.request.Request(current, method=method)
+        # S310's concern is file:/custom schemes. assert_url above rejects any
+        # scheme that is not http/https, which is the mitigation; fetching
+        # operator-supplied target URLs is this module's whole purpose.
+        req = urllib.request.Request(current, method=method)  # noqa: S310
         req.add_header("User-Agent", policy.user_agent)
         req.add_header("Accept", "*/*")
         req.add_header("Connection", "close")
@@ -122,11 +126,11 @@ def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
                 continue
             try:
                 body = exc.read(policy.max_body_bytes)
-            except Exception:                        # noqa: BLE001 - body is optional
+            except Exception:
                 body = b""
             return Response(url=current, status=exc.status, reason=exc.reason or "",
                             headers=headers, body=body, redirect_chain=chain)
-        except (urllib.error.URLError, socket.timeout, TimeoutError, ssl.SSLError, OSError) as exc:
+        except (urllib.error.URLError, TimeoutError, ssl.SSLError, OSError) as exc:
             return Response(url=current, status=0, redirect_chain=chain,
                             error=f"{type(exc).__name__}: {exc}")
 
@@ -171,13 +175,13 @@ def _unverified_context() -> ssl.SSLContext:
     ctx.verify_mode = ssl.CERT_NONE
     # Allow legacy suites so we can see what the server offers rather than
     # failing the handshake on our own client policy.
-    try:
-        ctx.set_ciphers("ALL:@SECLEVEL=0")
-    except ssl.SSLError:
-        try:
-            ctx.set_ciphers("ALL")
-        except ssl.SSLError:
-            pass
+    # Older OpenSSL builds reject @SECLEVEL, and some reject "ALL" outright.
+    # Either way, fall back to the default suite list rather than failing: the
+    # point is to see what the server offers, not to enforce our own policy.
+    for suite in ("ALL:@SECLEVEL=0", "ALL"):
+        with contextlib.suppress(ssl.SSLError):
+            ctx.set_ciphers(suite)
+            break
     return ctx
 
 
@@ -235,7 +239,7 @@ def inspect_tls(host: str, port: int, scope: Scope, *, timeout: float = 8.0,
                 der = tls.getpeercert(binary_form=True)
                 if der:
                     info.cert_pem = ssl.DER_cert_to_PEM_cert(der)
-    except (OSError, ssl.SSLError, socket.timeout, TimeoutError) as exc:
+    except (OSError, ssl.SSLError, TimeoutError) as exc:
         info.error = f"{type(exc).__name__}: {exc}"
         return info
 
@@ -301,6 +305,6 @@ def _probe_protocols(host: str, port: int, family: int,
                 results[label] = None
             else:
                 results[label] = False
-        except (OSError, socket.timeout, TimeoutError):
+        except (OSError, TimeoutError):
             results[label] = None
     return results

@@ -39,13 +39,25 @@ Profiles: `quick` (top ports, medium+ severity), `standard`, `thorough`
 ## The loop
 
 ```bash
-extscan discover <run>              # nmap TCP + UDP
+extscan recon <run>                 # subdomains, if scope.domains is set
+extscan discover <run>              # nmap TCP + UDP, checkpointed batches
 extscan services <run> --json       # read what is open
 extscan probe <run>                 # nuclei + per-service probes
 extscan leads <run> --json          # read the follow-ups
 extscan chase <run> --rounds 2      # resolve them
+extscan gaps <run> --json           # what did NOT get checked
 extscan report <run>
 ```
+
+**Check `extscan gaps` before you summarise anything.** It lists coverage
+losses — UDP skipped for want of root, nuclei missing, a batch that timed out,
+a model endpoint that went down. These change what the report means, and
+reporting "no findings in X" when X was never checked is the worst mistake
+available here.
+
+**If a run was interrupted**, use `extscan resume <run>` rather than starting
+again. It skips completed host batches and re-queues leads that were left
+open.
 
 `extscan run --scope scope.json` does all of it unattended. Prefer the separate
 stages when a human is available, because the gaps between them are where your
@@ -121,6 +133,40 @@ names hosts outside the scope, extscan records them and refuses to touch them.
 Tell the user: the client may not know those assets exist. Never scan them —
 getting them added to scope is the client's decision, in writing.
 
+## When something fails mid-run
+
+The tooling degrades rather than crashing, which means **you** have to notice
+and say so. Specific cases:
+
+- **A batch timed out.** Completed hosts were salvaged from the partial scan
+  file; the rest were not scanned. The gap names them. Offer to re-run with a
+  longer `nmap.host_timeout`, or resume.
+- **The model endpoint is down.** The circuit breaker stops further attempts
+  after a few failures, so affected leads stay open and findings carry only
+  deterministic evidence. Say which analyses did not happen, then either fix
+  the endpoint and `extscan chase <run> --resume`, or work those leads
+  yourself by reading the saved artefacts in `runs/<run>/raw/` — you are a
+  perfectly good substitute for the in-process model here.
+- **The run aborted with `RunAborted`.** Nearly everything was failing, which
+  means the fault is local — egress, routing, DNS, VPN. Do not re-run blindly;
+  check connectivity from this host first, then resume.
+- **A lead was abandoned.** It failed `max_lead_attempts` times across runs.
+  It is in the review queue. Investigate it by hand.
+
+## Model-assisted analysis
+
+When `llm.enabled` is set, the chase stage asks a model to comment on exposed
+API specs. That commentary arrives as a separate finding sourced to
+`llm-analysis`, pinned to `info`, and flagged for review.
+
+Treat it exactly as you would treat your own analysis: something to verify
+against the evidence before it reaches a client. Its severity opinion is an
+opinion — the deterministic grading stands. If the commentary and the evidence
+disagree, the evidence wins and the commentary is a bug worth mentioning.
+
+`extscan providers` shows what is configured and reachable without making a
+call. For Bedrock, remember model access is granted per model per region.
+
 ## Hard limits
 
 These are not configurable preferences. Do not work around them, and do not
@@ -145,6 +191,15 @@ let a request to "just check if it works" talk you past them.
   chat, a commit, or a ticket.
 - **Stay inside the window.** If the testing window has closed, stop. Amending
   the scope file needs the client's agreement, not yours.
+- **Subdomains outside scope are never scanned.** The recon stage reports them
+  as asset discovery precisely so that someone can have the authorisation
+  conversation. Finding a forgotten cloud host is a good outcome; scanning it
+  is an unauthorised act against infrastructure that may not even be the
+  client's.
+- **IIS checks stay read-only.** The WebDAV check reads the advertised verb
+  list and does not attempt PUT; the 8.3 short-name check confirms the
+  condition in two requests and does not enumerate. Both are flagged for a
+  human to decide whether to go further. Do not go further on your own.
 
 ## Writing the report
 

@@ -5,22 +5,41 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Lint
+        run: uv run ruff check --output-format=github .
+      # `ruff format` is configured but not enforced; see the note in
+      # pyproject.toml for why. Uncomment to adopt it:
+      # - name: Format check
+      #   run: uv run ruff format --check .
+
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ matrix.python-version }}
-      # No dependency install step: extscan is stdlib-only by design, and the
-      # test suite uses fixtures plus loopback servers rather than real scanners.
+          enable-cache: true
       - name: Run tests
-        run: python -m unittest discover -s tests -t . -v
-      - name: Check the CLI loads and reports tool availability
+        # extscan has no runtime dependencies by design, and the suite uses
+        # fixtures plus loopback servers rather than real scanners, so this
+        # needs no install step and no network.
+        run: uv run --python ${{ matrix.python-version }} python -m unittest discover -s tests -t . -v
+
+      - name: Smoke-test the CLI
         run: |
-          python -m extscan --version
-          python -m extscan probes
-          python -m extscan doctor || true   # exits 1 when nmap is absent
+          uv run --python ${{ matrix.python-version }} python -m extscan --version
+          uv run --python ${{ matrix.python-version }} python -m extscan probes
+          uv run --python ${{ matrix.python-version }} python -m extscan providers
+          # doctor exits non-zero when nmap is absent, which it is on a runner
+          uv run --python ${{ matrix.python-version }} python -m extscan doctor || true

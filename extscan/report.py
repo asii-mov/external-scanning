@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from .models import Finding, Host, Service
+from .resilience import Degradation
 from .scope import Scope
 from .triage import TriageResult
 
@@ -52,10 +53,12 @@ def _esc(text: str) -> str:
 
 def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
                     services: list[Service], meta: dict,
-                    commands: list[dict] | None = None) -> str:
+                    commands: list[dict] | None = None,
+                    degradations: list[Degradation] | None = None) -> str:
     stats = triaged.stats
     by_sev = stats["findings_by_severity"]
     commands = commands or []
+    degradations = degradations or []
     out: list[str] = []
     w = out.append
 
@@ -108,6 +111,14 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
       f"issued; {stats['distinct_issues']} distinct issue(s) were identified, of which "
       f"{stats['systemic_issues']} appear across three or more hosts.")
     w("")
+    if degradations:
+        serious = sum(1 for d in degradations if d.severity == "serious")
+        w(f"> ⚠️ **This assessment has {len(degradations)} coverage gap(s)"
+          f"{f', {serious} serious' if serious else ''}.** Parts of the intended "
+          "testing did not complete, so some absences in this report reflect "
+          "checks that did not run rather than exposure that is not there. "
+          "See [Coverage gaps](#coverage-gaps) before drawing conclusions.")
+        w("")
 
     # -- review queue ----------------------------------------------------
     w("## Manual review queue")
@@ -234,6 +245,40 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
               f"| {_esc(h.os_guess or '-')} |")
         w("")
 
+    # -- coverage gaps ---------------------------------------------------
+    #
+    # Deliberately placed before the inventory rather than in an appendix. A
+    # reader who skims the findings and stops must still see what was not
+    # checked, otherwise this report overstates its own coverage.
+    if degradations:
+        serious = [d for d in degradations if d.severity == "serious"]
+        w("## Coverage gaps")
+        w("")
+        w(f"{len(degradations)} part(s) of this assessment did not complete as "
+          f"intended{f', {len(serious)} of them materially' if serious else ''}. "
+          "**Absence of findings in the areas below is not evidence that nothing "
+          "is exposed there** -- the check did not run, or ran partially.")
+        w("")
+        w("| Severity | Stage | What was lost | Remedy |")
+        w("|---|---|---|---|")
+        for d in sorted(degradations, key=lambda x: x.severity != "serious"):
+            label = "Serious" if d.severity == "serious" else "Warning"
+            hosts = f" ({len(d.hosts)} host(s))" if d.hosts else ""
+            w(f"| {label} | `{_esc(d.stage)}` | {_esc(d.impact)}{hosts} "
+              f"| {_esc(d.remedy) or '-'} |")
+        w("")
+        w("<details><summary>Technical detail for each gap</summary>")
+        w("")
+        for d in degradations:
+            w(f"- **{_esc(d.component)}** during `{_esc(d.stage)}`: {_esc(d.reason)}")
+            if d.hosts:
+                shown = ", ".join(f"`{h}`" for h in d.hosts[:12])
+                more = f" (+{len(d.hosts) - 12} more)" if len(d.hosts) > 12 else ""
+                w(f"  - affected: {shown}{more}")
+        w("")
+        w("</details>")
+        w("")
+
     # -- methodology -----------------------------------------------------
     w("## Methodology and limitations")
     w("")
@@ -288,7 +333,8 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
 
 
 def render_json(scope: Scope, triaged: TriageResult, hosts: list[Host],
-                services: list[Service], meta: dict) -> str:
+                services: list[Service], meta: dict,
+                degradations: list[Degradation] | None = None) -> str:
     return json.dumps({
         "engagement": scope.summary(),
         "run": meta,
@@ -298,14 +344,17 @@ def render_json(scope: Scope, triaged: TriageResult, hosts: list[Host],
         "hosts": [h.to_dict() for h in hosts],
         "services": [s.to_dict() for s in services],
         "findings": [f.to_dict() for f in triaged.findings],
+        "coverage_gaps": [d.to_dict() for d in (degradations or [])],
     }, indent=2, default=str)
 
 
 def write_reports(path: Path, scope: Scope, triaged: TriageResult, hosts: list[Host],
                   services: list[Service], meta: dict,
-                  commands: list[dict] | None = None) -> dict[str, Path]:
+                  commands: list[dict] | None = None,
+                  degradations: list[Degradation] | None = None) -> dict[str, Path]:
     md = path / "report.md"
     js = path / "report.json"
-    md.write_text(render_markdown(scope, triaged, hosts, services, meta, commands))
-    js.write_text(render_json(scope, triaged, hosts, services, meta))
+    md.write_text(render_markdown(scope, triaged, hosts, services, meta, commands,
+                                  degradations))
+    js.write_text(render_json(scope, triaged, hosts, services, meta, degradations))
     return {"markdown": md, "json": js}

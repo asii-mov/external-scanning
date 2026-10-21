@@ -18,13 +18,13 @@ memory, so a run survives a dropped SSH session.
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from .models import CommandRecord, Finding, Host, Lead, Service
+from .resilience import Degradation
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
@@ -42,7 +42,7 @@ class Store:
     # -- lifecycle -------------------------------------------------------
 
     @classmethod
-    def create(cls, runs_dir: str | Path, engagement: str, run_id: str | None = None) -> "Store":
+    def create(cls, runs_dir: str | Path, engagement: str, run_id: str | None = None) -> Store:
         runs_dir = Path(runs_dir)
         if run_id is None:
             run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{_slug(engagement)}"
@@ -53,7 +53,7 @@ class Store:
         return store
 
     @classmethod
-    def open(cls, runs_dir: str | Path, run_id: str) -> "Store":
+    def open(cls, runs_dir: str | Path, run_id: str) -> Store:
         """Open an existing run. `latest` resolves to the newest run directory."""
         runs_dir = Path(runs_dir)
         if run_id in ("latest", "last"):
@@ -91,7 +91,7 @@ class Store:
         self.path.mkdir(parents=True, exist_ok=True)
         tmp = self.path / f".{name}.tmp"
         tmp.write_text(json.dumps(data, indent=2, sort_keys=False, default=str))
-        os.replace(tmp, self.path / name)
+        tmp.replace(self.path / name)
 
     # -- run metadata ----------------------------------------------------
 
@@ -177,31 +177,75 @@ class Store:
 
     def leads(self, status: str | None = None) -> list[Lead]:
         leads = [Lead.from_dict(d) for d in self._read("leads.json", [])]
-        return [l for l in leads if status is None or l.status == status]
+        return [ld for ld in leads if status is None or ld.status == status]
 
     def add_leads(self, leads: Iterable[Lead], max_total: int = 10_000) -> int:
-        existing = {l.id: l for l in self.leads()}
+        existing = {ld.id: ld for ld in self.leads()}
         added = 0
-        for l in leads:
-            if l.id in existing:
+        for ld in leads:
+            if ld.id in existing:
                 continue
             if len(existing) >= max_total:
                 break
-            existing[l.id] = l
+            existing[ld.id] = ld
             added += 1
-        self._write("leads.json", [l.to_dict() for l in existing.values()])
+        self._write("leads.json", [ld.to_dict() for ld in existing.values()])
         return added
 
     def update_lead(self, lead_id: str, **fields) -> Lead | None:
         leads = self.leads()
         hit = None
-        for l in leads:
-            if l.id == lead_id:
+        for ld in leads:
+            if ld.id == lead_id:
                 for k, v in fields.items():
-                    setattr(l, k, v)
-                hit = l
-        self._write("leads.json", [l.to_dict() for l in leads])
+                    setattr(ld, k, v)
+                hit = ld
+        self._write("leads.json", [ld.to_dict() for ld in leads])
         return hit
+
+    # -- degradations ----------------------------------------------------
+    #
+    # Recorded coverage losses. These are kept with the findings rather than in
+    # a log file precisely because they have to reach the report: a gap nobody
+    # reads about is the failure mode this whole module exists to prevent.
+
+    def degradations(self) -> list[Degradation]:
+        return [Degradation.from_dict(d) for d in self._read("degradations.json", [])]
+
+    def add_degradation(self, deg: Degradation) -> None:
+        existing = self.degradations()
+        key = (deg.stage, deg.component, deg.reason)
+        if any((d.stage, d.component, d.reason) == key for d in existing):
+            return                      # already recorded this run
+        existing.append(deg)
+        self._write("degradations.json", [d.to_dict() for d in existing])
+
+    # -- checkpoints -----------------------------------------------------
+    #
+    # Chunked work (a /20 split into batches, a per-host probe sweep) records
+    # which units finished, so a resumed run does not rescan what it already
+    # has -- and does not skip what it does not.
+
+    def checkpoint(self, stage: str, key: str) -> None:
+        data = self._read("checkpoints.json", {})
+        data.setdefault(stage, [])
+        if key not in data[stage]:
+            data[stage].append(key)
+        self._write("checkpoints.json", data)
+
+    def checkpoints(self, stage: str) -> set[str]:
+        return set(self._read("checkpoints.json", {}).get(stage, []))
+
+    def is_done(self, stage: str, key: str) -> bool:
+        return key in self.checkpoints(stage)
+
+    def clear_checkpoints(self, stage: str | None = None) -> None:
+        if stage is None:
+            self._write("checkpoints.json", {})
+            return
+        data = self._read("checkpoints.json", {})
+        data.pop(stage, None)
+        self._write("checkpoints.json", data)
 
     # -- audit trail -----------------------------------------------------
 
@@ -258,4 +302,5 @@ class Store:
             "review_required": sum(1 for f in findings if f.review_required),
             "leads_open": len(self.leads("open")),
             "leads_total": len(self.leads()),
+            "degradations": len(self.degradations()),
         }

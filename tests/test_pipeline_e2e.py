@@ -259,11 +259,11 @@ class TestLeadLifecycle(PipelineTestCase):
 
     def test_chase_cascaded_at_least_one_level(self):
         """openapi -> api_endpoint proves the loop re-queues its own output."""
-        kinds = {l.kind for l in self.store.leads()}
+        kinds = {ld.kind for ld in self.store.leads()}
         self.assertIn("openapi", kinds)
         self.assertIn("api_endpoint", kinds)
-        spawned = [l for l in self.store.leads() if l.kind == "api_endpoint"]
-        self.assertTrue(all(l.depth >= 1 for l in spawned))
+        spawned = [ld for ld in self.store.leads() if ld.kind == "api_endpoint"]
+        self.assertTrue(all(ld.depth >= 1 for ld in spawned))
 
 
 class TestReportOutput(PipelineTestCase):

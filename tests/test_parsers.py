@@ -17,10 +17,9 @@ def scope_for(targets, **extra) -> Scope:
         "authorization": {"reference": "T-1", "authorized_by": "x@test"},
         "targets": targets, **extra,
     }
-    fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
-    json.dump(data, fh)
-    fh.close()
-    return Scope.load(fh.name)
+    path = Path(tempfile.mkdtemp()) / "scope.json"
+    path.write_text(json.dumps(data))
+    return Scope.load(path)
 
 
 class TestNmapTcpParsing(unittest.TestCase):
@@ -146,27 +145,37 @@ class TestNmapArgvConstruction(unittest.TestCase):
         self.scope = scope_for(["203.0.113.0/24"], exclude=["203.0.113.5"])
         self.policy = Policy.for_profile("standard")
 
-    def test_tcp_argv_has_xml_output_and_targets(self):
-        argv = nmap.tcp_argv(self.scope, self.policy, "/tmp/out.xml")
+    def test_tcp_argv_has_all_format_output_and_targets(self):
+        """-oA, not -oX: `nmap --resume` cannot read XML, only the grepable log."""
+        argv = nmap.tcp_argv(self.scope, self.policy, "scan-out")
         self.assertEqual(argv[0], "nmap")
-        self.assertIn("-oX", argv)
-        self.assertIn("/tmp/out.xml", argv)
+        self.assertIn("-oA", argv)
+        self.assertNotIn("-oX", argv)
+        self.assertIn("scan-out", argv)
         self.assertIn("203.0.113.0/24", argv)
         self.assertIn("--exclude", argv)
 
+    def test_explicit_targets_replace_scope_cidrs_when_chunking(self):
+        argv = nmap.tcp_argv(self.scope, self.policy, "out",
+                             targets=["203.0.113.10", "203.0.113.11"])
+        self.assertIn("203.0.113.10", argv)
+        self.assertNotIn("203.0.113.0/24", argv)
+        # A chunk is already exclusion-filtered, so --exclude is redundant.
+        self.assertNotIn("--exclude", argv)
+
     def test_udp_argv_requests_udp_scan(self):
-        argv = nmap.udp_argv(self.scope, self.policy, "/tmp/u.xml")
+        argv = nmap.udp_argv(self.scope, self.policy, "scan-udp.xml")
         self.assertIn("-sU", argv)
 
     def test_never_requests_dos_or_exploit_scripts(self):
-        argv = nmap.tcp_argv(self.scope, self.policy, "/tmp/out.xml")
+        argv = nmap.tcp_argv(self.scope, self.policy, "scan-out.xml")
         joined = " ".join(argv)
         self.assertNotIn("exploit", joined)
         self.assertNotIn("dos", joined.replace("--dns", ""))
 
     def test_thorough_profile_scans_all_ports(self):
         from extscan.policy import Policy
-        argv = nmap.tcp_argv(self.scope, Policy.for_profile("thorough"), "/tmp/o.xml")
+        argv = nmap.tcp_argv(self.scope, Policy.for_profile("thorough"), "scan-o.xml")
         self.assertIn("1-65535", argv)
 
 
@@ -201,13 +210,13 @@ class TestNucleiParsing(unittest.TestCase):
         self.assertIn("Apache/2.4.6", apache.evidence)
 
     def test_swagger_hit_raises_openapi_lead(self):
-        kinds = {l.kind for l in self.leads}
+        kinds = {ld.kind for ld in self.leads}
         self.assertIn("openapi", kinds)
-        lead = next(l for l in self.leads if l.kind == "openapi")
+        lead = next(ld for ld in self.leads if ld.kind == "openapi")
         self.assertEqual(lead.url, "https://203.0.113.10/swagger.json")
 
     def test_git_hit_raises_git_lead(self):
-        self.assertIn("git_exposure", {l.kind for l in self.leads})
+        self.assertIn("git_exposure", {ld.kind for ld in self.leads})
 
     def test_swagger_flagged_for_human_review(self):
         swagger = next(f for f in self.findings if "Swagger" in f.title)
@@ -242,7 +251,7 @@ class TestNucleiArgv(unittest.TestCase):
         self.policy = Policy.for_profile("standard")
 
     def test_excludes_destructive_template_families(self):
-        argv = nuclei.argv(self.policy, "/tmp/t.txt", "/tmp/o.jsonl")
+        argv = nuclei.argv(self.policy, "targets.txt", "out.jsonl")
         self.assertIn("-exclude-tags", argv)
         excluded = argv[argv.index("-exclude-tags") + 1]
         for tag in ("dos", "intrusive", "fuzz", "brute-force"):

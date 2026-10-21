@@ -11,14 +11,26 @@ from __future__ import annotations
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import __version__, chase as chase_mod, probes as probes_mod, report as report_mod
+from . import __version__
+from . import chase as chase_mod
+from . import probes as probes_mod
+from . import report as report_mod
 from .models import Finding, Lead
 from .policy import Policy
 from .probes import ProbeContext
+from .resilience import (
+    AbortThreshold,
+    CircuitOpen,
+    Degradation,
+    RetryPolicy,
+    RunAborted,
+    classify,
+    retry,
+)
 from .runner import Runner, ToolMissing, doctor
 from .scope import Scope
 from .store import Store
-from .tools import nmap, nuclei
+from .tools import nmap, nuclei, subdomains
 from .triage import triage
 
 
@@ -53,56 +65,196 @@ def _warn(store: Store, message: str) -> None:
 # Discovery
 # ---------------------------------------------------------------------------
 
-def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
-             tcp: bool = True, udp: bool | None = None) -> dict:
-    scope.assert_window()
-    do_udp = policy.nmap.do_udp if udp is None else udp
-    summary = {"tcp": None, "udp": None}
+def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
+                   kind: str, resume: bool) -> dict | None:
+    """Run one nmap pass (tcp or udp) in checkpointed chunks.
 
-    if tcp:
-        print("→ nmap TCP discovery")
+    Chunking is what makes this survivable. A /22 scanned in one invocation is
+    all-or-nothing: a timeout two hours in leaves nothing usable. In batches,
+    each completed batch is checkpointed and parsed, a timeout costs only the
+    batch in flight, and `--resume`/`extscan resume` picks up from there.
+    """
+    runner_fn = nmap.run_tcp if kind == "tcp" else nmap.run_udp
+    chunks = nmap.chunk_targets(scope, policy.nmap.chunk_size)
+    if not chunks:
+        return None
+
+    stage_key = f"discover:{kind}"
+    done = store.checkpoints(stage_key) if resume else set()
+    if not resume:
+        store.clear_checkpoints(stage_key)
+
+    totals = {"hosts": 0, "services": 0, "chunks": len(chunks),
+              "chunks_done": 0, "chunks_failed": 0, "salvaged": 0, "skipped": len(done)}
+    aborter = AbortThreshold(min_samples=max(4, len(chunks) // 2), failure_ratio=1.0)
+
+    for index, targets in enumerate(chunks, start=1):
+        key = f"chunk-{index:04d}"
+        if key in done:
+            continue
+        label = f"{kind}-{index:04d}"
+        print(f"  [{index}/{len(chunks)}] {len(targets)} host(s)")
+
         try:
-            res, xml = nmap.run_tcp(runner, scope, policy)
+            res, xml, salvaged = runner_fn(runner, scope, policy,
+                                           targets=targets, label=label)
         except ToolMissing as exc:
+            store.add_degradation(Degradation(
+                stage=stage_key, component="nmap", reason=str(exc),
+                impact=f"No {kind.upper()} discovery was performed at all. Every "
+                       f"{kind.upper()} finding is absent from this report because "
+                       "the scanner was missing, not because nothing is exposed.",
+                severity="serious", recoverable=True,
+                remedy="Install nmap and re-run `extscan discover <run> --resume`.",
+            ))
             _warn(store, str(exc))
-            return summary
+            return None
+
+        if res.skipped:                       # dry run
+            print("    (dry run)")
+            continue
+
         if xml:
-            hosts, services, findings = nmap.parse_xml(xml, scope=scope, source="nmap-tcp")
+            hosts, services, findings = nmap.parse_xml(xml, scope=scope,
+                                                        source=f"nmap-{kind}")
             store.save_hosts(hosts)
             store.save_services(services)
             store.add_findings(findings)
-            summary["tcp"] = {"hosts": len(hosts), "services": len(services)}
-            print(f"  {len(hosts)} host(s), {len(services)} open TCP port(s)")
-        elif res.skipped:
-            print("  (dry run)")
+            totals["hosts"] += len(hosts)
+            totals["services"] += len(services)
+            totals["chunks_done"] += 1
+            store.checkpoint(stage_key, key)
+            aborter.record(ok=True)
+
+            if salvaged:
+                totals["salvaged"] += 1
+                store.add_degradation(Degradation(
+                    stage=stage_key, component="nmap",
+                    reason=f"{label} did not finish ({'timeout' if res.timed_out else 'exit ' + str(res.returncode)})",
+                    impact=f"Results for this batch are partial. {len(hosts)} host(s) "
+                           "completed and were recovered from the interrupted scan "
+                           "file; any host after that point was not scanned.",
+                    severity="serious", hosts=targets,
+                    remedy=f"Re-run with a longer nmap.host_timeout, or resume with "
+                           f"`nmap --resume {store.raw_path('nmap-' + label)}.gnmap`.",
+                ))
+                print(f"    ! partial: recovered {len(hosts)} host(s) from an "
+                      "interrupted scan")
         else:
-            _warn(store, f"nmap TCP produced no XML (exit {res.returncode}); "
-                         f"see commands.jsonl")
+            totals["chunks_failed"] += 1
+            aborter.record(ok=False)
+            store.add_degradation(Degradation(
+                stage=stage_key, component="nmap",
+                reason=f"{label} produced no parseable output "
+                       f"({'timed out' if res.timed_out else 'exit ' + str(res.returncode)})",
+                impact=f"{len(targets)} host(s) in this batch were not scanned for "
+                       f"{kind.upper()} services and are absent from the inventory.",
+                severity="serious", hosts=targets,
+                remedy="Inspect commands.jsonl for the error, then "
+                       "`extscan discover <run> --resume`.",
+            ))
+            print(f"    ! batch failed; {len(targets)} host(s) not covered")
+
+        # If every batch is failing, the fault is local -- stop now rather than
+        # producing a report that says the client's estate is dark.
+        aborter.check(context=f"{kind} discovery")
+
+    return totals
+
+
+def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
+             tcp: bool = True, udp: bool | None = None,
+             resume: bool = False) -> dict:
+    scope.assert_window()
+    do_udp = policy.nmap.do_udp if udp is None else udp
+    summary: dict = {"tcp": None, "udp": None}
+
+    if tcp:
+        print("→ nmap TCP discovery")
+        summary["tcp"] = _run_nmap_pass(store, scope, policy, runner, "tcp", resume)
+        if summary["tcp"]:
+            print(f"  {summary['tcp']['hosts']} host(s), "
+                  f"{summary['tcp']['services']} open TCP port(s)")
 
     if do_udp:
         if nmap.udp_requires_root():
-            _warn(store, "UDP scan skipped: nmap -sU needs root. Re-run the discover "
-                         "stage with sudo, or grant nmap CAP_NET_RAW. Without it, SNMP "
+            store.add_degradation(Degradation(
+                stage="discover:udp", component="nmap",
+                reason="nmap -sU requires root and the run is unprivileged",
+                impact="No UDP scanning was performed. SNMP, IPMI, NTP, mDNS and "
+                       "other UDP exposure is NOT covered by this report. Absence "
+                       "of UDP findings here means the check never ran.",
+                severity="serious", recoverable=True,
+                remedy="Re-run `extscan discover <run> --udp-only` as root, or grant "
+                       "CAP_NET_RAW: setcap cap_net_raw,cap_net_admin+eip $(which nmap)",
+            ))
+            _warn(store, "UDP scan skipped: nmap -sU needs root. Without it, SNMP "
                          "and other UDP exposure is NOT covered by this report.")
         else:
             print("→ nmap UDP discovery")
-            try:
-                res, xml = nmap.run_udp(runner, scope, policy)
-            except ToolMissing as exc:
-                _warn(store, str(exc))
-                xml, res = "", None
-            if xml:
-                hosts, services, findings = nmap.parse_xml(xml, scope=scope, source="nmap-udp")
-                store.save_hosts(hosts)
-                store.save_services(services)
-                store.add_findings(findings)
-                summary["udp"] = {"hosts": len(hosts), "services": len(services)}
-                print(f"  {len(services)} open/responding UDP port(s)")
-            elif res is not None and not res.skipped:
-                _warn(store, f"nmap UDP produced no XML (exit {res.returncode})")
+            summary["udp"] = _run_nmap_pass(store, scope, policy, runner, "udp", resume)
+            if summary["udp"]:
+                print(f"  {summary['udp']['services']} open/responding UDP port(s)")
 
     store.mark_stage("discover", **{k: v for k, v in summary.items() if v})
     return summary
+
+
+# ---------------------------------------------------------------------------
+# Recon (subdomain enumeration)
+# ---------------------------------------------------------------------------
+
+def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
+    """Enumerate subdomains of the scope's domains, then split them by scope.
+
+    Runs before discovery when used, because in-scope names it finds add hosts
+    worth scanning. Out-of-scope names are reported and never touched.
+    """
+    scope.assert_window()
+    if not scope.domains:
+        print("  no `domains` in the scope file; nothing to enumerate")
+        print("  (add e.g. \"domains\": [\"example.com\"] to enable this stage)")
+        return {"domains": 0}
+
+    totals = {"domains": len(scope.domains), "names": 0,
+              "in_scope": 0, "out_of_scope": 0, "sources_failed": 0}
+
+    for domain in scope.domains:
+        print(f"→ enumerating {domain} via {', '.join(policy.recon.sources)}")
+        results, errors = subdomains.enumerate_domain(
+            runner, scope, domain,
+            sources=policy.recon.sources,
+            resolve_timeout=policy.recon.resolve_timeout,
+            use_system_proxy=policy.http.use_system_proxy,
+            max_names=policy.recon.max_names,
+        )
+        findings, hosts = subdomains.to_findings(results, domain)
+        store.add_findings(findings)
+        if hosts:
+            store.save_hosts(hosts)
+
+        in_scope = sum(1 for r in results if r.in_scope)
+        totals["names"] += len(results)
+        totals["in_scope"] += in_scope
+        totals["out_of_scope"] += sum(1 for r in results
+                                      if not r.in_scope and r.addresses)
+        print(f"  {len(results)} name(s): {in_scope} in scope, "
+              f"{len(results) - in_scope} outside or unresolved")
+
+        for error in errors:
+            totals["sources_failed"] += 1
+            store.add_degradation(Degradation(
+                stage="recon", component=f"subdomains:{domain}",
+                reason=error[:200],
+                impact=f"One enumeration source for {domain} returned nothing, so the "
+                       "subdomain list for this domain may be incomplete.",
+                remedy="Check connectivity to the source, or install subfinder/amass "
+                       "for an additional passive source, then re-run `extscan recon`.",
+            ))
+            print(f"  ! {error[:160]}")
+
+    store.mark_stage("recon", **totals)
+    return totals
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +311,7 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 p, svc = futures[fut]
                 try:
                     findings, leads = fut.result()
-                except Exception as exc:                  # noqa: BLE001
+                except Exception as exc:
                     _warn(store, f"probe {p.name} failed on {svc.id}: "
                                  f"{type(exc).__name__}: {exc}")
                     continue
@@ -187,30 +339,102 @@ def _run_one_probe(ctx: ProbeContext, p: probes_mod.Probe, svc):
 
 def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 lead_ids: list[str] | None = None, kinds: list[str] | None = None,
-                rounds: int = 2) -> dict:
-    """Resolve open leads, re-queueing any new ones up to `rounds` passes."""
+                rounds: int = 2, llm=None) -> dict:
+    """Resolve open leads, re-queueing any new ones up to `rounds` passes.
+
+    Every lead is attempted in isolation and its outcome written immediately,
+    so an interrupted chase resumes rather than restarts. A lead that keeps
+    failing transiently is retried up to `policy.max_lead_attempts` across
+    runs and then abandoned with its error recorded -- which stops a single
+    unreachable host from blocking the stage on every resume.
+    """
     scope.assert_window()
-    ctx = ProbeContext(scope=scope, policy=policy, runner=runner)
+    ctx = ProbeContext(scope=scope, policy=policy, runner=runner, llm=llm)
     total_f = total_l = handled = 0
+    abandoned = 0
+    retry_policy = RetryPolicy(attempts=2, base_delay=1.0, max_delay=8.0,
+                               total_budget=30.0)
+    aborter = AbortThreshold(min_samples=15, failure_ratio=0.95)
 
     for round_no in range(1, max(1, rounds) + 1):
         open_leads = store.leads("open")
         if lead_ids:
-            open_leads = [l for l in open_leads if l.id in lead_ids]
+            open_leads = [ld for ld in open_leads if ld.id in lead_ids]
         if kinds:
-            open_leads = [l for l in open_leads if l.kind in kinds]
-        open_leads = [l for l in open_leads if l.depth <= policy.max_lead_depth]
+            open_leads = [ld for ld in open_leads if ld.kind in kinds]
+        open_leads = [ld for ld in open_leads if ld.depth <= policy.max_lead_depth]
         if not open_leads:
             break
 
         print(f"→ chase round {round_no}: {len(open_leads)} lead(s)")
         for lead in open_leads:
-            result = chase_mod.chase(ctx, lead)
+            # Permanently-failing leads are given up on rather than retried on
+            # every resume until someone notices the run never finishes.
+            if lead.attempts >= policy.max_lead_attempts:
+                store.update_lead(
+                    lead.id, status="abandoned",
+                    note=f"abandoned after {lead.attempts} attempts: {lead.last_error[:200]}",
+                )
+                abandoned += 1
+                store.add_degradation(Degradation(
+                    stage="chase", component=f"lead:{lead.kind}",
+                    reason=f"{lead.attempts} failed attempts; last error: {lead.last_error[:160]}",
+                    impact=f"The follow-up '{lead.reason[:120]}' was never completed, so "
+                           f"whatever {lead.url or lead.host} exposes is unassessed.",
+                    hosts=[lead.host] if lead.host else [],
+                    remedy="Investigate this item by hand; it is in the review queue.",
+                ))
+                continue
+
+            attempt_no = lead.attempts + 1
+            try:
+                result = retry(
+                    lambda ld=lead: chase_mod.chase(ctx, ld),
+                    retry_policy,
+                    on_retry=lambda n, exc, delay, ld=lead: print(
+                        f"    retry {n} for {ld.kind} after {type(exc).__name__}; "
+                        f"waiting {delay:.1f}s"),
+                )
+            except CircuitOpen as exc:
+                # A dependency (typically the model endpoint) is down. Leave the
+                # lead open so a resume picks it up, and stop hammering it.
+                store.update_lead(lead.id, attempts=attempt_no, last_error=str(exc)[:300])
+                store.add_degradation(Degradation(
+                    stage="chase", component="llm",
+                    reason=str(exc)[:200],
+                    impact="Model-assisted analysis stopped partway through the "
+                           "follow-up queue. Affected leads are still open and are "
+                           "listed for manual review; the deterministic findings "
+                           "around them are unaffected.",
+                    severity="serious",
+                    remedy="Restore the model endpoint and run "
+                           "`extscan chase <run> --resume`, or work the open leads by hand.",
+                ))
+                print(f"  [{lead.kind}] deferred: {str(exc)[:110]}")
+                break           # abandon this round; the circuit needs time
+            except RunAborted:
+                raise
+            except Exception as exc:
+                verdict = classify(exc)
+                store.update_lead(
+                    lead.id,
+                    status="open" if verdict == "transient" else "failed",
+                    attempts=attempt_no,
+                    last_error=f"{type(exc).__name__}: {exc}"[:300],
+                )
+                aborter.record(ok=False)
+                print(f"  [{lead.kind}] {verdict} failure: {type(exc).__name__}: "
+                      f"{str(exc)[:100]}")
+                aborter.check(context="lead chasing")
+                continue
+
             handled += 1
+            aborter.record(ok=True)
             status = "done" if (result.findings or result.note) else "skipped"
             if result.note.startswith(("handler error", "scope refusal")):
                 status = "failed"
-            store.update_lead(lead.id, status=status, note=result.note[:500])
+            store.update_lead(lead.id, status=status, note=result.note[:500],
+                              attempts=attempt_no)
             total_f += store.add_findings(result.findings)
             total_l += store.add_leads(result.leads, max_total=policy.max_leads_per_run)
             print(f"  [{lead.kind}] {lead.host}:{lead.port or '-'} -> {result.note[:140]}")
@@ -218,8 +442,10 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
         if lead_ids:
             break          # explicit single-lead request: do not cascade
 
-    store.mark_stage("chase", leads_handled=handled, findings=total_f, new_leads=total_l)
-    return {"handled": handled, "findings": total_f, "new_leads": total_l}
+    store.mark_stage("chase", leads_handled=handled, findings=total_f,
+                     new_leads=total_l, abandoned=abandoned)
+    return {"handled": handled, "findings": total_f, "new_leads": total_l,
+            "abandoned": abandoned}
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +468,7 @@ def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dic
         store.write_meta(meta)
 
     paths = report_mod.write_reports(store.path, scope, triaged, hosts, services,
-                                     meta, store.commands())
+                                     meta, store.commands(), store.degradations())
     store.mark_stage("report", **{k: str(v) for k, v in paths.items()})
     return {"paths": {k: str(v) for k, v in paths.items()}, "stats": triaged.stats,
             "review_items": len(triaged.review_queue)}
@@ -253,10 +479,12 @@ def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dic
 # ---------------------------------------------------------------------------
 
 def run_all(store: Store, scope: Scope, policy: Policy, runner: Runner,
-            rounds: int = 2) -> dict:
+            rounds: int = 2, llm=None) -> dict:
     out = {"doctor": doctor()}
+    if scope.domains:
+        out["recon"] = recon(store, scope, policy, runner)
     out["discover"] = discover(store, scope, policy, runner)
     out["probe"] = probe(store, scope, policy, runner)
-    out["chase"] = chase_leads(store, scope, policy, runner, rounds=rounds)
+    out["chase"] = chase_leads(store, scope, policy, runner, rounds=rounds, llm=llm)
     out["report"] = make_report(store, scope, runner)
     return out

@@ -22,10 +22,9 @@ BASE = {
 
 def write_scope(**overrides) -> str:
     data = {**BASE, **overrides}
-    fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
-    json.dump(data, fh)
-    fh.close()
-    return fh.name
+    path = Path(tempfile.mkdtemp()) / "scope.json"
+    path.write_text(json.dumps(data))
+    return str(path)
 
 
 class TestScopeLoading(unittest.TestCase):
@@ -37,11 +36,10 @@ class TestScopeLoading(unittest.TestCase):
     def test_refuses_missing_authorization_block(self):
         data = dict(BASE)
         del data["authorization"]
-        fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
-        json.dump(data, fh)
-        fh.close()
+        path = Path(tempfile.mkdtemp()) / "scope.json"
+        path.write_text(json.dumps(data))
         with self.assertRaises(ScopeError) as cm:
-            Scope.load(fh.name)
+            Scope.load(path)
         self.assertIn("authorization", str(cm.exception))
 
     def test_refuses_authorization_without_signoff(self):

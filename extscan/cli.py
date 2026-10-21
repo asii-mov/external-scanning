@@ -17,6 +17,7 @@ from . import __version__, pipeline
 from .models import Finding, severity_rank
 from .policy import Policy
 from .probes import REGISTRY
+from .resilience import Degradation
 from .runner import Runner, doctor
 from .scope import Scope, ScopeError
 from .store import Store
@@ -70,6 +71,33 @@ def _policy_for(store: Store, args) -> Policy:
     return policy
 
 
+def _llm_for(store: Store, policy: Policy, args):
+    """Build the model client, or None. Never fails a scan over a model."""
+    if getattr(args, "no_llm", False):
+        return None
+    if not policy.llm.enabled:
+        return None
+    try:
+        from .llm import build_client
+
+        client = build_client(policy.llm)
+    except Exception as exc:
+        store.add_degradation(Degradation(
+            stage="llm", component=f"llm:{policy.llm.provider}",
+            reason=f"{type(exc).__name__}: {exc}"[:300],
+            impact="Model-assisted commentary was requested but no model could be "
+                   "reached, so findings carry deterministic evidence only.",
+            remedy="Check `extscan providers`, then re-run `extscan chase <run>`.",
+        ))
+        print(f"  ! model unavailable: {str(exc)[:200]}")
+        print("    continuing with deterministic analysis only")
+        return None
+    if client is not None:
+        print(f"  model: {client.provider.name} / "
+              f"{getattr(client.provider, 'model', '?')}")
+    return client
+
+
 def _runner(store: Store, args) -> Runner:
     return Runner(store, dry_run=getattr(args, "dry_run", False),
                   verbose=getattr(args, "verbose", False))
@@ -121,12 +149,24 @@ def cmd_init(args) -> int:
     return 0
 
 
+def cmd_recon(args) -> int:
+    store = _open(args)
+    scope = _scope_for(store, args)
+    policy = _policy_for(store, args)
+    result = pipeline.recon(store, scope, policy, _runner(store, args))
+    _emit({"recon": result, "counts": store.counts()}, args.json,
+          lambda d: print(f"\n{json.dumps(d['recon'], indent=2)}"))
+    return 0
+
+
 def cmd_discover(args) -> int:
     store = _open(args)
     scope = _scope_for(store, args)
     policy = _policy_for(store, args)
     result = pipeline.discover(store, scope, policy, _runner(store, args),
-                               tcp=not args.udp_only, udp=None if not args.tcp_only else False)
+                               tcp=not args.udp_only,
+                               udp=None if not args.tcp_only else False,
+                               resume=args.resume)
     _emit({"discover": result, "counts": store.counts()}, args.json,
           lambda d: print(f"\n{json.dumps(d['counts'], indent=2)}"))
     return 0
@@ -147,21 +187,21 @@ def cmd_probe(args) -> int:
 def cmd_leads(args) -> int:
     store = _open(args)
     leads = store.leads(None if args.status == "all" else args.status)
-    data = [l.to_dict() for l in leads]
+    data = [ld.to_dict() for ld in leads]
 
     def human(rows):
         if not rows:
             print("No leads.")
             return
         print(f"{len(rows)} lead(s):\n")
-        for l in rows:
-            print(f"  [{l['status']}] {l['id']}  {l['kind']}  "
-                  f"{l['host']}:{l['port'] or '-'}  depth={l['depth']}")
-            if l.get("url"):
-                print(f"      url: {l['url']}")
-            print(f"      why: {l['reason']}")
-            if l.get("note"):
-                print(f"      outcome: {l['note']}")
+        for ld in rows:
+            print(f"  [{ld['status']}] {ld['id']}  {ld['kind']}  "
+                  f"{ld['host']}:{ld['port'] or '-'}  depth={ld['depth']}")
+            if ld.get("url"):
+                print(f"      url: {ld['url']}")
+            print(f"      why: {ld['reason']}")
+            if ld.get("note"):
+                print(f"      outcome: {ld['note']}")
             print()
 
     _emit(data, args.json, human)
@@ -174,7 +214,8 @@ def cmd_chase(args) -> int:
     policy = _policy_for(store, args)
     result = pipeline.chase_leads(store, scope, policy, _runner(store, args),
                                   lead_ids=args.lead or None, kinds=args.kind or None,
-                                  rounds=args.rounds)
+                                  rounds=args.rounds,
+                                  llm=_llm_for(store, policy, args))
     _emit({"chase": result, "counts": store.counts()}, args.json,
           lambda d: print(f"\n{json.dumps(d['counts'], indent=2)}"))
     return 0
@@ -314,18 +355,115 @@ def cmd_resolve(args) -> int:
     return 0
 
 
+def cmd_gaps(args) -> int:
+    """Show where coverage was lost. The first thing to check after any run."""
+    store = _open(args)
+    gaps = store.degradations()
+    data = [d.to_dict() for d in gaps]
+
+    def human(rows):
+        if not rows:
+            print("No coverage gaps recorded: every stage completed as intended.")
+            return
+        serious = [r for r in rows if r["severity"] == "serious"]
+        print(f"{len(rows)} coverage gap(s), {len(serious)} serious.\n")
+        for r in sorted(rows, key=lambda x: x["severity"] != "serious"):
+            mark = "!!" if r["severity"] == "serious" else " !"
+            print(f"  {mark} [{r['stage']}] {r['component']}")
+            print(f"       lost:   {r['impact']}")
+            print(f"       cause:  {r['reason']}")
+            if r.get("remedy"):
+                print(f"       remedy: {r['remedy']}")
+            if r.get("hosts"):
+                shown = ", ".join(r["hosts"][:6])
+                more = f" (+{len(r['hosts']) - 6} more)" if len(r["hosts"]) > 6 else ""
+                print(f"       hosts:  {shown}{more}")
+            print()
+
+    _emit(data, args.json, human)
+    return 0
+
+
+def cmd_resume(args) -> int:
+    """Carry on a run that was interrupted, skipping completed work."""
+    store = _open(args)
+    scope = _scope_for(store, args)
+    policy = _policy_for(store, args)
+    runner = _runner(store, args)
+    meta = store.meta()
+
+    print(f"Resuming {store.run_id}")
+    print(f"  completed stages: {', '.join(meta.get('stages', {})) or 'none'}")
+    for stage in ("discover:tcp", "discover:udp"):
+        done = store.checkpoints(stage)
+        if done:
+            print(f"  {stage}: {len(done)} batch(es) already done")
+
+    out = {}
+    out["discover"] = pipeline.discover(store, scope, policy, runner, resume=True)
+    out["probe"] = pipeline.probe(store, scope, policy, runner)
+    out["chase"] = pipeline.chase_leads(store, scope, policy, runner,
+                                        rounds=args.rounds,
+                                        llm=_llm_for(store, policy, args))
+    out["report"] = pipeline.make_report(store, scope, runner)
+
+    def human(d):
+        print(f"\nReport: {d['report']['paths']['markdown']}")
+        gaps = store.degradations()
+        if gaps:
+            print(f"{len(gaps)} coverage gap(s) -- see `extscan gaps {store.run_id}`")
+
+    _emit(out, args.json, human)
+    return 0
+
+
 def cmd_run(args) -> int:
     scope = Scope.load(args.scope)
     policy = Policy.load(args.policy, profile=args.profile)
     store = pipeline.init_run(args.runs_dir, scope, policy, run_id=args.id)
     print(f"Run {store.run_id}\n")
-    result = pipeline.run_all(store, scope, policy, _runner(store, args), rounds=args.rounds)
+    runner = _runner(store, args)
+    result = pipeline.run_all(store, scope, policy, runner, rounds=args.rounds,
+                              llm=_llm_for(store, policy, args))
 
     def human(d):
         print(f"\nReport: {d['report']['paths']['markdown']}")
         print(f"{d['report']['review_items']} item(s) need manual review.")
 
     _emit({"run_id": store.run_id, **result}, args.json, human)
+    return 0
+
+
+def cmd_providers(args) -> int:
+    """Show which model providers this installation can reach, without calling one."""
+    from .llm import describe_providers
+
+    policy = Policy.load(getattr(args, "policy", None),
+                         profile=getattr(args, "profile", None) or "standard")
+    rows = describe_providers(policy.llm)
+    data = {"configured": {"enabled": policy.llm.enabled,
+                           "provider": policy.llm.provider,
+                           "model": policy.llm.model or "(provider default)",
+                           "effort": policy.llm.effort},
+            "providers": rows}
+
+    def human(d):
+        c = d["configured"]
+        state = "enabled" if c["enabled"] else "disabled (deterministic scanning only)"
+        print(f"Model-assisted analysis: {state}")
+        if c["enabled"]:
+            print(f"  provider: {c['provider']}   model: {c['model']}   "
+                  f"effort: {c['effort']}")
+        print("\nProvider availability:\n")
+        for row in d["providers"]:
+            mark = "OK " if row["available"] else "-- "
+            print(f"  {mark} {row['provider']:<12} {row['detail']}")
+        if not c["enabled"]:
+            print("\nTo enable, set llm.enabled and llm.provider in a policy file:")
+            print('  {"llm": {"enabled": true, "provider": "bedrock", '
+                  '"aws_region": "eu-west-2"}}')
+
+    _emit(data, args.json, human)
     return 0
 
 
@@ -355,6 +493,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--verbose", action="store_true", help="echo every command executed")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the commands that would run, send no packets")
+    ap.add_argument("--no-llm", action="store_true",
+                    help="skip model-assisted analysis even if enabled in policy")
     sub = ap.add_subparsers(dest="command", required=True)
 
     def add_run_arg(p):
@@ -369,6 +509,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("probes", help="list registered probes")
     p.set_defaults(func=cmd_probes)
 
+    p = sub.add_parser("providers", help="show model provider availability")
+    p.add_argument("--policy", help="policy file to read llm settings from")
+    p.add_argument("--profile", help="profile to base settings on")
+    p.set_defaults(func=cmd_providers)
+
     p = sub.add_parser("init", help="create a run from a scope file")
     p.add_argument("--scope", required=True, help="path to the scope/authorisation file")
     p.add_argument("--policy", help="optional policy JSON overlay")
@@ -376,10 +521,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--id", help="explicit run id")
     p.set_defaults(func=cmd_init)
 
+    p = sub.add_parser("recon", help="enumerate subdomains of the scope's domains")
+    add_run_arg(p)
+    p.set_defaults(func=cmd_recon)
+
     p = sub.add_parser("discover", help="nmap TCP and UDP discovery")
     add_run_arg(p)
     p.add_argument("--tcp-only", action="store_true")
     p.add_argument("--udp-only", action="store_true")
+    p.add_argument("--resume", action="store_true",
+                   help="skip host batches already completed in this run")
     p.set_defaults(func=cmd_discover)
 
     p = sub.add_parser("probe", help="run service-matched probes (incl. nuclei)")
@@ -409,6 +560,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("report", help="triage and render the report")
     add_run_arg(p)
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("gaps", help="show coverage gaps (what did not get checked)")
+    add_run_arg(p)
+    p.set_defaults(func=cmd_gaps)
+
+    p = sub.add_parser("resume", help="continue an interrupted run")
+    add_run_arg(p)
+    p.add_argument("--rounds", type=int, default=2)
+    p.set_defaults(func=cmd_resume)
 
     p = sub.add_parser("status", help="show run state")
     add_run_arg(p)

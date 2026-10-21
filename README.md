@@ -44,13 +44,28 @@ Bounded by depth so it terminates.
 
 ```bash
 git clone <this repo> && cd external-scanning
-pip install -e .          # or just run: python3 -m extscan
-extscan doctor            # check external tools
+uv sync                   # dev environment (ruff, pytest)
+uv run extscan doctor     # check external tools
+
+# or without uv -- there are no runtime dependencies:
+python3 -m extscan doctor
+```
+
+Optional model-assisted analysis needs one extra:
+
+```bash
+uv pip install 'extscan[llm]'       # direct Claude API
+uv pip install 'extscan[bedrock]'   # AWS Bedrock
+uv run extscan providers            # check what is reachable
 ```
 
 External tools: **nmap** (required), **nuclei** (required for web checks),
-`httpx` and `testssl.sh` (optional). `extscan doctor` prints install commands
-for what is missing.
+`sslscan`, `httpx`, `testssl.sh`, `subfinder`/`amass` (all optional —
+each degrades to a recorded coverage gap rather than a failure).
+`extscan doctor` prints install commands for what is missing.
+
+Lint with `uv run ruff check .`. The formatter is configured but not
+enforced; `pyproject.toml` explains why and how to turn it on.
 
 UDP scanning needs raw sockets:
 
@@ -96,13 +111,17 @@ See `examples/scope.example.json`.
 
 ```bash
 extscan init --scope scope.json --profile standard
-extscan discover latest              # nmap TCP + UDP
+extscan recon latest                 # subdomain enumeration (needs scope.domains)
+extscan discover latest              # nmap TCP + UDP, in checkpointed batches
 extscan services latest              # what is open
 extscan probe latest                 # nuclei + per-service probes
 extscan leads latest                 # what is worth a closer look
 extscan chase latest --rounds 2      # resolve the follow-ups
 extscan report latest                # report.md + report.json
+extscan gaps latest                  # what did NOT get checked
 ```
+
+Interrupted? `extscan resume latest` continues from the last checkpoint.
 
 Or unattended: `extscan run --scope scope.json`
 
@@ -125,6 +144,9 @@ fragile infrastructure.
 | `probe` → `snmp` | default/guessable community strings, read-only, built-in SNMP client |
 | `probe` → `exposure` | databases, management interfaces and legacy services that should not face the internet |
 | `probe` → `ssh` | banner and exposure review |
+| `probe` → `iis` | IIS/ASP.NET: `trace.axd`/`elmah.axd`, WebDAV verbs, 8.3 short-name oracle, verbose error pages, version headers, default content |
+| `probe` → `sslscan` | cipher-level TLS audit — RC4/3DES/export suites, CRIME, insecure renegotiation (needs `sslscan`) |
+| `recon` → subdomains | certificate transparency + `subfinder`/`amass`, resolved and split into in-scope (scannable) and out-of-scope (reported, never touched) |
 | `chase` → `openapi` | finds the spec, enumerates operations, flags those declaring no authentication (writes especially), notes out-of-scope servers |
 | `chase` → `graphql` | introspection, schema size, whether mutations are exposed |
 | `chase` → `api_endpoint` | confirms one documented-as-open **GET** really is open |
@@ -135,6 +157,62 @@ fragile infrastructure.
 `extscan probes` lists what is registered. Adding a service family means adding
 one function to `extscan/probes.py` with a match predicate — the pipeline does
 not change.
+
+## When things go wrong
+
+Reduced coverage must never look like a clean result — a scan that silently
+checked half of what it claimed is worse than one that failed outright,
+because somebody signs a report based on it. So every failure ends in one of
+three places: retried and succeeded, recorded as a named coverage gap, or a
+loud abort. Never a silent pass.
+
+| Failure | What happens |
+|---|---|
+| **nmap times out or is killed** | Partial XML is salvaged — completed hosts are recovered from the truncated file instead of the whole batch being lost. The gap names which hosts went unscanned. `-oA` output means `nmap --resume` also works. |
+| **Scope is large** | Discovery runs in batches of `nmap.chunk_size` hosts, each checkpointed. A timeout costs one batch; `extscan resume` skips what finished. |
+| **nmap/nuclei/sslscan not installed** | Recorded as a coverage gap naming what was not checked, and the run continues. `doctor` tells you up front. |
+| **UDP needs root** | Loud warning plus a *serious* coverage gap, because "no SNMP findings" and "SNMP was never checked" must never look alike. |
+| **Model endpoint is down** | Retried with jittered backoff, then a circuit breaker opens and stops trying. 100 leads against a dead endpoint cost ~6 HTTP attempts, not 200. Findings keep their deterministic evidence and get a human-review flag. |
+| **Model returns garbage** | Not retried — it answered, just not usefully. Counted separately from an outage. |
+| **A lead keeps failing** | Retried up to `max_lead_attempts` *across runs*, then abandoned with its error recorded, so one unreachable host cannot block the stage on every resume. |
+| **Nearly everything fails** | The abort threshold decides the fault is local (egress, VPN, DNS), stops, and says so — rather than producing a report saying the client's estate is dark. |
+| **Process killed** | All state is on disk after every step. `extscan resume <run>` continues. |
+
+`extscan gaps <run>` lists them; the report carries them in the summary *and*
+their own section, above the inventory.
+
+## Model-assisted analysis (optional)
+
+Off by default. Enable per-engagement in a policy file:
+
+```jsonc
+{"llm": {"enabled": true, "provider": "bedrock",
+         "model": "anthropic.claude-opus-5-5",
+         "aws_region": "eu-west-2", "effort": "medium"}}
+```
+
+`provider` is `anthropic` (direct API) or `bedrock`. Bedrock model IDs carry an
+`anthropic.` prefix, accept cross-region (`us.anthropic.…`) and
+inference-profile ARNs, and are granted **per model per region** — a wrong
+region is the usual first failure, so `extscan providers` reports it.
+
+Three rules the implementation holds to, because everything it would send a
+model was written by the target:
+
+1. **Input is hostile.** Evidence is fenced, labelled as data, and the
+   delimiter is stripped from the content so it cannot forge its own
+   terminator. The system prompt says injected instructions are themselves a
+   finding and must not be followed.
+2. **Output is a suggestion, never an action.** Commentary becomes a separate
+   finding sourced to `llm-analysis`, pinned to `info` severity regardless of
+   the model's opinion, marked tentative and flagged for review. It cannot
+   decide what to scan, widen scope, or move an item up the remediation queue.
+3. **Secrets do not leave the engagement.** Evidence goes through the same
+   redaction as the report before transmission. An exposed `.env` proves
+   credentials are reachable; it is not something to upload to an API.
+
+A run with no model produces the same findings minus the commentary, and says
+so. Nothing depends on it — which is what makes it safe to use.
 
 ## Safety properties
 
@@ -198,15 +276,26 @@ the loop — the branching logic is not frozen into the tool.
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -t .      # 183 tests, ~1s, no network
+uv run python -m unittest discover -s tests -t .   # 367 tests, ~5s, no network
 ```
 
-Fixture-driven, so no scanners are needed: captured nmap XML and nuclei JSONL
-for the parsers, a fake SNMP agent over a real UDP socket for the wire format,
-and a deliberately exposed local HTTP target for the full probe → chase →
-report path. The end-to-end test asserts the things that cause false positives
-in client reports — soft-404 filtering, OpenAPI base-path joining, secret
-redaction, and scope refusal of hostile redirects.
+Fixture-driven, so no scanners are needed: captured nmap/sslscan XML and
+nuclei JSONL for the parsers, a fake SNMP agent over a real UDP socket for the
+wire format, and local HTTP targets (one deliberately exposed, one IIS-flavoured,
+one correctly hardened) for the probe → chase → report path.
+
+The suite deliberately covers the things that cause false positives in client
+reports — soft-404 filtering, OpenAPI base-path joining, secret redaction,
+scope refusal of hostile redirects, SHA-1 signature detection — and the
+failure paths: truncated-scan salvage, checkpoint resume, circuit breaking, and
+a dead model endpoint costing bounded work. Tests pass with and without the
+optional `anthropic` extra installed.
+
+## Further work
+
+`docs/ROADMAP.md` has a prioritised list of what else is worth adding, with
+the catch for each. The top of it: web-service screenshotting, virtual-host
+enumeration, and run-to-run diffing.
 
 ## Legal
 

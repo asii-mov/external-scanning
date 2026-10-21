@@ -11,23 +11,38 @@ service/version/script detail survives intact.
 from __future__ import annotations
 
 import os
+import re
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
-from ..models import Finding, Host, Service
-from ..policy import Policy
-from ..runner import Result, Runner, require
-from ..scope import Scope
+from extscan.models import Finding, Host, Service
+from extscan.policy import Policy
+from extscan.runner import Result, Runner, require
+from extscan.scope import Scope
 
 
 def _is_root() -> bool:
     return hasattr(os, "geteuid") and os.geteuid() == 0
 
 
-def tcp_argv(scope: Scope, policy: Policy, xml_out: str) -> list[str]:
+def _targets_for(scope: Scope, targets: list[str] | None) -> list[str]:
+    """Explicit host list when chunking, otherwise the scope's CIDRs."""
+    if targets is None:
+        return scope.nmap_target_args()
+    # A chunk is already a list of in-scope hosts, so exclusions are applied.
+    return list(targets)
+
+
+def tcp_argv(scope: Scope, policy: Policy, out_base: str,
+             targets: list[str] | None = None) -> list[str]:
     """Build the TCP discovery command.
 
     SYN scan when privileged (faster, lighter on the target); connect scan
     otherwise, so an unprivileged run still works.
+
+    Output goes to -oA (all formats) rather than -oX. The extra files cost
+    nothing and the grepable one is what `nmap --resume` needs: if a scan is
+    interrupted, XML alone cannot be resumed from.
     """
     p = policy.nmap
     argv = ["nmap", "-sS" if _is_root() else "-sT", "-sV",
@@ -37,7 +52,7 @@ def tcp_argv(scope: Scope, policy: Policy, xml_out: str) -> list[str]:
     argv += ["-p", p.tcp_ports, p.timing,
              "--max-retries", str(p.max_retries),
              "--host-timeout", p.host_timeout,
-             "--open", "-oX", xml_out]
+             "--open", "-oA", out_base]
     if p.min_rate:
         argv += ["--min-rate", str(p.min_rate)]
     if p.skip_host_discovery:
@@ -45,23 +60,24 @@ def tcp_argv(scope: Scope, policy: Policy, xml_out: str) -> list[str]:
     if _is_root():
         argv.append("-O")               # OS fingerprint; needs raw sockets
     argv += p.extra_args
-    argv += scope.nmap_target_args()
+    argv += _targets_for(scope, targets)
     return argv
 
 
-def udp_argv(scope: Scope, policy: Policy, xml_out: str) -> list[str]:
+def udp_argv(scope: Scope, policy: Policy, out_base: str,
+             targets: list[str] | None = None) -> list[str]:
     p = policy.nmap
     argv = ["nmap", "-sU", "-sV", "--version-intensity", str(min(p.version_intensity, 5)),
             "-p", p.udp_ports, p.timing,
             "--max-retries", str(p.max_retries),
             "--host-timeout", p.host_timeout,
-            "--open", "-oX", xml_out]
+            "--open", "-oA", out_base]
     # UDP service detection leans on these scripts for SNMP/NTP/DNS/mDNS.
     if p.scripts:
         argv += ["--script", "default,safe"]
     if p.skip_host_discovery:
         argv.append("-Pn")
-    argv += scope.nmap_target_args()
+    argv += _targets_for(scope, targets)
     return argv
 
 
@@ -81,6 +97,40 @@ def _script_map(node: ET.Element) -> dict[str, str]:
     return out
 
 
+# nmap XML can be large, and the service/script fields inside it carry banner
+# text the target chose. ElementTree is not hardened against hostile XML, so
+# refuse anything with a doctype or entity declaration (nmap never emits one)
+# and cap the input, rather than trusting the file because we spawned the tool.
+MAX_XML_BYTES = 256 * 1024 * 1024
+
+# nmap legitimately emits a bare `<!DOCTYPE nmaprun>` with no internal subset,
+# so a blanket doctype ban would reject every real scan file. What must be
+# refused is an internal subset (`<!DOCTYPE x [ ... ]>`) or any entity
+# declaration -- the parts that drive entity-expansion attacks.
+_ENTITY_RE = re.compile(r"<!ENTITY\b", re.I)
+_DOCTYPE_SUBSET_RE = re.compile(r"<!DOCTYPE[^>\[]*\[", re.I)
+
+
+def _reject_hostile_xml(xml_text: str) -> None:
+    """Refuse XML shaped like an entity-expansion attack, before parsing it."""
+    if len(xml_text) > MAX_XML_BYTES:
+        raise ValueError(
+            f"nmap XML is {len(xml_text)} bytes, over the {MAX_XML_BYTES} limit; "
+            "refusing to parse. Split the scope into smaller chunks."
+        )
+    head = xml_text[:200_000]
+    if _ENTITY_RE.search(head):
+        raise ValueError(
+            "nmap XML contains an ENTITY declaration. nmap does not emit these, "
+            "so this file is not what it claims to be; refusing to parse."
+        )
+    if _DOCTYPE_SUBSET_RE.search(head):
+        raise ValueError(
+            "nmap XML has a DOCTYPE with an internal subset. nmap emits only a "
+            "bare `<!DOCTYPE nmaprun>`; refusing to parse."
+        )
+
+
 def parse_xml(xml_text: str, scope: Scope | None = None,
               source: str = "nmap") -> tuple[list[Host], list[Service], list[Finding]]:
     """Turn nmap XML into hosts, services and script-derived findings.
@@ -93,8 +143,11 @@ def parse_xml(xml_text: str, scope: Scope | None = None,
     services: list[Service] = []
     findings: list[Finding] = []
 
+    _reject_hostile_xml(xml_text)
     try:
-        root = ET.fromstring(xml_text)
+        # _reject_hostile_xml above refuses doctype/entity declarations and
+        # oversized input, which are the vectors S314 warns about.
+        root = ET.fromstring(xml_text)  # noqa: S314
     except ET.ParseError as exc:
         raise ValueError(f"could not parse nmap XML: {exc}") from exc
 
@@ -224,18 +277,101 @@ def _findings_from_scripts(svc: Service, source: str) -> list[Finding]:
     return out
 
 
-def run_tcp(runner: Runner, scope: Scope, policy: Policy) -> tuple[Result, str]:
-    """Run the TCP pass. Returns (result, xml_text)."""
+# ---------------------------------------------------------------------------
+# Recovering a scan that did not finish
+# ---------------------------------------------------------------------------
+
+def salvage_partial_xml(xml_text: str) -> tuple[str, bool]:
+    """Repair nmap XML that was cut off mid-scan so it can still be parsed.
+
+    This is the difference between a timeout costing you one host and costing
+    you the whole range. nmap writes each `<host>` element as it completes, so
+    a killed scan leaves a file with real results in it and no closing
+    `</nmaprun>` -- which ElementTree rejects outright, discarding everything.
+
+    Returns (xml, was_repaired). The repair drops any trailing partial element
+    and closes what remains.
+    """
+    text = xml_text.rstrip()
+    if not text:
+        return "", False
+    if text.endswith("</nmaprun>"):
+        return text, False
+
+    # Keep everything up to the last completed top-level element. A `<host>`
+    # cut off halfway is unparseable, so it has to go; its ports were never
+    # written anyway.
+    cut = max(text.rfind("</host>"), text.rfind("</runstats>"))
+    if cut == -1:
+        # Nothing completed. If even the root tag is absent there is nothing
+        # to salvage; if it is present we return an empty but valid document.
+        start = text.find("<nmaprun")
+        if start == -1:
+            return "", False
+        end = text.find(">", start)
+        if end == -1:
+            return "", False
+        return text[: end + 1] + "</nmaprun>", True
+
+    repaired = text[: cut + len("</host>") if text.rfind("</host>") == cut
+                    else cut + len("</runstats>")]
+    # Close any still-open ancestor elements, outermost last.
+    for tag in ("</ports>", "</host>"):
+        opener = tag.replace("</", "<").replace(">", "")
+        if repaired.count(opener) > repaired.count(tag):
+            repaired += tag
+    return repaired + "</nmaprun>", True
+
+
+def chunk_targets(scope: Scope, chunk_size: int) -> list[list[str]]:
+    """Split the scope into batches of individual hosts.
+
+    Chunking bounds the blast radius of a timeout: one slow host costs that
+    chunk, not the entire engagement. It also gives the run natural checkpoints
+    to resume from.
+    """
+    if chunk_size <= 0:
+        return [scope.targets]
+    hosts = scope.hosts()
+    if len(hosts) <= chunk_size:
+        return [hosts] if hosts else []
+    return [hosts[i:i + chunk_size] for i in range(0, len(hosts), chunk_size)]
+
+
+def resume_argv(policy: Policy, gnmap_path: str) -> list[str]:
+    """nmap's own resume, which reads the grepable log to find where it stopped.
+
+    Only usable because the argv builders request -oA (all three formats)
+    rather than -oX alone. `--resume` cannot read XML.
+    """
+    return ["nmap", "--resume", gnmap_path]
+
+
+def _read_xml(base: Path) -> tuple[str, bool]:
+    """Read `<base>.xml`, repairing it if the scan was cut short."""
+    xml_file = base.with_suffix(".xml")
+    if not xml_file.exists():
+        return "", False
+    return salvage_partial_xml(xml_file.read_text(errors="replace"))
+
+
+def run_tcp(runner: Runner, scope: Scope, policy: Policy,
+            targets: list[str] | None = None,
+            label: str = "tcp") -> tuple[Result, str, bool]:
+    """Run the TCP pass. Returns (result, xml_text, was_salvaged)."""
     if not runner.dry_run:
         require("nmap")
-    xml_path = runner.store.raw_path("nmap-tcp.xml")
-    argv = tcp_argv(scope, policy, str(xml_path))
-    res = runner.run(argv, stage="discover:tcp", timeout=policy.nmap.timeout_sec,
-                     stdout_name="nmap-tcp")
-    return res, xml_path.read_text() if xml_path.exists() else ""
+    base = runner.store.raw_path(f"nmap-{label}")
+    argv = tcp_argv(scope, policy, str(base), targets=targets)
+    res = runner.run(argv, stage=f"discover:{label}", timeout=policy.nmap.timeout_sec,
+                     stdout_name=f"nmap-{label}")
+    xml, salvaged = _read_xml(base)
+    return res, xml, salvaged
 
 
-def run_udp(runner: Runner, scope: Scope, policy: Policy) -> tuple[Result, str]:
+def run_udp(runner: Runner, scope: Scope, policy: Policy,
+            targets: list[str] | None = None,
+            label: str = "udp") -> tuple[Result, str, bool]:
     """Run the UDP pass.
 
     Needs root for -sU. We surface that as a warning rather than a hard error:
@@ -245,11 +381,12 @@ def run_udp(runner: Runner, scope: Scope, policy: Policy) -> tuple[Result, str]:
     """
     if not runner.dry_run:
         require("nmap")
-    xml_path = runner.store.raw_path("nmap-udp.xml")
-    argv = udp_argv(scope, policy, str(xml_path))
-    res = runner.run(argv, stage="discover:udp", timeout=policy.nmap.timeout_sec,
-                     stdout_name="nmap-udp")
-    return res, xml_path.read_text() if xml_path.exists() else ""
+    base = runner.store.raw_path(f"nmap-{label}")
+    argv = udp_argv(scope, policy, str(base), targets=targets)
+    res = runner.run(argv, stage=f"discover:{label}", timeout=policy.nmap.timeout_sec,
+                     stdout_name=f"nmap-{label}")
+    xml, salvaged = _read_xml(base)
+    return res, xml, salvaged
 
 
 def udp_requires_root() -> bool:

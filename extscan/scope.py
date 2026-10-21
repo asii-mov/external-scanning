@@ -47,7 +47,7 @@ _INTERNAL_NETS = [
 ]
 
 
-def _is_internal(net: "ipaddress._BaseNetwork") -> bool:
+def _is_internal(net: ipaddress._BaseNetwork) -> bool:
     return any(
         net.version == internal.version and net.overlaps(internal)
         for internal in _INTERNAL_NETS
@@ -63,7 +63,7 @@ class Authorization:
     notes: str = ""
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Authorization":
+    def from_dict(cls, d: dict) -> Authorization:
         missing = [k for k in ("reference", "authorized_by") if not d.get(k)]
         if missing:
             raise ScopeError(
@@ -97,6 +97,10 @@ class Scope:
     targets: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
     allow_hostnames: list[str] = field(default_factory=list)
+    # Domains the client owns, for subdomain enumeration. Listing a domain
+    # authorises *enumeration* of it, not scanning of whatever it resolves to:
+    # a discovered name is only scannable if its address is in `targets`.
+    domains: list[str] = field(default_factory=list)
     max_hosts: int = 1024
     allow_private: bool = False
     source_path: str = ""
@@ -104,7 +108,7 @@ class Scope:
     # -- loading ---------------------------------------------------------
 
     @classmethod
-    def load(cls, path: str | Path) -> "Scope":
+    def load(cls, path: str | Path) -> Scope:
         p = Path(path)
         if not p.exists():
             raise ScopeError(f"scope file not found: {p}")
@@ -126,6 +130,7 @@ class Scope:
             targets=[str(t) for t in data["targets"]],
             exclude=[str(t) for t in data.get("exclude", [])],
             allow_hostnames=[h.lower() for h in data.get("allow_hostnames", [])],
+            domains=[d.lower().strip().rstrip(".") for d in data.get("domains", [])],
             max_hosts=int(data.get("max_hosts", 1024)),
             allow_private=bool(data.get("allow_private", False)),
             source_path=str(p),
@@ -266,6 +271,7 @@ class Scope:
             },
             "targets": self.targets,
             "exclude": self.exclude,
+            "domains": self.domains,
             "host_count": self.host_count(),
             "window_ok": ok,
             "window_note": why,

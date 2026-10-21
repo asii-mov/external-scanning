@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 SEVERITIES = ["info", "low", "medium", "high", "critical"]
@@ -29,7 +29,7 @@ def _now() -> float:
 def _stable_id(*parts: Any) -> str:
     """Short deterministic id, so re-running a stage does not duplicate records."""
     raw = "|".join(str(p) for p in parts)
-    return hashlib.sha1(raw.encode("utf-8", "replace")).hexdigest()[:12]
+    return hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest()[:12]
 
 
 @dataclass
@@ -44,7 +44,7 @@ class Host:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Host":
+    def from_dict(cls, d: dict) -> Host:
         return cls(**d)
 
 
@@ -103,7 +103,7 @@ class Service:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Service":
+    def from_dict(cls, d: dict) -> Service:
         return cls(**d)
 
 
@@ -138,7 +138,7 @@ class Finding:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Finding":
+    def from_dict(cls, d: dict) -> Finding:
         return cls(**d)
 
 
@@ -160,8 +160,12 @@ class Lead:
     reason: str = ""                 # why this is worth a look
     origin: str = ""                 # probe/tool that raised it
     depth: int = 0
-    status: str = "open"             # open | done | skipped | failed
+    status: str = "open"             # open | done | skipped | failed | abandoned
     note: str = ""                   # outcome once resolved
+    # Attempt tracking makes the chase loop resumable and stops a permanently
+    # broken lead from being retried forever on every resume.
+    attempts: int = 0
+    last_error: str = ""
     created: float = field(default_factory=_now)
     id: str = ""
 
@@ -174,7 +178,7 @@ class Lead:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Lead":
+    def from_dict(cls, d: dict) -> Lead:
         return cls(**d)
 
 

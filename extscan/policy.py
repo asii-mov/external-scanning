@@ -9,7 +9,7 @@ file on purpose and the engagement covers it.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 # nmap's default top-1000 TCP is a reasonable opener; full range is opt-in
@@ -34,6 +34,10 @@ class NmapPolicy:
     do_udp: bool = True
     extra_args: list[str] = field(default_factory=list)
     timeout_sec: int = 7200
+    # Split the scope into batches of this many hosts, so an interrupted or
+    # timed-out scan costs one batch instead of the whole range, and the run
+    # has natural checkpoints to resume from. 0 disables chunking.
+    chunk_size: int = 32
 
 
 @dataclass
@@ -118,22 +122,84 @@ class SnmpPolicy:
 
 
 @dataclass
+class ReconPolicy:
+    """Subdomain enumeration settings."""
+
+    # Passive sources only. `crt.sh` reads public certificate transparency
+    # logs; the certificates are already public but the *query* is logged by a
+    # third party, so the source list is explicit rather than implied.
+    sources: list[str] = field(default_factory=lambda: ["crt.sh", "subfinder"])
+    resolve_timeout: float = 5.0
+    max_names: int = 2000
+    # Brute-forcing names generates heavy DNS traffic and is off by design:
+    # passive sources find most of what matters without it.
+    allow_bruteforce: bool = False
+
+
+@dataclass
+class LLMPolicy:
+    """Model-assisted analysis settings.
+
+    Disabled by default, deliberately. A scanner should not start sending a
+    client's response bodies to a third-party API because a config file was
+    copied from somewhere -- turning this on is a decision with contractual
+    implications, so it has to be made explicitly.
+    """
+
+    enabled: bool = False
+    provider: str = "none"             # none | anthropic | bedrock
+    model: str = ""                    # provider default when empty
+    effort: str = "medium"             # low | medium | high | xhigh | max
+    max_tokens: int = 1500
+    timeout_sec: int = 60
+
+    # Bedrock: model access is granted per model per region, so the region is
+    # part of the configuration rather than an afterthought.
+    aws_region: str = ""
+    aws_profile: str = ""
+    base_url: str = ""                 # for a gateway or proxy deployment
+
+    # How much target-supplied text may be sent in one analysis. Redaction runs
+    # first; this bounds cost and blast radius.
+    max_input_chars: int = 40_000
+
+    # Failure handling. The SDK's own retries are off (sdk_retries=0) so that
+    # backoff, budget and the circuit breaker are decided in one place.
+    sdk_retries: int = 0
+    retry_attempts: int = 3
+    retry_base_delay: float = 2.0
+    retry_budget_sec: int = 90
+    circuit_failure_threshold: int = 3
+    circuit_cooldown_sec: int = 120
+
+    # Which analyses to run when a model is available.
+    analyse_openapi: bool = True
+    analyse_findings_above: str = "medium"   # severity floor for commentary
+
+
+@dataclass
 class Policy:
     profile: str = "standard"
     nmap: NmapPolicy = field(default_factory=NmapPolicy)
     nuclei: NucleiPolicy = field(default_factory=NucleiPolicy)
     http: HttpPolicy = field(default_factory=HttpPolicy)
     snmp: SnmpPolicy = field(default_factory=SnmpPolicy)
+    recon: ReconPolicy = field(default_factory=ReconPolicy)
+    llm: LLMPolicy = field(default_factory=LLMPolicy)
     max_lead_depth: int = 3
     max_leads_per_run: int = 500
     stop_on_tool_error: bool = False
+    # How many times a failing lead is retried across runs before it is
+    # abandoned and handed to the review queue. Without a cap, one unreachable
+    # host keeps the chase stage from ever completing on a resume.
+    max_lead_attempts: int = 3
     # Per-service probes are network-bound and independent, so they run in a
     # small thread pool. Keep it modest: the point is to finish before the
     # auditor loses interest, not to flood the client's perimeter.
     max_workers: int = 8
 
     @classmethod
-    def for_profile(cls, name: str) -> "Policy":
+    def for_profile(cls, name: str) -> Policy:
         p = cls(profile=name)
         if name == "quick":
             p.nmap.tcp_ports = "21,22,23,25,53,80,110,135,139,143,443,445,993,995,1433,3306,3389,5432,5900,6379,8000,8080,8443,9200,27017"
@@ -156,7 +222,7 @@ class Policy:
         return p
 
     @classmethod
-    def load(cls, path: str | Path | None, profile: str = "standard") -> "Policy":
+    def load(cls, path: str | Path | None, profile: str = "standard") -> Policy:
         """Start from a profile, then overlay any JSON file given."""
         p = cls.for_profile(profile)
         if not path:
@@ -165,7 +231,8 @@ class Policy:
         if "profile" in data and data["profile"] != profile:
             p = cls.for_profile(str(data["profile"]))
         for section, cls_ in (("nmap", NmapPolicy), ("nuclei", NucleiPolicy),
-                              ("http", HttpPolicy), ("snmp", SnmpPolicy)):
+                              ("http", HttpPolicy), ("snmp", SnmpPolicy),
+                              ("recon", ReconPolicy), ("llm", LLMPolicy)):
             if section in data:
                 current = asdict(getattr(p, section))
                 unknown = set(data[section]) - set(current)

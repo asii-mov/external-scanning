@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Structurally faithful sslscan 2.x XML, trimmed. Describes a badly
+     configured endpoint: SSLv3 + TLS1.0/1.1 enabled, 3DES and RC4 accepted,
+     compression on, insecure renegotiation, SHA-1 cert with a 1024-bit key. -->
+<document title="SSLScan Results" version="2.1.3" web="http://github.com/rbsec/sslscan">
+ <ssltest host="203.0.113.10" sniname="203.0.113.10" port="443">
+  <protocol type="ssl" version="2" enabled="0" />
+  <protocol type="ssl" version="3" enabled="1" />
+  <protocol type="tls" version="1.0" enabled="1" />
+  <protocol type="tls" version="1.1" enabled="1" />
+  <protocol type="tls" version="1.2" enabled="1" />
+  <protocol type="tls" version="1.3" enabled="0" />
+  <fallback supported="0" />
+  <renegotiation supported="1" secure="0" />
+  <compression supported="1" />
+  <heartbleed sslversion="TLSv1.2" vulnerable="0" />
+  <heartbleed sslversion="TLSv1.1" vulnerable="0" />
+  <cipher status="preferred" sslversion="TLSv1.2" bits="256" cipher="ECDHE-RSA-AES256-GCM-SHA384" id="0xC030" strength="strong" curve="P-256" dhebits="256" />
+  <cipher status="accepted" sslversion="TLSv1.2" bits="128" cipher="AES128-SHA" id="0x2F" strength="acceptable" />
+  <cipher status="accepted" sslversion="TLSv1.0" bits="112" cipher="DES-CBC3-SHA" id="0x0A" strength="weak" />
+  <cipher status="accepted" sslversion="TLSv1.0" bits="128" cipher="RC4-SHA" id="0x05" strength="weak" />
+  <cipher status="accepted" sslversion="SSLv3" bits="112" cipher="DES-CBC3-SHA" id="0x0A" strength="weak" />
+  <cipher status="accepted" sslversion="TLSv1.0" bits="40" cipher="EXP-RC4-MD5" id="0x03" strength="null" />
+  <certificate>
+   <signature-algorithm>sha1WithRSAEncryption</signature-algorithm>
+   <pk error="false" type="RSA" bits="1024" />
+   <subject>legacy.example-client.test</subject>
+   <altnames>DNS:legacy.example-client.test</altnames>
+   <issuer>legacy.example-client.test</issuer>
+   <self-signed>true</self-signed>
+   <expired>true</expired>
+   <not-valid-before>Jan  1 00:00:00 2020 GMT</not-valid-before>
+   <not-valid-after>Jan  1 00:00:00 2021 GMT</not-valid-after>
+  </certificate>
+ </ssltest>
+ <ssltest host="198.51.100.200" port="443">
+  <protocol type="tls" version="1.2" enabled="1" />
+ </ssltest>
+</document>

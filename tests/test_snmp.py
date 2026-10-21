@@ -4,6 +4,7 @@ The wire format is hand-rolled, so it gets tested against responses built
 byte-by-byte, plus a real UDP socket for the round trip.
 """
 
+import contextlib
 import socket
 import threading
 import unittest
@@ -15,7 +16,7 @@ from extscan.tools import snmp as S
 def build_response(community: str, oid: str, value: str, request_id: int,
                    error: int = 0, value_tag: int = S.TAG_OCTET) -> bytes:
     """Assemble a GetResponse the way an agent would."""
-    raw = value.encode() if value_tag == S.TAG_OCTET else value.encode()
+    raw = value.encode()
     vb = S._tlv(S.TAG_SEQ, S._enc_oid(oid) + S._tlv(value_tag, raw))
     vbs = S._tlv(S.TAG_SEQ, vb)
     pdu = S._tlv(S.TAG_RESPONSE,
@@ -28,13 +29,13 @@ class TestBerPrimitives(unittest.TestCase):
     def test_oid_round_trip(self):
         for oid in ("1.3.6.1.2.1.1.1.0", "1.3.6.1.4.1.9.9.999.1.2",
                     "1.3.6.1.2.1.2.2.1.2.16777216", "0.0", "2.5.4.3"):
-            tag, raw, _ = S._parse_tlv(S._enc_oid(oid))
-            self.assertEqual(tag, S.TAG_OID)
+            _tag, raw, _ = S._parse_tlv(S._enc_oid(oid))
+            self.assertEqual(_tag, S.TAG_OID)
             self.assertEqual(S._dec_oid(raw), oid)
 
     def test_oid_multibyte_arcs(self):
         """Arcs above 127 use base-128 continuation bytes."""
-        tag, raw, _ = S._parse_tlv(S._enc_oid("1.3.6.1.4.1.311"))
+        _tag, raw, _ = S._parse_tlv(S._enc_oid("1.3.6.1.4.1.311"))
         self.assertEqual(S._dec_oid(raw), "1.3.6.1.4.1.311")
 
     def test_bad_oid_rejected(self):
@@ -44,13 +45,13 @@ class TestBerPrimitives(unittest.TestCase):
 
     def test_integer_encoding_preserves_sign_bit(self):
         for n in (0, 1, 127, 128, 255, 256, 65535, 1 << 23, 2147483647):
-            tag, raw, _ = S._parse_tlv(S._enc_int(n))
+            _tag, raw, _ = S._parse_tlv(S._enc_int(n))
             self.assertEqual(int.from_bytes(raw, "big", signed=True), n, f"n={n}")
 
     def test_long_form_length(self):
         """sysDescr frequently exceeds the 127-byte short form."""
         payload = b"A" * 500
-        tag, raw, _ = S._parse_tlv(S._tlv(S.TAG_OCTET, payload))
+        _tag, raw, _ = S._parse_tlv(S._tlv(S.TAG_OCTET, payload))
         self.assertEqual(raw, payload)
 
     def test_parse_tlv_rejects_truncated_buffers(self):
@@ -122,11 +123,13 @@ class FakeAgent:
         while not self._stop.is_set():
             try:
                 data, addr = self.sock.recvfrom(65535)
-            except (socket.timeout, OSError):
+            except (TimeoutError, OSError):
                 continue
             try:
                 community, oid, rid = self._decode(data)
-            except Exception:
+            except (ValueError, IndexError, UnicodeDecodeError):
+                # A malformed datagram from an unrelated sender; ignore it the
+                # way a real agent would.
                 continue
             self.requests.append(community)
             if community in self.accept:
@@ -135,10 +138,8 @@ class FakeAgent:
                 # Real agents usually stay silent on a bad community; some
                 # return an error. Exercise the error path.
                 pkt = build_response(community, oid, "", rid, error=2)
-            try:
+            with contextlib.suppress(OSError):
                 self.sock.sendto(pkt, addr)
-            except OSError:
-                pass
 
     @staticmethod
     def _decode(data: bytes) -> tuple[str, str, int]:

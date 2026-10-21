@@ -146,7 +146,7 @@ class Runner:
                 [tool, *(args or ("--version",))],
                 capture_output=True, text=True, errors="replace", timeout=20, shell=False,
             )
-        except Exception as exc:                      # noqa: BLE001 - informational only
+        except Exception as exc:
             return f"unknown ({exc})"
         text = (proc.stdout or proc.stderr or "").strip()
         return text.splitlines()[0][:200] if text else "unknown"

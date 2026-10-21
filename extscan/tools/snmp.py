@@ -18,8 +18,8 @@ import os
 import socket
 from dataclasses import dataclass
 
-from ..models import Finding, Lead
-from ..policy import Policy
+from extscan.models import Finding, Lead
+from extscan.policy import Policy
 
 # ---------------------------------------------------------------------------
 # Minimal BER
@@ -208,7 +208,7 @@ def snmp_get(host: str, community: str, oid: str, *, version: int = 2,
              pdu_tag: int = TAG_GET) -> SnmpReply | None:
     """One SNMP GET (or GETNEXT). Returns None on timeout or unparseable reply."""
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
-    for attempt in range(retries + 1):
+    for _attempt in range(retries + 1):
         request_id = int.from_bytes(os.urandom(3), "big") + 1
         packet = _build_request(community, oid, version, request_id, pdu_tag)
         sock = socket.socket(family, socket.SOCK_DGRAM)
@@ -223,7 +223,7 @@ def snmp_get(host: str, community: str, oid: str, *, version: int = 2,
                 # Ignore stale datagrams from an earlier attempt.
                 if reply.request_id == request_id:
                     return reply
-        except (socket.timeout, TimeoutError):
+        except TimeoutError:
             continue
         except OSError:
             return None

@@ -24,6 +24,11 @@
     "api.acme.example"
   ],
 
+  "//domains": "Domains to enumerate subdomains of. Listing a domain authorises ENUMERATION of it, not scanning whatever it resolves to: a discovered name is only scanned if its address falls inside `targets`. Names resolving elsewhere are reported as asset discovery and never touched.",
+  "domains": [
+    "acme.example"
+  ],
+
   "max_hosts": 256,
   "allow_private": false
 }

@@ -130,7 +130,7 @@ def triage(findings: list[Finding], services: list[Service] | None = None) -> Tr
         groups.setdefault(issue_key(f), []).append(f)
 
     systemic: list[SystemicIssue] = []
-    for key, group in groups.items():
+    for group in groups.values():
         hosts = sorted({f.host for f in group if f.host})
         if len(hosts) >= SYSTEMIC_THRESHOLD:
             worst = max(group, key=lambda f: severity_rank(f.severity))
@@ -142,7 +142,7 @@ def triage(findings: list[Finding], services: list[Service] | None = None) -> Tr
 
     # Review queue, one entry per distinct issue rather than per host.
     queue: list[ReviewItem] = []
-    for key, group in groups.items():
+    for group in groups.values():
         flagged = [f for f in group if f.review_required]
         if not flagged:
             continue

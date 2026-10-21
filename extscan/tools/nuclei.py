@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import json
 
-from ..models import Finding, Lead, Service
-from ..policy import Policy
-from ..runner import Result, Runner, require
-from ..scope import Scope
+from extscan.models import Finding, Lead, Service
+from extscan.policy import Policy
+from extscan.runner import Result, Runner, require
+from extscan.scope import Scope
 
 
 def argv(policy: Policy, targets_file: str, jsonl_out: str) -> list[str]:
