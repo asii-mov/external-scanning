@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trimmed but structurally faithful nmap -oX output used by the parser tests.
+     Includes: service/version detail, CPEs, NSE script output (flat and
+     table-valued), an OS match, a down host, and a host outside the test scope
+     so scope filtering can be asserted. -->
+<nmaprun scanner="nmap" args="nmap -sS -sV -O --script default,safe,vuln -oX - 203.0.113.0/29" start="1760990000" version="7.94" xmloutputversion="1.5">
+<scaninfo type="syn" protocol="tcp" numservices="1000" services="1-1024"/>
+
+<host starttime="1760990001" endtime="1760990240">
+  <status state="up" reason="syn-ack" reason_ttl="56"/>
+  <address addr="203.0.113.10" addrtype="ipv4"/>
+  <hostnames>
+    <hostname name="www.example-client.test" type="PTR"/>
+    <hostname name="shop.example-client.test" type="user"/>
+  </hostnames>
+  <ports>
+    <port protocol="tcp" portid="22">
+      <state state="open" reason="syn-ack" reason_ttl="56"/>
+      <service name="ssh" product="OpenSSH" version="7.4" extrainfo="protocol 2.0" method="probed" conf="10">
+        <cpe>cpe:/a:openbsd:openssh:7.4</cpe>
+      </service>
+      <script id="ssh-hostkey" output="2048 aa:bb:cc:dd (RSA)"/>
+    </port>
+    <port protocol="tcp" portid="80">
+      <state state="open" reason="syn-ack" reason_ttl="56"/>
+      <service name="http" product="Apache httpd" version="2.4.6" extrainfo="(CentOS)" method="probed" conf="10">
+        <cpe>cpe:/a:apache:http_server:2.4.6</cpe>
+      </service>
+      <script id="http-title" output="Example Client Storefront"/>
+      <script id="vulners" output="cpe:/a:apache:http_server:2.4.6:&#xa;    CVE-2021-44790  9.8  https://vulners.com/cve/CVE-2021-44790&#xa;    CVE-2022-22720  9.8  https://vulners.com/cve/CVE-2022-22720"/>
+    </port>
+    <port protocol="tcp" portid="443">
+      <state state="open" reason="syn-ack" reason_ttl="56"/>
+      <service name="http" product="Apache httpd" version="2.4.6" tunnel="ssl" method="probed" conf="10"/>
+      <script id="ssl-cert">
+        <table key="subject">
+          <elem key="commonName">www.example-client.test</elem>
+        </table>
+        <elem key="validity">2024-01-01 to 2025-01-01</elem>
+      </script>
+    </port>
+    <port protocol="tcp" portid="6379">
+      <state state="open" reason="syn-ack" reason_ttl="56"/>
+      <service name="redis" product="Redis key-value store" version="5.0.3" method="probed" conf="10"/>
+    </port>
+    <port protocol="tcp" portid="8080">
+      <state state="filtered" reason="no-response" reason_ttl="0"/>
+      <service name="http-proxy" method="table" conf="3"/>
+    </port>
+  </ports>
+  <os>
+    <osmatch name="Linux 3.10 - 4.11" accuracy="94" line="62708"/>
+    <osmatch name="Linux 4.15" accuracy="90" line="62800"/>
+  </os>
+</host>
+
+<host starttime="1760990001" endtime="1760990240">
+  <status state="up" reason="syn-ack" reason_ttl="55"/>
+  <address addr="203.0.113.11" addrtype="ipv4"/>
+  <hostnames/>
+  <ports>
+    <port protocol="tcp" portid="21">
+      <state state="open" reason="syn-ack" reason_ttl="55"/>
+      <service name="ftp" product="vsftpd" version="2.3.4" method="probed" conf="10"/>
+      <script id="ftp-anon" output="Anonymous FTP login allowed (FTP code 230)"/>
+    </port>
+    <port protocol="tcp" portid="3306">
+      <state state="open" reason="syn-ack" reason_ttl="55"/>
+      <service name="mysql" product="MySQL" version="5.5.62-log" method="probed" conf="10"/>
+    </port>
+  </ports>
+  <hostscript>
+    <script id="smb-os-discovery" output="OS: Windows Server 2012 R2&#xa;Computer name: FILE01"/>
+  </hostscript>
+</host>
+
+<host>
+  <status state="down" reason="no-response" reason_ttl="0"/>
+  <address addr="203.0.113.12" addrtype="ipv4"/>
+</host>
+
+<!-- Outside the scope used by the tests: must be dropped by parse_xml. -->
+<host starttime="1760990001" endtime="1760990240">
+  <status state="up" reason="syn-ack" reason_ttl="48"/>
+  <address addr="198.51.100.99" addrtype="ipv4"/>
+  <hostnames/>
+  <ports>
+    <port protocol="tcp" portid="443">
+      <state state="open" reason="syn-ack" reason_ttl="48"/>
+      <service name="https" product="nginx" version="1.24.0" tunnel="ssl" method="probed" conf="10"/>
+    </port>
+  </ports>
+</host>
+
+<runstats>
+  <finished time="1760990240" elapsed="239.11" summary="Nmap done" exit="success"/>
+  <hosts up="3" down="1" total="4"/>
+</runstats>
+</nmaprun>

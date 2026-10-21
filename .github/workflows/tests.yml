@@ -1,0 +1,26 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # No dependency install step: extscan is stdlib-only by design, and the
+      # test suite uses fixtures plus loopback servers rather than real scanners.
+      - name: Run tests
+        run: python -m unittest discover -s tests -t . -v
+      - name: Check the CLI loads and reports tool availability
+        run: |
+          python -m extscan --version
+          python -m extscan probes
+          python -m extscan doctor || true   # exits 1 when nmap is absent

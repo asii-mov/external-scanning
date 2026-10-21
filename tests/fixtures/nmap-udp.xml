@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- UDP pass fixture: SNMP and NTP responding, plus an open|filtered port
+     (nmap's normal ambiguous UDP state, which the parser must still accept). -->
+<nmaprun scanner="nmap" args="nmap -sU -sV -p 53,123,161 -oX - 203.0.113.10" start="1760991000" version="7.94">
+<host starttime="1760991001" endtime="1760991300">
+  <status state="up" reason="udp-response" reason_ttl="56"/>
+  <address addr="203.0.113.10" addrtype="ipv4"/>
+  <hostnames/>
+  <ports>
+    <port protocol="udp" portid="161">
+      <state state="open" reason="udp-response" reason_ttl="56"/>
+      <service name="snmp" product="net-snmp SNMPv3 server" method="probed" conf="10"/>
+      <script id="snmp-info" output="enterprise: net-snmp&#xa;engineIDFormat: unknown"/>
+    </port>
+    <port protocol="udp" portid="123">
+      <state state="open" reason="udp-response" reason_ttl="56"/>
+      <service name="ntp" product="NTP" version="4.2.6p5" method="probed" conf="10"/>
+    </port>
+    <port protocol="udp" portid="53">
+      <state state="open|filtered" reason="no-response" reason_ttl="0"/>
+      <service name="domain" method="table" conf="3"/>
+    </port>
+  </ports>
+</host>
+<runstats><finished time="1760991300" elapsed="299.5" exit="success"/><hosts up="1" down="0" total="1"/></runstats>
+</nmaprun>

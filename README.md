@@ -1,0 +1,216 @@
+# extscan
+
+Orchestrated external attack-surface scanning for **authorised** security
+assessments.
+
+The problem this solves: you feed an IP or subnet into nmap, then the team
+works through each open port by hand. The port-by-port part is mechanical —
+run the right tool at the right service, read the output, decide whether to dig
+further — and it eats the time that should go on the findings that actually
+need a human.
+
+extscan automates the mechanical half and is explicit about where the other
+half begins. Every report ends with a **manual review queue**: the things
+automation proved are exposed but cannot judge, each with the specific question
+an auditor needs to answer.
+
+```
+scope → discover (nmap TCP+UDP) → probe (per-service) → chase (follow-ups) → triage → report
+                                         ↑_______________________|  bounded loop
+```
+
+## Why it is built this way
+
+**Stages are separate, state is on disk.** Each stage reads and writes a run
+directory, so you can stop after discovery, look at what is open, change the
+policy, and carry on. That is how audit work actually goes. It also means a
+dropped SSH session costs you nothing.
+
+**Findings are separate from judgement.** A tool can establish that Swagger UI
+is published. It cannot decide whether that is acceptable for this client.
+extscan records both: the finding, and the question for the auditor.
+
+**Follow-ups are first-class.** Discovery says port 443 is open. A probe says
+there is an OpenAPI document. Neither answers *what does that expose*. "Leads"
+close that gap: a swagger hit raises an `openapi` lead, chasing it parses the
+spec and raises `api_endpoint` leads for operations documented as needing no
+authentication, and chasing those confirms whether the spec reflects reality.
+Bounded by depth so it terminates.
+
+**Stdlib only.** No pip install on the jump box. SNMP is implemented directly
+(BER over UDP), so `snmpwalk` is optional rather than required.
+
+## Install
+
+```bash
+git clone <this repo> && cd external-scanning
+pip install -e .          # or just run: python3 -m extscan
+extscan doctor            # check external tools
+```
+
+External tools: **nmap** (required), **nuclei** (required for web checks),
+`httpx` and `testssl.sh` (optional). `extscan doctor` prints install commands
+for what is missing.
+
+UDP scanning needs raw sockets:
+
+```bash
+sudo setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip $(which nmap)
+```
+
+Without it, extscan **warns loudly and continues** — because "no SNMP findings"
+and "SNMP was never checked" must never look the same in a report.
+
+## Authorisation is mandatory
+
+extscan will not scan anything without a scope file recording who authorised
+the work. This is not a formality: it is the artefact that distinguishes an
+audit from an attack, and the thing you want on file if a client's SOC asks
+what hit them.
+
+```jsonc
+{
+  "engagement": "ACME external perimeter review Q4",
+  "client": "ACME Corporation",
+  "authorization": {
+    "reference": "SOW-2026-114 / JIRA SEC-1423",     // required
+    "authorized_by": "jane.doe@acme.example (CISO)",  // required
+    "window_start": "2026-10-20T00:00:00Z",
+    "window_end": "2026-10-31T23:59:59Z",
+    "notes": "External perimeter only. No DoS. No credential testing."
+  },
+  "targets": ["203.0.113.0/27", "198.51.100.14"],
+  "exclude": ["203.0.113.5"],
+  "max_hosts": 256
+}
+```
+
+Enforced at load: malformed CIDRs fail before a packet is sent, internal
+address space (RFC 1918, loopback, link-local, CGNAT) is refused unless
+`allow_private` is set, a scope that expands past `max_hosts` is refused, and
+scanning outside the testing window stops the run.
+
+See `examples/scope.example.json`.
+
+## Use
+
+```bash
+extscan init --scope scope.json --profile standard
+extscan discover latest              # nmap TCP + UDP
+extscan services latest              # what is open
+extscan probe latest                 # nuclei + per-service probes
+extscan leads latest                 # what is worth a closer look
+extscan chase latest --rounds 2      # resolve the follow-ups
+extscan report latest                # report.md + report.json
+```
+
+Or unattended: `extscan run --scope scope.json`
+
+`--dry-run` prints every command without sending a packet. Worth doing on a new
+engagement before the real thing.
+
+Profiles: `quick`, `standard`, `thorough` (all 65535 TCP ports — hours on a
+wide range). Override anything with a policy file; see
+`examples/policy.gentle.json` for a rate-limited configuration suitable for
+fragile infrastructure.
+
+## What it checks
+
+| Stage | Covers |
+|---|---|
+| `discover` | nmap TCP (SYN when privileged, connect otherwise) + UDP, service/version detection, `default,safe,vuln` NSE categories, OS fingerprint |
+| `probe` → `nuclei` | templated web checks across every discovered HTTP service at once |
+| `probe` → `http_fingerprint` | root page, fingerprint and security headers, ~23 disclosure paths with soft-404 filtering |
+| `probe` → `tls` | certificate detail, expiry, self-signing, which TLS versions are actually offered |
+| `probe` → `snmp` | default/guessable community strings, read-only, built-in SNMP client |
+| `probe` → `exposure` | databases, management interfaces and legacy services that should not face the internet |
+| `probe` → `ssh` | banner and exposure review |
+| `chase` → `openapi` | finds the spec, enumerates operations, flags those declaring no authentication (writes especially), notes out-of-scope servers |
+| `chase` → `graphql` | introspection, schema size, whether mutations are exposed |
+| `chase` → `api_endpoint` | confirms one documented-as-open **GET** really is open |
+| `chase` → `secret_file` | credential-bearing files, with values redacted |
+| `chase` → `git_exposure` | readable `.git` metadata |
+| `chase` → `snmp_walk` | interface and address tables, to show what the exposure actually discloses |
+
+`extscan probes` lists what is registered. Adding a service family means adding
+one function to `extscan/probes.py` with a match predicate — the pipeline does
+not change.
+
+## Safety properties
+
+Deliberate, tested, and not configurable away:
+
+- **Read-only.** GET, connect, query. No credential testing, no SNMP SET, no
+  writes to discovered services, no exploitation. Where impact cannot be
+  established without going further, the finding says so and asks a human.
+- **Scope re-checked per request.** Leads come from scanner output, HTTP
+  redirects and OpenAPI `servers` blocks — all controlled by the target. A host
+  that redirects to `169.254.169.254` gets refused, recorded as a finding, and
+  not followed.
+- **No shell.** Every command runs as an argv list. Target-derived strings
+  never reach a shell.
+- **Destructive nuclei templates excluded** (`dos`, `intrusive`, `fuzz`,
+  `brute-force`), and out-of-band detection is off by default — public
+  interactsh relays would see client traffic.
+- **No system proxy.** `http_proxy` in the operator's shell would route client
+  traffic through a third party and make results reflect the proxy, not the
+  target.
+- **Secrets redacted.** Evidence proves an `.env` is readable and names the
+  keys; it does not copy the values into the report, the ticket and three
+  mailboxes.
+- **Full audit trail.** Every command, exit code and timing in
+  `commands.jsonl`, summarised in the report so a client can reproduce any
+  finding.
+
+## Reports
+
+`report.md` for people, `report.json` for tooling. Structure:
+
+1. **Authorisation and scope** — what was agreed, by whom, when
+2. **Summary** — counts by severity
+3. **Manual review queue** — the handover from automation to auditor, ordered,
+   each item naming the decision required
+4. **Systemic issues** — anything on 3+ hosts, as one remediation task rather
+   than forty findings
+5. **Findings** — by severity, with evidence and reproduction
+6. **Service inventory**
+7. **Methodology and limitations** — stages run, coverage gaps, tool versions,
+   command log
+
+Findings are marked `tentative` when derived from a version banner or a
+specification rather than observed behaviour. Keep that distinction when
+writing up: one over-claimed finding costs more credibility than ten correct
+ones earn.
+
+## Driving it with Claude
+
+`.claude/skills/extscan/SKILL.md` is a skill for Claude Code covering the
+workflow, where model judgement adds value over the tooling, and the limits
+that hold regardless of how a request is phrased.
+
+The agent-facing design: every read command takes `--json`, and
+`extscan note` records a finding from the model's own analysis with
+`--source claude-analysis` so a reviewer can tell reasoning from tool output.
+Reading an OpenAPI spec and concluding that unauthenticated invoice deletion
+matters more than an open health check is exactly the judgement worth having in
+the loop — the branching logic is not frozen into the tool.
+
+## Tests
+
+```bash
+python3 -m unittest discover -s tests -t .      # 183 tests, ~1s, no network
+```
+
+Fixture-driven, so no scanners are needed: captured nmap XML and nuclei JSONL
+for the parsers, a fake SNMP agent over a real UDP socket for the wire format,
+and a deliberately exposed local HTTP target for the full probe → chase →
+report path. The end-to-end test asserts the things that cause false positives
+in client reports — soft-404 filtering, OpenAPI base-path joining, secret
+redaction, and scope refusal of hostile redirects.
+
+## Legal
+
+For authorised testing only. Scanning infrastructure you do not own or have
+written permission to test is illegal in most jurisdictions. The scope file
+exists so that permission is recorded before the first packet — use it
+honestly.

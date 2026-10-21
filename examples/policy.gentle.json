@@ -1,0 +1,18 @@
+{
+  "profile": "standard",
+  "nmap": {
+    "timing": "-T2",
+    "max_retries": 1,
+    "host_timeout": "20m"
+  },
+  "nuclei": {
+    "rate_limit": 10,
+    "concurrency": 5,
+    "severities": ["low", "medium", "high", "critical"]
+  },
+  "http": {
+    "inter_request_delay": 0.5,
+    "timeout_sec": 20
+  },
+  "max_workers": 3
+}

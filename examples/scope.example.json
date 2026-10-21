@@ -1,0 +1,29 @@
+{
+  "engagement": "ACME external perimeter review Q4",
+  "client": "ACME Corporation",
+
+  "authorization": {
+    "reference": "SOW-2026-114 / JIRA SEC-1423",
+    "authorized_by": "jane.doe@acme.example (CISO)",
+    "window_start": "2026-10-20T00:00:00Z",
+    "window_end": "2026-10-31T23:59:59Z",
+    "notes": "External perimeter only. No denial of service, no social engineering, no credential testing without a separate written approval. Primary contact: soc@acme.example, +44 20 7946 0000."
+  },
+
+  "targets": [
+    "203.0.113.0/27",
+    "198.51.100.14"
+  ],
+
+  "exclude": [
+    "203.0.113.5"
+  ],
+
+  "allow_hostnames": [
+    "www.acme.example",
+    "api.acme.example"
+  ],
+
+  "max_hosts": 256,
+  "allow_private": false
+}

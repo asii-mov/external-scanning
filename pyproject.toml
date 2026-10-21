@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "extscan"
+version = "0.1.0"
+description = "Orchestrated external attack-surface scanning for authorised security assessments"
+requires-python = ">=3.10"
+dependencies = []          # stdlib only, so it installs on any jump box
+
+[project.scripts]
+extscan = "extscan.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["extscan*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
