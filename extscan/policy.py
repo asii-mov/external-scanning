@@ -44,7 +44,9 @@ class NmapPolicy:
 @dataclass
 class NucleiPolicy:
     severities: list[str] = field(default_factory=lambda: ["info", "low", "medium", "high", "critical"])
-    exclude_tags: list[str] = field(default_factory=lambda: ["dos", "intrusive", "fuzz", "brute-force"])
+    exclude_tags: list[str] = field(default_factory=lambda: [
+        "dos", "intrusive", "fuzz", "brute-force",
+        "default-login", "default-logins", "creds-stuffing"])
     include_tags: list[str] = field(default_factory=list)
     rate_limit: int = 50
     concurrency: int = 15

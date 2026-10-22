@@ -219,7 +219,8 @@ so. Nothing depends on it — which is what makes it safe to use.
 
 Deliberate, tested, and not configurable away:
 
-- **Read-only.** GET, connect, query. No credential testing, no SNMP SET, no
+- **Read-only.** GET, connect, query. No credential testing (nuclei's
+  `default-login` and `creds-stuffing` templates are excluded), no SNMP SET, no
   writes to discovered services, no exploitation. Where impact cannot be
   established without going further, the finding says so and asks a human.
 - **Scope re-checked per request.** Leads come from scanner output, HTTP

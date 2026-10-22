@@ -3,7 +3,8 @@
 Two things this module does beyond shelling out:
 
 * it constrains nuclei to non-destructive template families. The default
-  exclude list drops dos/intrusive/fuzz/brute-force, and out-of-band
+  exclude list drops dos/intrusive/fuzz/brute-force and the default-login
+  templates (which submit passwords), and out-of-band
   (interactsh) detection is off, because the public interactsh relay would see
   client traffic;
 * it reads results as *leads*, not just findings. A nuclei hit on a swagger
