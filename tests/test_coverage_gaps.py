@@ -88,6 +88,36 @@ class TestNucleiFailure(_Stage):
         self.assertEqual(svc.probed_by, ["nuclei"])
 
 
+class TestFuzzerFindings(_Stage):
+    """Minimized cases from tests/fuzz_failures.py."""
+
+    def test_realtime_signal_is_a_gap_not_a_crash(self):
+        self.fake_tool("nuclei", "kill -35 $$")
+        with self.only_fake_tools_on_path():
+            svc = self.probe(TestNucleiFailure.web, only=["nuclei"])
+        self.assertEqual([d.reason for d in self.store.degradations()],
+                         ["nuclei killed by signal 35"])
+        self.assertNotIn("nuclei", svc.probed_by)
+
+    def test_failing_sslscan_is_a_gap(self):
+        self.fake_tool("sslscan", "exit 1")
+        svc = Service(host="127.0.0.1", port=8443, proto="tcp", name="https")
+        with self.only_fake_tools_on_path():
+            after = self.probe(svc, only=["sslscan"])
+        self.assertEqual(self.gaps(), [("probe:sslscan", "sslscan", ["127.0.0.1"])])
+        self.assertNotIn("sslscan", after.probed_by)
+
+    def test_unparseable_nmap_xml_is_a_gap_not_a_crash(self):
+        xml = bytearray((Path(__file__).parent / "fixtures" / "nmap-tcp.xml").read_bytes())
+        xml[0] = 0
+        (self.tmp / "out.xml").write_bytes(bytes(xml))
+        self.fake_tool("nmap", 'while [ $# -gt 0 ]; do [ "$1" = -oA ] && '
+                               f'/bin/cp {self.tmp}/out.xml "$2.xml"; shift; done; exit 0')
+        with self.only_fake_tools_on_path(), contextlib.redirect_stdout(io.StringIO()):
+            pipeline.discover(self.store, self.scope, self.policy, self.runner, udp=False)
+        self.assertEqual(self.gaps(), [("discover:tcp", "nmap", ["127.0.0.1"])])
+
+
 class TestProbeFailure(_Stage):
     def test_crashing_probe_is_a_gap_and_retried_next_run(self):
         svc = Service(host="127.0.0.1", port=22, proto="tcp", name="ssh")
