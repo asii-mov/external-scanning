@@ -8,7 +8,6 @@ the normal shape of real audit work, rather than one opaque button.
 
 from __future__ import annotations
 
-import signal
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -57,14 +56,6 @@ def _coverage_lost(store: Store, deg: Degradation) -> None:
     store.add_degradation(deg)
     print(f"  ! {deg.reason}")
     print(f"    {deg.impact}")
-
-
-def _exit_reason(res) -> str:
-    if res.timed_out:
-        return "timed out"
-    if res.returncode is not None and res.returncode < 0:
-        return f"killed by {signal.Signals(-res.returncode).name}"
-    return f"exited {res.returncode}"
 
 
 UDP_NEEDS_ROOT = "nmap -sU requires root and the run is unprivileged"
@@ -128,9 +119,12 @@ def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
             print("    (dry run)")
             continue
 
-        if xml:
-            hosts, services, findings = nmap.parse_xml(xml, scope=scope,
-                                                        source=f"nmap-{kind}")
+        try:
+            parsed = nmap.parse_xml(xml, scope=scope, source=f"nmap-{kind}") if xml else None
+        except ValueError:
+            parsed = None
+        if parsed:
+            hosts, services, findings = parsed
             store.save_hosts(hosts)
             store.save_services(services)
             store.add_findings(findings)
@@ -285,7 +279,7 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
         print(f"→ nuclei against {len(web)} web service(s)")
         try:
             res, findings, leads = nuclei.run(runner, scope, policy, services)
-            failure = "" if res is None or res.ok or res.skipped else _exit_reason(res)
+            failure = res.failure if res else ""
         except ToolMissing as exc:
             findings, leads, failure = [], [], str(exc)
         all_findings += findings

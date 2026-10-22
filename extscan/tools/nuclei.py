@@ -229,6 +229,6 @@ def run(runner: Runner, scope: Scope, policy: Policy,
     cmd = argv(policy, targets_file, str(out_path))
     res = runner.run(cmd, stage="probe:nuclei", timeout=policy.nuclei.timeout_sec,
                      stdout_name="nuclei")
-    text = out_path.read_text() if out_path.exists() else ""
+    text = out_path.read_text(errors="replace") if out_path.exists() else ""
     findings, leads = parse_jsonl(text, scope=scope)
     return res, findings, leads

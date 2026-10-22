@@ -14,6 +14,7 @@ Every external command the pipeline runs goes through here so that:
 from __future__ import annotations
 
 import shutil
+import signal
 import subprocess
 import time
 from dataclasses import dataclass
@@ -45,6 +46,20 @@ class Result:
     @property
     def ok(self) -> bool:
         return self.returncode == 0 and not self.timed_out
+
+    @property
+    def failure(self) -> str:
+        """Why the run did not succeed, or "" when it did (or was a dry run)."""
+        if self.ok or self.skipped:
+            return ""
+        if self.timed_out:
+            return "timed out"
+        if self.returncode is not None and self.returncode < 0:
+            try:
+                return f"killed by {signal.Signals(-self.returncode).name}"
+            except ValueError:
+                return f"killed by signal {-self.returncode}"
+        return f"exited {self.returncode}"
 
 
 def have(tool: str) -> bool:
