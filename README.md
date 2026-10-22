@@ -276,13 +276,18 @@ the loop — the branching logic is not frozen into the tool.
 ## Tests
 
 ```bash
-uv run python -m unittest discover -s tests -t .   # 367 tests, ~5s, no network
+uv run python -m unittest discover -s tests -t .   # 373 tests, ~6s, no network
 ```
 
 Fixture-driven, so no scanners are needed: captured nmap/sslscan XML and
 nuclei JSONL for the parsers, a fake SNMP agent over a real UDP socket for the
 wire format, and local HTTP targets (one deliberately exposed, one IIS-flavoured,
 one correctly hardened) for the probe → chase → report path.
+
+To exercise the real scanners too, `uv run python -m tests.lab` starts nine
+exposed services on `127.0.0.2` (HTTP, HTTPS, IIS, SSH, Redis, MySQL,
+Elasticsearch, Docker API, SNMP) with a matching scope and policy in
+`examples/lab/`. See `docs/LAB.md`.
 
 The suite deliberately covers the things that cause false positives in client
 reports — soft-404 filtering, OpenAPI base-path joining, secret redaction,

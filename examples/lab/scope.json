@@ -1,0 +1,17 @@
+{
+  "engagement": "extscan local lab",
+  "client": "Local workstation (operator-owned)",
+
+  "authorization": {
+    "reference": "LOCAL-LAB",
+    "authorized_by": "operator (owns this host)",
+    "window_start": "2026-01-01T00:00:00Z",
+    "window_end": "2027-12-31T23:59:59Z",
+    "notes": "Loopback-only test lab started by `python -m tests.lab`. Nothing here leaves the machine."
+  },
+
+  "targets": ["127.0.0.2/32"],
+  "exclude": [],
+  "max_hosts": 1,
+  "allow_private": true
+}

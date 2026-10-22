@@ -1,0 +1,152 @@
+# Local test lab
+
+The unit tests feed probes pre-built `Service` objects, so they never exercise
+real nmap discovery, real nuclei, or service identification. The lab covers
+that gap. It is a set of deliberately exposed listeners on a dedicated loopback
+address, so you can run the whole pipeline end to end on a workstation without
+touching a network you don't own.
+
+Everything is stdlib Python and reuses the handlers the test suite already
+uses (`tests/targetapp.py`, the IIS handler in `tests/test_new_tools.py`, the
+SNMP agent in `tests/test_snmp.py`). One extra dependency: `openssl` on `PATH`,
+which generates the self-signed certificate at startup.
+
+## Quick start
+
+```bash
+# terminal 1: start the lab (Ctrl-C to stop)
+uv run python -m tests.lab
+
+# terminal 2: scan it
+uv run extscan run --scope examples/lab/scope.json --policy examples/lab/policy.json
+uv run extscan findings latest
+uv run extscan gaps latest
+```
+
+A full run takes about 70 seconds. The report lands in `runs/<id>/report.md`,
+which is gitignored like any other run.
+
+## What is listening
+
+Everything binds `127.0.0.2`. Linux routes all of `127.0.0.0/8` to `lo`, so no
+setup is needed there. The scope is that single address, so nothing else
+running on your machine shows up in the results.
+
+| Port | Imitates | nmap identifies it as | What extscan should report |
+|---|---|---|---|
+| 2222/tcp | OpenSSH 7.4 banner | `ssh OpenSSH 7.4` | SSH exposure review, vulners candidates |
+| 2375/tcp | Docker remote API, no auth | `docker Docker remote API` | **critical** Docker API (plaintext) exposure |
+| 3306/tcp | MySQL 5.7.33 handshake | `mysql MySQL 5.7.33-log` | **high** database exposed |
+| 6379/tcp | Redis 5.0.7, no `requirepass` | `redis Redis key-value store 5.0.7` | **critical** Redis exposure, `redis-info` |
+| 8080/tcp | Billing app (`targetapp.py`) | `http nginx 1.18.0` | `.env` with redacted secrets, Swagger spec with unauthenticated writes, GraphQL introspection, `/metrics`, soft-404 handling, a confirmed-open `/api/admin/users` |
+| 8081/tcp | IIS 8.5 / ASP.NET | `http Microsoft IIS httpd 8.5` | `trace.axd`, `elmah.axd`, WebDAV write verbs, 8.3 short-name oracle, verbose error page |
+| 8443/tcp | Billing app over TLS | `ssl/http nginx 1.18.0` | Same as 8080, plus a self-signed certificate |
+| 9200/tcp | Elasticsearch 6.8.0 | `http Elasticsearch REST API 6.8.0` | **critical** Elasticsearch exposure |
+| 10161/udp | SNMP agent, community `public` | `snmp` (needs a UDP scan) | **SNMP readable with `public`**, interface walk |
+
+On the last full run this produced 5 critical, 11 high, 18 medium and 6 low
+findings, with 47 items in the manual review queue.
+
+The 8443 copy of the billing app serves the same OpenAPI document as 8080, and
+its `servers` entry points at `http://127.0.0.2:8080/api`. That's deliberate:
+its `api_endpoint` follow-ups land on 8080, which exercises extscan following a
+spec's `servers` block, still within scope. The second `servers` entry,
+`internal-billing.corp.acme.example`, shows up as an out-of-scope reference
+and is never requested.
+
+## UDP and SNMP
+
+nmap needs raw sockets for `-sU`. Unprivileged, extscan skips UDP and records a
+**serious** coverage gap, which is correct behaviour and worth seeing once.
+To cover SNMP, either grant nmap the capability once:
+
+```bash
+sudo setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip $(which nmap)
+```
+
+or add UDP to an existing run as root:
+
+```bash
+sudo uv run extscan discover latest --udp-only
+uv run extscan probe latest && uv run extscan chase latest && uv run extscan report latest
+```
+
+The SNMP probe matches port 10161 (SNMP over TLS's registered port), so the
+lab doesn't need root to bind 161. You can check the agent directly without
+nmap:
+
+```bash
+uv run python -c "from extscan.policy import Policy; from extscan.tools import snmp; \
+print(snmp.check_community_strings('127.0.0.2', Policy(), port=10161)[2])"
+# ['public']
+```
+
+## The lab policy
+
+`examples/lab/policy.json` narrows the standard settings to what a loopback
+target needs:
+
+- **Ports**: only the lab's, so discovery takes about a minute instead of
+  sweeping `TCP_TOP`.
+- **Scripts**: `(default or safe) and not dns-blacklist`. `dns-blacklist`
+  queries public DNSBL servers about the target address. For a loopback
+  address that query can't mean anything, and it stalls the run on an
+  offline or sandboxed machine.
+- **No `vuln` category**: keeps the run short. Add it back to test the
+  production script set.
+
+`examples/lab/scope.json` sets `allow_private: true` (loopback is refused
+otherwise) and a wide testing window. Don't copy either setting into a real
+engagement scope.
+
+## Things the lab surfaced
+
+These came up while building the lab. They're worth knowing before you trust
+a run against real infrastructure:
+
+- **`http-slowloris-check` is in NSE's `safe` category**, so the default
+  `default,safe,vuln` set includes it. It holds connections open against any
+  HTTP server that doesn't time out partial requests. Before the lab handlers
+  had a read timeout, it stretched the TCP stage from about 1 minute to 10.
+  Against fragile client kit that's a soft DoS, so consider excluding it in
+  `policy.gentle.json`.
+- **`vulners` sends every detected product and version to vulners.com.**
+  It's in `safe` and runs by default. That's fine for a lab, but on an
+  engagement it's client data leaving the box, in the same way the README
+  warns about public interactsh relays.
+- **A nuclei crash isn't recorded as a coverage gap.** If nuclei exits
+  non-zero, `pipeline.py` prints `nuclei exited N; results may be partial`
+  but adds nothing to `degradations.json`, and it still marks every web
+  service as nuclei-probed. `extscan gaps` then reports a clean web stage.
+  This contradicts the "never a silent pass" rule in the README.
+
+## Troubleshooting
+
+**`OSError: [Errno 98] Address already in use`**: a lab is already running,
+or something else holds one of the ports on `127.0.0.2`. `ss -ltnup | grep
+127.0.0.2` shows what. You can also bind a different loopback address with
+`--host 127.0.0.5`, then change `targets` in a copy of the scope to match.
+
+**macOS**: only `127.0.0.1` is configured on `lo0` by default. Add the alias
+first with `sudo ifconfig lo0 alias 127.0.0.2 up`.
+
+**nuclei reports 0 results and `exited -9`**: nuclei itself was killed. Check
+it outside extscan with `nuclei -u http://127.0.0.2:8080 -t ~/nuclei-templates/http/`.
+On the workstation where the lab was built, nuclei v3.4.10 with templates
+v10.2.7 was SIGKILLed within a second of loading the `http/` or `javascript/`
+template directories, whatever the target. `network/`, `ssl/` and `dns/`
+loaded fine. extscan's own probes still run. Only the nuclei findings are
+missing.
+
+**A port shows as `tcpwrapped` or `?`**: nmap identifies these listeners by
+exact byte patterns, so changing a handler's headers or JSON layout can break
+identification. Check with `nmap -sT -sV -Pn -p <port> 127.0.0.2`, and compare
+the `SF-Port` fingerprint against the `match` lines in
+`/usr/share/nmap/nmap-service-probes`.
+
+## Tests
+
+`tests/test_lab.py` starts the lab on `127.0.0.3`, so it doesn't collide with
+a lab you have running. It checks that every listener answers as expected,
+including that an idle TLS client can't stall the HTTPS port. It runs as part
+of the normal suite.
