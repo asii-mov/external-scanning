@@ -290,6 +290,17 @@ nuclei JSONL for the parsers, a fake SNMP agent over a real UDP socket for the
 wire format, and local HTTP targets (one deliberately exposed, one IIS-flavoured,
 one correctly hardened) for the probe → chase → report path.
 
+`tests/fuzz_failures.py` fuzzes the failure paths with Hypothesis. Fake
+`nmap`, `nuclei` and `sslscan` binaries exit with random codes and signals,
+hang, or write truncated, random or bit-flipped output. Each run is checked
+for a crash, a failed tool with no coverage gap, or a failed tool marked as
+having checked a service. It is opt-in because it needs Hypothesis and takes
+about ten minutes:
+
+```bash
+uv run --with hypothesis python -m unittest tests.fuzz_failures -v
+```
+
 To exercise the real scanners too, `uv run python -m tests.lab` starts nine
 exposed services on `127.0.0.2` (HTTP, HTTPS, IIS, SSH, Redis, MySQL,
 Elasticsearch, Docker API, SNMP) with a matching scope and policy in
