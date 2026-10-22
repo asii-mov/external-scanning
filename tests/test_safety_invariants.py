@@ -101,6 +101,14 @@ class TestDefaultPolicyIsNonDestructive(unittest.TestCase):
             for tag in ("dos", "intrusive", "fuzz", "brute-force"):
                 self.assertIn(tag, excluded, f"{name} does not exclude {tag}")
 
+    def test_credential_templates_excluded_in_every_profile(self):
+        """default-login templates submit passwords; that is credential testing."""
+        for name, policy in self.profiles.items():
+            argv = nuclei.argv(policy, "/t", "/o")
+            excluded = argv[argv.index("-exclude-tags") + 1].split(",")
+            for tag in ("default-login", "default-logins", "creds-stuffing"):
+                self.assertIn(tag, excluded, f"{name} does not exclude {tag}")
+
     def test_intrusive_is_opt_in_in_every_profile(self):
         for name, policy in self.profiles.items():
             self.assertFalse(policy.nuclei.allow_intrusive, name)
