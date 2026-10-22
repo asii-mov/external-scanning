@@ -99,6 +99,15 @@ class TestFuzzerFindings(_Stage):
                          ["nuclei killed by signal 35"])
         self.assertNotIn("nuclei", svc.probed_by)
 
+    def test_partial_utf8_in_killed_nuclei_output_is_a_gap_not_a_crash(self):
+        self.fake_tool("nuclei", 'while [ $# -gt 0 ]; do [ "$1" = -output ] && '
+                                 "printf '\\200' > \"$2\"; shift; done; kill -9 $$")
+        with self.only_fake_tools_on_path():
+            svc = self.probe(TestNucleiFailure.web, only=["nuclei"])
+        self.assertEqual([d.reason for d in self.store.degradations()],
+                         ["nuclei killed by SIGKILL"])
+        self.assertNotIn("nuclei", svc.probed_by)
+
     def test_failing_sslscan_is_a_gap(self):
         self.fake_tool("sslscan", "exit 1")
         svc = Service(host="127.0.0.1", port=8443, proto="tcp", name="https")
