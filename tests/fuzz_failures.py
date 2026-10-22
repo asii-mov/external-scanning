@@ -7,9 +7,11 @@ prints. Fake executables on PATH act that out, the real stages run, and every
 run is checked against the README's promise that reduced coverage never
 looks like a clean result.
 
-Opt-in, because it needs Hypothesis and takes a few minutes:
+Minimized counterexamples live in tests/fuzz_corpus.json and replay before
+any random example, so a past failure stays fixed on every machine. Opt-in,
+because it takes several minutes:
 
-    uv run --with hypothesis python -m unittest tests.fuzz_failures -v
+    uv run python -m unittest tests.fuzz_failures -v
 
 FUZZ_EXAMPLES=500 raises the example count per property.
 """
@@ -30,7 +32,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from unittest import mock
 
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 
 from extscan import pipeline
@@ -116,6 +118,40 @@ def failures(fixture: bytes, can_hang: bool = True):
     )
 
 
+CORPUS = json.loads((Path(__file__).parent / "fuzz_corpus.json").read_text())
+
+
+def _corpus_bytes(spec: dict | None) -> bytes | None:
+    if spec is None:
+        return None
+    if "hex" in spec:
+        return bytes.fromhex(spec["hex"])
+    data = (FIXTURES / spec["fixture"]).read_bytes()
+    if "truncate" in spec:
+        return data[:spec["truncate"]]
+    return _flip(data, spec["flips"])
+
+
+def _corpus_failure(spec: dict) -> ToolFailure:
+    out = _corpus_bytes(spec["output"])
+    return ToolFailure(exit=tuple(spec["exit"]), output=None if out is None else out.hex(),
+                       stdout="", stderr="")
+
+
+def replay(section: str, **fields):
+    """Apply every corpus entry in `section` as a Hypothesis @example."""
+    def deco(fn):
+        entries = CORPUS[section]
+        for entry in entries if isinstance(entries, list) else entries[fields["parser"]]:
+            if section == "parsers":
+                fn = example(data=_corpus_bytes(entry))(fn)
+            else:
+                fn = example(**{arg: _corpus_failure(entry[tool])
+                                for arg, tool in fields.items()})(fn)
+        return fn
+    return deco
+
+
 def finished_nmap_doc(hexdata: str | None) -> bool:
     """Independent oracle: did nmap leave a complete, well-formed document?
 
@@ -182,6 +218,7 @@ FUZZ = settings(max_examples=EXAMPLES, deadline=None, derandomize=False,
 
 class FuzzDiscovery(unittest.TestCase):
     @FUZZ
+    @replay("discovery", failure="nmap")
     @given(failures((FIXTURES / "nmap-tcp.xml").read_bytes()))
     def test_unfinished_nmap_output_is_always_a_gap(self, failure: ToolFailure):
         h = _Harness(["203.0.113.10/31", "203.0.113.12/32", "198.51.100.99/32"])
@@ -208,6 +245,7 @@ class FuzzProbe(unittest.TestCase):
     web = Service(host="127.0.0.1", port=9, proto="tcp", name="http", tunnel="ssl")
 
     @FUZZ
+    @replay("probe", nuc="nuclei", ssl="sslscan")
     @given(failures((FIXTURES / "nuclei.jsonl").read_bytes()),
            failures((FIXTURES / "sslscan.xml").read_bytes(), can_hang=False))
     def test_failed_tool_is_a_gap_and_service_stays_unprobed(self, nuc, ssl):
@@ -237,6 +275,7 @@ class FuzzParsers(unittest.TestCase):
     """
 
     @FUZZ
+    @replay("parsers", parser="nmap")
     @given(outputs((FIXTURES / "nmap-tcp.xml").read_bytes()).filter(lambda b: b is not None))
     def test_nmap_salvage_and_parse(self, data: bytes):
         text, _ = nmap.salvage_partial_xml(data.decode(errors="replace"))
@@ -245,18 +284,21 @@ class FuzzParsers(unittest.TestCase):
                 nmap.parse_xml(text)
 
     @FUZZ
+    @replay("parsers", parser="nuclei")
     @given(outputs((FIXTURES / "nuclei.jsonl").read_bytes()).filter(lambda b: b is not None))
     def test_nuclei_jsonl(self, data: bytes):
         with contextlib.suppress(ValueError):
             nuclei.parse_jsonl(data.decode(errors="replace"))
 
     @FUZZ
+    @replay("parsers", parser="sslscan")
     @given(outputs((FIXTURES / "sslscan.xml").read_bytes()).filter(lambda b: b is not None))
     def test_sslscan_xml(self, data: bytes):
         with contextlib.suppress(ValueError):
             sslscan.parse_xml(data.decode(errors="replace"))
 
     @FUZZ
+    @replay("parsers", parser="snmp")
     @given(st.binary(max_size=512))
     def test_snmp_reply(self, data: bytes):
         snmp._parse_reply(data)
