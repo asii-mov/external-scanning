@@ -23,7 +23,9 @@ uv run extscan findings latest
 uv run extscan gaps latest
 ```
 
-A full run takes about 70 seconds. The report lands in `runs/<id>/report.md`,
+A full run takes about 8 minutes, nearly all of it nuclei. With
+`--skip-nuclei` on `probe`, or nuclei missing, it takes about 70 seconds.
+The report lands in `runs/<id>/report.md`,
 which is gitignored like any other run.
 
 ## What is listening
@@ -44,8 +46,12 @@ running on your machine shows up in the results.
 | 9200/tcp | Elasticsearch 6.8.0 | `http Elasticsearch REST API 6.8.0` | **critical** Elasticsearch exposure |
 | 10161/udp | SNMP agent, community `public` | `snmp` (needs a UDP scan) | **SNMP readable with `public`**, interface walk |
 
-On the last full run this produced 5 critical, 11 high, 18 medium and 6 low
-findings, with 47 items in the manual review queue.
+On the last full run with nuclei working, this produced 5 critical, 20 high,
+14 medium and 8 low findings, with 42 items in the manual review queue.
+nuclei flags "Apache RocketMQ Broker - Unauthenticated Access" on 2375 and
+9200. That's a false positive caused by the lab's fake listeners, which
+answer the template's raw TCP probe. A real Docker or Elasticsearch
+wouldn't.
 
 The 8443 copy of the billing app serves the same OpenAPI document as 8080, and
 its `servers` entry points at `http://127.0.0.2:8080/api`. That's deliberate:
@@ -103,7 +109,7 @@ engagement scope.
 
 ## Things the lab surfaced
 
-Building the lab turned up three problems, all fixed since:
+Building the lab turned up four problems, all fixed since:
 
 - **`http-slowloris-check` ran by default.** NSE puts it in `vuln,safe`, not
   `dos`. It holds connections open against servers that don't time out
@@ -111,6 +117,10 @@ Building the lab turned up three problems, all fixed since:
 - **`vulners` and `dns-blacklist` ran by default.** Both are in `external`
   and send target details to third parties. All three are now excluded by
   `nmap.exclude_scripts`.
+- **nuclei tested default credentials.** Once nuclei could run, the
+  default policy loaded 274 `default-login` templates, which submit
+  passwords to discovered services. `default-login`, `default-logins` and
+  `creds-stuffing` are now in `nuclei.exclude_tags`.
 - **A nuclei crash looked like a clean result.** A killed nuclei is now a
   serious coverage gap, and the web services stay unmarked so
   `extscan probe <run> --only nuclei` retries them.
@@ -127,15 +137,12 @@ first with `sudo ifconfig lo0 alias 127.0.0.2 up`.
 
 **Gap `nuclei killed by SIGKILL`**: something outside extscan killed nuclei.
 Check with `nuclei -u http://127.0.0.2:8080 -t ~/nuclei-templates/http/`.
-On the workstation where the lab was built, nuclei v3.4.10 died about 0.9s
-into loading the `http/` or `javascript/` templates, whatever the target. It
-died the same way in Docker and as a separate systemd unit. It sent no
-signal to itself, and no cgroup or OOM limit was involved. An EDR agent
-(Elastic Defend) was running, and nuclei's templates are full of exploit
-payloads. Its logs are root-only, so ask whoever manages it to confirm and
-add an exclusion. A Python venv won't help: nuclei is a Go binary, and the
-EDR judges the process, not its environment. extscan's own probes still run.
-Only the nuclei findings are missing, and the report says so.
+On the workstation where the lab was built, an EDR agent (Elastic Defend)
+killed nuclei about 0.9s into loading the `http/` or `javascript/`
+templates, whatever the target, including inside Docker. Uninstalling the
+agent fixed it. A reinstall or a venv won't help, because the EDR judges
+the process, not how it was installed. Until the cause is gone, extscan's
+own probes still run, and the report says the nuclei findings are missing.
 
 **A port shows as `tcpwrapped` or `?`**: nmap identifies these listeners by
 exact byte patterns, so changing a handler's headers or JSON layout can break
