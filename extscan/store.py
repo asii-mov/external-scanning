@@ -205,6 +205,10 @@ class Store:
         existing.append(deg)
         self._write("degradations.json", [d.to_dict() for d in existing])
 
+    def remove_degradations(self, stage: str, reason: str) -> None:
+        kept = [d for d in self.degradations() if (d.stage, d.reason) != (stage, reason)]
+        self._write("degradations.json", [d.to_dict() for d in kept])
+
     def checkpoint(self, stage: str, key: str) -> None:
         data = self._read("checkpoints.json", {})
         data.setdefault(stage, [])

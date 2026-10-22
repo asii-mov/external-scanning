@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from .llm.base import SECRET_LINE_RE
 from .models import Finding, Lead, Service
 from .policy import Policy
-from .runner import Runner, have
+from .runner import Runner
 from .scope import Scope
 from .tools import iis, net, snmp, sslscan
 
@@ -543,16 +543,13 @@ def iis_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead
 
 
 @register("sslscan", lambda s: s.proto == "tcp" and s.is_tls,
-          "Cipher-level TLS audit via sslscan (skipped when not installed).")
+          "Cipher-level TLS audit via sslscan (a coverage gap when not installed).")
 def sslscan_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     """Cipher enumeration, which the built-in TLS probe cannot do.
 
     Python's ssl module only offers what the local OpenSSL build supports, so
     it cannot prove a server accepts RC4. sslscan links its own crypto and can.
-    Absent, this is a no-op: the built-in probe already covered protocols.
     """
-    if not have("sslscan"):
-        return [], []
     _res, findings = sslscan.run(ctx.runner, ctx.scope, svc.host, svc.port)
     return findings, []
 

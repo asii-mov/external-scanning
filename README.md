@@ -67,14 +67,14 @@ each degrades to a recorded coverage gap rather than a failure).
 Lint with `uv run ruff check .`. The formatter is configured but not
 enforced; `pyproject.toml` explains why and how to turn it on.
 
-UDP scanning needs raw sockets:
+UDP scanning needs root. Run unprivileged, extscan says up front that the run
+is TCP only, prints the command to add UDP afterwards, and records a coverage
+gap, because "no SNMP findings" and "SNMP was never checked" must never look
+the same in a report:
 
 ```bash
-sudo setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip $(which nmap)
+sudo extscan discover <run> --udp-only   # clears the gap once UDP has run
 ```
-
-Without it, extscan **warns loudly and continues** — because "no SNMP findings"
-and "SNMP was never checked" must never look the same in a report.
 
 ## Authorisation is mandatory
 
@@ -171,7 +171,8 @@ loud abort. Never a silent pass.
 | **nmap times out or is killed** | Partial XML is salvaged — completed hosts are recovered from the truncated file instead of the whole batch being lost. The gap names which hosts went unscanned. `-oA` output means `nmap --resume` also works. |
 | **Scope is large** | Discovery runs in batches of `nmap.chunk_size` hosts, each checkpointed. A timeout costs one batch; `extscan resume` skips what finished. |
 | **nmap/nuclei/sslscan not installed** | Recorded as a coverage gap naming what was not checked, and the run continues. `doctor` tells you up front. |
-| **UDP needs root** | Loud warning plus a *serious* coverage gap, because "no SNMP findings" and "SNMP was never checked" must never look alike. |
+| **nuclei or a probe fails** | A killed, timed-out or crashing tool is a coverage gap naming the services it did not finish, and those services stay unmarked so `extscan probe <run> --only <probe>` retries them. |
+| **UDP needs root** | A TCP-only notice before discovery starts, plus a *serious* coverage gap, because "no SNMP findings" and "SNMP was never checked" must never look alike. |
 | **Model endpoint is down** | Retried with jittered backoff, then a circuit breaker opens and stops trying. 100 leads against a dead endpoint cost ~6 HTTP attempts, not 200. Findings keep their deterministic evidence and get a human-review flag. |
 | **Model returns garbage** | Not retried — it answered, just not usefully. Counted separately from an outage. |
 | **A lead keeps failing** | Retried up to `max_lead_attempts` *across runs*, then abandoned with its error recorded, so one unreachable host cannot block the stage on every resume. |
@@ -227,6 +228,11 @@ Deliberate, tested, and not configurable away:
   not followed.
 - **No shell.** Every command runs as an argv list. Target-derived strings
   never reach a shell.
+- **Disruptive and leaky NSE scripts excluded by default.** The `dos` and
+  `external` categories and `http-slowloris-check` do not run. `external`
+  covers scripts such as `vulners` and `dns-blacklist`, which send target
+  details to third-party services. This is the one item here a policy can
+  change (`nmap.exclude_scripts`), for an engagement that permits it.
 - **Destructive nuclei templates excluded** (`dos`, `intrusive`, `fuzz`,
   `brute-force`), and out-of-band detection is off by default — public
   interactsh relays would see client traffic.

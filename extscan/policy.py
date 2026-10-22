@@ -27,6 +27,13 @@ class NmapPolicy:
     max_retries: int = 2
     min_rate: int = 0
     scripts: str = "default,safe,vuln"
+    # NSE categories or script names never run, whatever `scripts` selects.
+    # dos: smb-vuln-ms10-054 and friends sit in `vuln` and can crash hosts.
+    # external: vulners, dns-blacklist, whois-ip and others send target data
+    # to third-party services. http-slowloris-check is `vuln,safe` but holds
+    # connections open for minutes, a soft DoS against fragile servers.
+    exclude_scripts: list[str] = field(default_factory=lambda: [
+        "dos", "external", "http-slowloris-check"])
     skip_host_discovery: bool = False
     do_udp: bool = True
     extra_args: list[str] = field(default_factory=list)

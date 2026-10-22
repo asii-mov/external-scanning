@@ -8,6 +8,7 @@ the normal shape of real audit work, rather than one opaque button.
 
 from __future__ import annotations
 
+import signal
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -50,6 +51,23 @@ def init_run(runs_dir: str, scope: Scope, policy: Policy,
         "warnings": [],
     })
     return store
+
+
+def _coverage_lost(store: Store, deg: Degradation) -> None:
+    store.add_degradation(deg)
+    print(f"  ! {deg.reason}")
+    print(f"    {deg.impact}")
+
+
+def _exit_reason(res) -> str:
+    if res.timed_out:
+        return "timed out"
+    if res.returncode is not None and res.returncode < 0:
+        return f"killed by {signal.Signals(-res.returncode).name}"
+    return f"exited {res.returncode}"
+
+
+UDP_NEEDS_ROOT = "nmap -sU requires root and the run is unprivileged"
 
 
 def _warn(store: Store, message: str) -> None:
@@ -161,7 +179,13 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
              resume: bool = False) -> dict:
     scope.assert_window()
     do_udp = policy.nmap.do_udp if udp is None else udp
+    udp_blocked = do_udp and nmap.udp_requires_root()
     summary: dict = {"tcp": None, "udp": None}
+    rerun = f"sudo extscan discover {store.path.name} --udp-only"
+
+    if udp_blocked:
+        print("Not running as root: this run is TCP only.")
+        print(f"  Re-run as root to add UDP: {rerun}")
 
     if tcp:
         print("→ nmap TCP discovery")
@@ -170,25 +194,21 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
             print(f"  {summary['tcp']['hosts']} host(s), "
                   f"{summary['tcp']['services']} open TCP port(s)")
 
-    if do_udp:
-        if nmap.udp_requires_root():
-            store.add_degradation(Degradation(
-                stage="discover:udp", component="nmap",
-                reason="nmap -sU requires root and the run is unprivileged",
-                impact="No UDP scanning was performed. SNMP, IPMI, NTP, mDNS and "
-                       "other UDP exposure is NOT covered by this report. Absence "
-                       "of UDP findings here means the check never ran.",
-                severity="serious", recoverable=True,
-                remedy="Re-run `extscan discover <run> --udp-only` as root, or grant "
-                       "CAP_NET_RAW: setcap cap_net_raw,cap_net_admin+eip $(which nmap)",
-            ))
-            _warn(store, "UDP scan skipped: nmap -sU needs root. Without it, SNMP "
-                         "and other UDP exposure is NOT covered by this report.")
-        else:
-            print("→ nmap UDP discovery")
-            summary["udp"] = _run_nmap_pass(store, scope, policy, runner, "udp", resume)
-            if summary["udp"]:
-                print(f"  {summary['udp']['services']} open/responding UDP port(s)")
+    if udp_blocked:
+        store.add_degradation(Degradation(
+            stage="discover:udp", component="nmap", reason=UDP_NEEDS_ROOT,
+            impact="No UDP scanning was performed. SNMP, IPMI, NTP, mDNS and "
+                   "other UDP exposure is NOT covered by this report. Absence "
+                   "of UDP findings here means the check never ran.",
+            severity="serious", recoverable=True,
+            remedy=f"Re-run as root: `{rerun}`",
+        ))
+    elif do_udp:
+        store.remove_degradations("discover:udp", UDP_NEEDS_ROOT)
+        print("→ nmap UDP discovery")
+        summary["udp"] = _run_nmap_pass(store, scope, policy, runner, "udp", resume)
+        if summary["udp"]:
+            print(f"  {summary['udp']['services']} open/responding UDP port(s)")
 
     store.mark_stage("discover", **{k: v for k, v in summary.items() if v})
     return summary
@@ -265,15 +285,24 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
         print(f"→ nuclei against {len(web)} web service(s)")
         try:
             res, findings, leads = nuclei.run(runner, scope, policy, services)
-            all_findings += findings
-            all_leads += leads
-            print(f"  {len(findings)} result(s), {len(leads)} lead(s)")
-            if res is not None and not res.ok and not res.skipped:
-                _warn(store, f"nuclei exited {res.returncode}; results may be partial")
-            for s in web:
-                store.mark_probed(s.id, "nuclei")
+            failure = "" if res is None or res.ok or res.skipped else _exit_reason(res)
         except ToolMissing as exc:
-            _warn(store, f"{exc} Web vulnerability checks did NOT run.")
+            findings, leads, failure = [], [], str(exc)
+        all_findings += findings
+        all_leads += leads
+        print(f"  {len(findings)} result(s), {len(leads)} lead(s)")
+        if failure:
+            _coverage_lost(store, Degradation(
+                stage="probe:nuclei", component="nuclei", reason=f"nuclei {failure}",
+                impact=f"Templated web checks did not complete against {len(web)} web "
+                       "service(s). Any nuclei finding may be missing from this report.",
+                severity="serious", hosts=sorted({w.host for w in web}),
+                remedy="Run nuclei by hand against raw/nuclei-targets.txt to see why, "
+                       "then `extscan probe <run> --only nuclei`.",
+            ))
+        else:
+            for w in web:
+                store.mark_probed(w.id, "nuclei")
 
     jobs: list[tuple[probes_mod.Probe, object]] = []
     for svc in services:
@@ -284,6 +313,7 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 continue
             jobs.append((p, svc))
 
+    failed: set[tuple[str, str]] = set()
     if jobs:
         print(f"→ {len(jobs)} per-service probe(s) across {len(services)} service(s)")
         with ThreadPoolExecutor(max_workers=max(1, policy.max_workers)) as pool:
@@ -294,8 +324,14 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 try:
                     findings, leads = fut.result()
                 except Exception as exc:
-                    _warn(store, f"probe {p.name} failed on {svc.id}: "
-                                 f"{type(exc).__name__}: {exc}")
+                    failed.add((p.name, svc.id))
+                    _coverage_lost(store, Degradation(
+                        stage=f"probe:{p.name}", component=p.name,
+                        reason=f"{svc.id}: {type(exc).__name__}: {exc}"[:300],
+                        impact=f"The {p.name} check did not run on {svc.id}.",
+                        hosts=[svc.host],
+                        remedy=f"Fix the cause, then `extscan probe <run> --only {p.name}`.",
+                    ))
                     continue
                 all_findings += findings
                 all_leads += leads
@@ -303,7 +339,8 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
     added_f = store.add_findings(all_findings)
     added_l = store.add_leads(all_leads, max_total=policy.max_leads_per_run)
     for p, svc in jobs:
-        store.mark_probed(svc.id, p.name)
+        if (p.name, svc.id) not in failed:
+            store.mark_probed(svc.id, p.name)
 
     store.mark_stage("probe", findings=added_f, leads=added_l, probes_run=len(jobs))
     print(f"  {added_f} new finding(s), {added_l} new lead(s)")

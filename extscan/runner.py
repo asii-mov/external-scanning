@@ -194,9 +194,9 @@ def doctor() -> dict:
         }
     rows["_notes"] = {
         "nmap_privileges": (
-            "UDP scans (-sU), SYN scans (-sS) and OS detection need root. Either "
-            "run extscan with sudo, or grant nmap CAP_NET_RAW: "
-            "sudo setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip $(which nmap)"
+            "UDP scans (-sU), SYN scans (-sS) and OS detection need root. "
+            "Unprivileged runs are TCP only; add UDP with "
+            "`sudo extscan discover <run> --udp-only`."
         ),
     }
     return rows

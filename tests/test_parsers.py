@@ -169,9 +169,10 @@ class TestNmapArgvConstruction(unittest.TestCase):
 
     def test_never_requests_dos_or_exploit_scripts(self):
         argv = nmap.tcp_argv(self.scope, self.policy, "scan-out.xml")
-        joined = " ".join(argv)
-        self.assertNotIn("exploit", joined)
-        self.assertNotIn("dos", joined.replace("--dns", ""))
+        self.assertNotIn("exploit", " ".join(argv))
+        selected, excluded = argv[argv.index("--script") + 1].split(" and not ")
+        self.assertNotIn("dos", selected)
+        self.assertIn("dos", excluded)
 
     def test_thorough_profile_scans_all_ports(self):
         from extscan.policy import Policy

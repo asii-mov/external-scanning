@@ -122,6 +122,16 @@ class TestUnprivilegedUdp(_Stage):
         self.assertIn("  Re-run as root to add UDP: sudo extscan discover r --udp-only", lines)
         self.assertEqual(self.gaps(), [("discover:udp", "nmap", [])])
 
+    def test_root_rerun_clears_the_udp_gap(self):
+        dry = Runner(self.store, dry_run=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.object(nmap, "udp_requires_root", return_value=True):
+                pipeline.discover(self.store, self.scope, self.policy, dry)
+            with mock.patch.object(nmap, "udp_requires_root", return_value=False):
+                pipeline.discover(self.store, self.scope, self.policy, dry,
+                                  tcp=False, udp=True)
+        self.assertEqual(self.gaps(), [])
+
 
 class TestNseScriptSelection(unittest.TestCase):
     def setUp(self):

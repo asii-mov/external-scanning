@@ -56,20 +56,24 @@ and is never requested.
 
 ## UDP and SNMP
 
-nmap needs raw sockets for `-sU`. Unprivileged, extscan skips UDP and records a
-**serious** coverage gap, which is correct behaviour and worth seeing once.
-To cover SNMP, either grant nmap the capability once:
+nmap needs root for `-sU`. Run unprivileged, extscan prints this before
+discovery starts, and records a **serious** coverage gap:
 
-```bash
-sudo setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip $(which nmap)
+```
+Not running as root: this run is TCP only.
+  Re-run as root to add UDP: sudo extscan discover <run> --udp-only
 ```
 
-or add UDP to an existing run as root:
+Run that command to cover SNMP, then re-run the later stages as yourself.
+The UDP pass clears the gap:
 
 ```bash
-sudo uv run extscan discover latest --udp-only
+sudo .venv/bin/extscan discover <run> --udp-only
 uv run extscan probe latest && uv run extscan chase latest && uv run extscan report latest
 ```
+
+Use the venv's `extscan` under sudo. root's `PATH` usually has neither `uv`
+nor the project's entry point.
 
 The SNMP probe matches port 10161 (SNMP over TLS's registered port), so the
 lab doesn't need root to bind 161. You can check the agent directly without
@@ -88,12 +92,10 @@ target needs:
 
 - **Ports**: only the lab's, so discovery takes about a minute instead of
   sweeping `TCP_TOP`.
-- **Scripts**: `(default or safe) and not dns-blacklist`. `dns-blacklist`
-  queries public DNSBL servers about the target address. For a loopback
-  address that query can't mean anything, and it stalls the run on an
-  offline or sandboxed machine.
-- **No `vuln` category**: keeps the run short. Add it back to test the
-  production script set.
+- **Scripts**: `default,safe`, minus the `nmap.exclude_scripts` default that
+  every policy gets (`dos`, `external`, `http-slowloris-check`). No `vuln`
+  category, which keeps the run short. Add it back to test the production
+  script set.
 
 `examples/lab/scope.json` sets `allow_private: true` (loopback is refused
 otherwise) and a wide testing window. Don't copy either setting into a real
@@ -101,24 +103,17 @@ engagement scope.
 
 ## Things the lab surfaced
 
-These came up while building the lab. They're worth knowing before you trust
-a run against real infrastructure:
+Building the lab turned up three problems, all fixed since:
 
-- **`http-slowloris-check` is in NSE's `safe` category**, so the default
-  `default,safe,vuln` set includes it. It holds connections open against any
-  HTTP server that doesn't time out partial requests. Before the lab handlers
-  had a read timeout, it stretched the TCP stage from about 1 minute to 10.
-  Against fragile client kit that's a soft DoS, so consider excluding it in
-  `policy.gentle.json`.
-- **`vulners` sends every detected product and version to vulners.com.**
-  It's in `safe` and runs by default. That's fine for a lab, but on an
-  engagement it's client data leaving the box, in the same way the README
-  warns about public interactsh relays.
-- **A nuclei crash isn't recorded as a coverage gap.** If nuclei exits
-  non-zero, `pipeline.py` prints `nuclei exited N; results may be partial`
-  but adds nothing to `degradations.json`, and it still marks every web
-  service as nuclei-probed. `extscan gaps` then reports a clean web stage.
-  This contradicts the "never a silent pass" rule in the README.
+- **`http-slowloris-check` ran by default.** NSE puts it in `vuln,safe`, not
+  `dos`. It holds connections open against servers that don't time out
+  partial requests, and stretched the lab's TCP stage from 1 minute to 10.
+- **`vulners` and `dns-blacklist` ran by default.** Both are in `external`
+  and send target details to third parties. All three are now excluded by
+  `nmap.exclude_scripts`.
+- **A nuclei crash looked like a clean result.** A killed nuclei is now a
+  serious coverage gap, and the web services stay unmarked so
+  `extscan probe <run> --only nuclei` retries them.
 
 ## Troubleshooting
 
@@ -130,13 +125,17 @@ or something else holds one of the ports on `127.0.0.2`. `ss -ltnup | grep
 **macOS**: only `127.0.0.1` is configured on `lo0` by default. Add the alias
 first with `sudo ifconfig lo0 alias 127.0.0.2 up`.
 
-**nuclei reports 0 results and `exited -9`**: nuclei itself was killed. Check
-it outside extscan with `nuclei -u http://127.0.0.2:8080 -t ~/nuclei-templates/http/`.
-On the workstation where the lab was built, nuclei v3.4.10 with templates
-v10.2.7 was SIGKILLed within a second of loading the `http/` or `javascript/`
-template directories, whatever the target. `network/`, `ssl/` and `dns/`
-loaded fine. extscan's own probes still run. Only the nuclei findings are
-missing.
+**Gap `nuclei killed by SIGKILL`**: something outside extscan killed nuclei.
+Check with `nuclei -u http://127.0.0.2:8080 -t ~/nuclei-templates/http/`.
+On the workstation where the lab was built, nuclei v3.4.10 died about 0.9s
+into loading the `http/` or `javascript/` templates, whatever the target. It
+died the same way in Docker and as a separate systemd unit. It sent no
+signal to itself, and no cgroup or OOM limit was involved. An EDR agent
+(Elastic Defend) was running, and nuclei's templates are full of exploit
+payloads. Its logs are root-only, so ask whoever manages it to confirm and
+add an exclusion. A Python venv won't help: nuclei is a Go binary, and the
+EDR judges the process, not its environment. extscan's own probes still run.
+Only the nuclei findings are missing, and the report says so.
 
 **A port shows as `tcpwrapped` or `?`**: nmap identifies these listeners by
 exact byte patterns, so changing a handler's headers or JSON layout can break

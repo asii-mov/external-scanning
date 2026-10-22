@@ -32,6 +32,12 @@ def _targets_for(scope: Scope, targets: list[str] | None) -> list[str]:
     return list(targets)
 
 
+def _script_selection(scripts: str, exclude: list[str]) -> str:
+    if not exclude:
+        return scripts
+    return f"({scripts.replace(',', ' or ')}) and not ({' or '.join(exclude)})"
+
+
 def tcp_argv(scope: Scope, policy: Policy, out_base: str,
              targets: list[str] | None = None) -> list[str]:
     """Build the TCP discovery command.
@@ -47,7 +53,7 @@ def tcp_argv(scope: Scope, policy: Policy, out_base: str,
     argv = ["nmap", "-sS" if _is_root() else "-sT", "-sV",
             "--version-intensity", str(p.version_intensity)]
     if p.scripts:
-        argv += ["--script", p.scripts]
+        argv += ["--script", _script_selection(p.scripts, p.exclude_scripts)]
     argv += ["-p", p.tcp_ports, p.timing,
              "--max-retries", str(p.max_retries),
              "--host-timeout", p.host_timeout,
@@ -72,7 +78,7 @@ def udp_argv(scope: Scope, policy: Policy, out_base: str,
             "--host-timeout", p.host_timeout,
             "--open", "-oA", out_base]
     if p.scripts:
-        argv += ["--script", "default,safe"]
+        argv += ["--script", _script_selection("default,safe", p.exclude_scripts)]
     if p.skip_host_discovery:
         argv.append("-Pn")
     argv += _targets_for(scope, targets)
