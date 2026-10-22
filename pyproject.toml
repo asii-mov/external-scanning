@@ -24,7 +24,14 @@ extscan = "extscan.cli:main"
 dev = [
     "ruff>=0.16",
     "pytest>=8.0",
+    "hypothesis>=6.150",
 ]
+
+[tool.uv]
+# Only resolve packages published at least a week ago, on every machine, so
+# a freshly compromised release cannot land through `uv lock`. Kept here, not
+# only in user config, so `uv sync --locked` agrees everywhere.
+exclude-newer = "7 days"
 
 [tool.setuptools.packages.find]
 include = ["extscan*"]
