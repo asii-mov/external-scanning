@@ -295,12 +295,17 @@ one correctly hardened) for the probe → chase → report path.
 `nmap`, `nuclei` and `sslscan` binaries exit with random codes and signals,
 hang, or write truncated, random or bit-flipped output. Each run is checked
 for a crash, a failed tool with no coverage gap, or a failed tool marked as
-having checked a service. It is opt-in because it needs Hypothesis and takes
-about ten minutes:
+having checked a service. Past counterexamples in `tests/fuzz_corpus.json`
+replay first on every run. It is opt-in because it takes several minutes:
 
 ```bash
-uv run --with hypothesis python -m unittest tests.fuzz_failures -v
+uv run python -m unittest tests.fuzz_failures -v
 ```
+
+`tests/fixtures/lab-run/` is a complete lab run with real nmap and nuclei
+output, for working on reporting without running scanners.
+`bash scripts/cloud-setup.sh` provisions a fresh Linux box (a cloud session,
+CI) with nmap, sslscan and pinned nuclei and templates.
 
 To exercise the real scanners too, `uv run python -m tests.lab` starts nine
 exposed services on `127.0.0.2` (HTTP, HTTPS, IIS, SSH, Redis, MySQL,
