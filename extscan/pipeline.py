@@ -61,10 +61,6 @@ def _warn(store: Store, message: str) -> None:
     print(f"  ! {message}")
 
 
-# ---------------------------------------------------------------------------
-# Discovery
-# ---------------------------------------------------------------------------
-
 def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
                    kind: str, resume: bool) -> dict | None:
     """Run one nmap pass (tcp or udp) in checkpointed chunks.
@@ -110,7 +106,7 @@ def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
             _warn(store, str(exc))
             return None
 
-        if res.skipped:                       # dry run
+        if res.skipped:
             print("    (dry run)")
             continue
 
@@ -155,8 +151,6 @@ def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
             ))
             print(f"    ! batch failed; {len(targets)} host(s) not covered")
 
-        # If every batch is failing, the fault is local -- stop now rather than
-        # producing a report that says the client's estate is dark.
         aborter.check(context=f"{kind} discovery")
 
     return totals
@@ -199,10 +193,6 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
     store.mark_stage("discover", **{k: v for k, v in summary.items() if v})
     return summary
 
-
-# ---------------------------------------------------------------------------
-# Recon (subdomain enumeration)
-# ---------------------------------------------------------------------------
 
 def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
     """Enumerate subdomains of the scope's domains, then split them by scope.
@@ -257,10 +247,6 @@ def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
     return totals
 
 
-# ---------------------------------------------------------------------------
-# Probing
-# ---------------------------------------------------------------------------
-
 def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
           only: list[str] | None = None, force: bool = False,
           skip_nuclei: bool = False) -> dict:
@@ -274,9 +260,6 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
     all_findings: list[Finding] = []
     all_leads: list[Lead] = []
 
-    # nuclei runs once across every web target rather than per service: it
-    # manages its own concurrency and rate limiting better than we can by
-    # invoking it repeatedly.
     web = [s for s in services if s.is_http]
     if web and not skip_nuclei and (only is None or "nuclei" in only):
         print(f"→ nuclei against {len(web)} web service(s)")
@@ -292,7 +275,6 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
         except ToolMissing as exc:
             _warn(store, f"{exc} Web vulnerability checks did NOT run.")
 
-    # Per-service probes, in a small pool since each is network-bound.
     jobs: list[tuple[probes_mod.Probe, object]] = []
     for svc in services:
         for p in probes_mod.probes_for(svc):
@@ -318,7 +300,6 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 all_findings += findings
                 all_leads += leads
 
-    # Single-threaded writes: the store is not concurrency-safe by design.
     added_f = store.add_findings(all_findings)
     added_l = store.add_leads(all_leads, max_total=policy.max_leads_per_run)
     for p, svc in jobs:
@@ -332,10 +313,6 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
 def _run_one_probe(ctx: ProbeContext, p: probes_mod.Probe, svc):
     return p.run(ctx, svc)
 
-
-# ---------------------------------------------------------------------------
-# Chasing leads
-# ---------------------------------------------------------------------------
 
 def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 lead_ids: list[str] | None = None, kinds: list[str] | None = None,
@@ -368,8 +345,6 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
 
         print(f"→ chase round {round_no}: {len(open_leads)} lead(s)")
         for lead in open_leads:
-            # Permanently-failing leads are given up on rather than retried on
-            # every resume until someone notices the run never finishes.
             if lead.attempts >= policy.max_lead_attempts:
                 store.update_lead(
                     lead.id, status="abandoned",
@@ -396,8 +371,6 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
                         f"waiting {delay:.1f}s"),
                 )
             except CircuitOpen as exc:
-                # A dependency (typically the model endpoint) is down. Leave the
-                # lead open so a resume picks it up, and stop hammering it.
                 store.update_lead(lead.id, attempts=attempt_no, last_error=str(exc)[:300])
                 store.add_degradation(Degradation(
                     stage="chase", component="llm",
@@ -411,7 +384,7 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
                            "`extscan chase <run> --resume`, or work the open leads by hand.",
                 ))
                 print(f"  [{lead.kind}] deferred: {str(exc)[:110]}")
-                break           # abandon this round; the circuit needs time
+                break
             except RunAborted:
                 raise
             except Exception as exc:
@@ -440,17 +413,13 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
             print(f"  [{lead.kind}] {lead.host}:{lead.port or '-'} -> {result.note[:140]}")
 
         if lead_ids:
-            break          # explicit single-lead request: do not cascade
+            break
 
     store.mark_stage("chase", leads_handled=handled, findings=total_f,
                      new_leads=total_l, abandoned=abandoned)
     return {"handled": handled, "findings": total_f, "new_leads": total_l,
             "abandoned": abandoned}
 
-
-# ---------------------------------------------------------------------------
-# Report
-# ---------------------------------------------------------------------------
 
 def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dict:
     findings = store.findings()
@@ -473,10 +442,6 @@ def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dic
     return {"paths": {k: str(v) for k, v in paths.items()}, "stats": triaged.stats,
             "review_items": len(triaged.review_queue)}
 
-
-# ---------------------------------------------------------------------------
-# Whole run
-# ---------------------------------------------------------------------------
 
 def run_all(store: Store, scope: Scope, policy: Policy, runner: Runner,
             rounds: int = 2, llm=None) -> dict:

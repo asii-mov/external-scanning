@@ -10,19 +10,10 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Proprietary" }
 
-# No runtime dependencies, deliberately. This gets installed on jump boxes and
-# bastion hosts where adding packages is a change-control conversation, so the
-# whole scanner -- including SNMP on the wire -- is standard library only.
-# Model-assisted analysis is the one optional extra; see below.
 dependencies = []
 
 [project.optional-dependencies]
-# Model-assisted analysis is optional. The scanner is fully functional without
-# it -- findings are then entirely deterministic -- so its dependencies stay
-# out of the core install, which has to work on locked-down jump boxes where
-# adding packages is a change-control conversation.
 llm = ["anthropic>=0.69"]
-# Bedrock support rides on the same SDK plus its AWS credential handling.
 bedrock = ["anthropic[bedrock]>=0.69"]
 all = ["anthropic[bedrock]>=0.69"]
 
@@ -41,10 +32,6 @@ include = ["extscan*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-# ---------------------------------------------------------------------------
-# ruff
-# ---------------------------------------------------------------------------
-
 [tool.ruff]
 line-length = 100
 target-version = "py310"
@@ -52,62 +39,45 @@ src = ["extscan", "tests"]
 
 [tool.ruff.lint]
 select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # pyflakes
-    "I",      # import sorting
-    "UP",     # pyupgrade
-    "B",      # bugbear
-    "C4",     # comprehensions
-    "SIM",    # simplify
-    "RET",    # return consistency
-    "TID",    # tidy imports
-    "PTH",    # prefer pathlib
-    "RUF",    # ruff-specific
-    "S",      # flake8-bandit: this is security tooling, so the security
-              # linter earns its place even where it is noisy
+    "E",
+    "W",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "C4",
+    "SIM",
+    "RET",
+    "TID",
+    "PTH",
+    "RUF",
+    "S",
 ]
 ignore = [
-    "E501",    # line length is handled by the formatter, not an error here
-    "B008",    # function calls in defaults: not a pattern this codebase uses
-    "SIM108",  # ternaries are not always clearer than if/else
-    "RET504",  # a named return value is often the clearer documentation
-    "S101",    # assert: used in tests, and the lint config scopes that below
-    "S603",    # subprocess call: every one is an argv list with shell=False,
-               # which is enforced by tests/test_safety_invariants.py
-    "S607",    # partial executable path: tools are resolved via PATH on
-               # purpose, so operators can point at their own builds
+    "E501",
+    "B008",
+    "SIM108",
+    "RET504",
+    "S603",
+    "S607",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [
-    "S104",   # binding 0.0.0.0: test servers bind loopback only
-    "S105",   # hardcoded password: the fixtures are deliberate placeholders
+    "S101",
+    "S104",
+    "S105",
     "S106",
-    "S311",   # pseudo-random: fine in tests
-    "SLF001", # private member access: these tests target internals on purpose
+    "S311",
 ]
-# The target app is an intentionally vulnerable fixture.
 "tests/targetapp.py" = ["S104", "S105", "S106"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["extscan"]
 
 [tool.ruff.lint.flake8-tidy-imports]
-# Sibling-relative imports (`from .models import ...`) are correct inside a
-# package and keep it relocatable. Reaching up past the package (`..`) is the
-# thing actually worth banning.
 ban-relative-imports = "parents"
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
-
-# NOTE: `ruff check` is the enforced gate (see .github/workflows/tests.yml).
-# `ruff format` is configured but deliberately NOT enforced: this codebase is
-# dense in record construction (Finding(...) with a dozen keyword arguments),
-# and the formatter puts every argument on its own line, which inflates the
-# modules by roughly 40% and makes the lookup tables harder to scan. If the
-# team would rather have one consistent style than compact records, run
-# `ruff format .` once and add it to CI -- that is a reasonable trade, just not
-# the default chosen here.

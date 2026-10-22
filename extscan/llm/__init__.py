@@ -117,8 +117,6 @@ class LLMClient:
         self.stats.provider = self.provider.name
         self.stats.model = getattr(self.provider, "model", "")
 
-    # -- introspection ---------------------------------------------------
-
     @property
     def healthy(self) -> bool:
         return self.breaker.allows()
@@ -126,8 +124,6 @@ class LLMClient:
     def describe(self) -> dict:
         return {**self.provider.describe(), "circuit": self.breaker.state,
                 "stats": self.stats.to_dict()}
-
-    # -- the one call ----------------------------------------------------
 
     def analyse(self, question: str, evidence: str,
                 context: dict | None = None) -> Analysis | None:
@@ -183,8 +179,6 @@ class LLMClient:
         try:
             analysis = parse_analysis(text)
         except LLMBadOutput as exc:
-            # A reply we cannot parse is not a reason to retry: the model
-            # answered, just not usefully.
             self.stats.bad_output += 1
             self.stats.last_error = str(exc)[:300]
             return None
@@ -226,8 +220,6 @@ def build_client(policy) -> LLMClient | None:
     )
 
 
-# Let the shared classifier understand SDK exception types, so a 429 from the
-# model API is retried and a 401 is not.
 def _register_classifier() -> None:
     from extscan import resilience
 

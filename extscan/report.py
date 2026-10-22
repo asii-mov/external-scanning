@@ -62,7 +62,6 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
     out: list[str] = []
     w = out.append
 
-    # -- header ----------------------------------------------------------
     w(f"# External attack surface assessment: {scope.engagement}")
     w("")
     w(f"**Client:** {scope.client or 'n/a'}  ")
@@ -92,7 +91,6 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
             w(f"- `{t}`")
     w("")
 
-    # -- summary ---------------------------------------------------------
     w("## Summary")
     w("")
     w(f"{stats['hosts_with_findings']} of {len(hosts)} responding host(s) produced "
@@ -120,7 +118,6 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
           "See [Coverage gaps](#coverage-gaps) before drawing conclusions.")
         w("")
 
-    # -- review queue ----------------------------------------------------
     w("## Manual review queue")
     w("")
     if not triaged.review_queue:
@@ -152,7 +149,6 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
                     w(f"  - _... and {len(item.instances) - 15} more_")
             w("")
 
-    # -- systemic --------------------------------------------------------
     if triaged.systemic:
         w("## Systemic issues")
         w("")
@@ -169,7 +165,6 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
               f"| {len(s.hosts)}: {shown} |")
         w("")
 
-    # -- findings --------------------------------------------------------
     w("## Findings")
     w("")
     grouped: dict[str, list[Finding]] = {}
@@ -219,7 +214,6 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
                     w(f"- {r}")
                 w("")
 
-    # -- inventory -------------------------------------------------------
     w("## Service inventory")
     w("")
     if not services:
@@ -245,11 +239,6 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
               f"| {_esc(h.os_guess or '-')} |")
         w("")
 
-    # -- coverage gaps ---------------------------------------------------
-    #
-    # Deliberately placed before the inventory rather than in an appendix. A
-    # reader who skims the findings and stops must still see what was not
-    # checked, otherwise this report overstates its own coverage.
     if degradations:
         serious = [d for d in degradations if d.severity == "serious"]
         w("## Coverage gaps")
@@ -279,7 +268,6 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
         w("</details>")
         w("")
 
-    # -- methodology -----------------------------------------------------
     w("## Methodology and limitations")
     w("")
     stages = meta.get("stages", {})

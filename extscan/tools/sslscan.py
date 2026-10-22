@@ -20,8 +20,8 @@ import xml.etree.ElementTree as ET
 from extscan.models import Finding
 from extscan.runner import Result, Runner, require
 from extscan.scope import Scope
+from extscan.tools.nmap import reject_hostile_xml
 
-# Suites that should not be accepted by an internet-facing service in 2026.
 # Matched on the suite name, since sslscan's own `strength` attribute is
 # coarse and varies between versions.
 _WEAK_PATTERNS: list[tuple[str, str, str]] = [
@@ -72,8 +72,9 @@ def parse_xml(xml_text: str, scope: Scope | None = None) -> list[Finding]:
     """Turn sslscan XML into findings."""
     if not xml_text.strip():
         return []
+    reject_hostile_xml(xml_text, tool="sslscan")
     try:
-        root = ET.fromstring(xml_text)  # noqa: S314 - output of a tool we invoked
+        root = ET.fromstring(xml_text)  # noqa: S314
     except ET.ParseError as exc:
         raise ValueError(f"could not parse sslscan XML: {exc}") from exc
 
@@ -90,7 +91,6 @@ def parse_xml(xml_text: str, scope: Scope | None = None) -> list[Finding]:
 
         target = f"{host}:{port}" if port else host
 
-        # -- protocols ---------------------------------------------------
         enabled, disabled = [], []
         for node in test.findall("protocol"):
             label = _protocol_label(node)
@@ -116,7 +116,6 @@ def parse_xml(xml_text: str, scope: Scope | None = None) -> list[Finding]:
                 tags=["tls", "sslscan", "deprecated-protocol"],
             ))
 
-        # -- ciphers -----------------------------------------------------
         accepted = []
         for node in test.findall("cipher"):
             name = node.get("cipher") or ""
@@ -148,7 +147,6 @@ def parse_xml(xml_text: str, scope: Scope | None = None) -> list[Finding]:
                 tags=["tls", "sslscan", "weak-cipher"],
             ))
 
-        # Low-bit suites that the name patterns do not catch.
         low_bits = [e for e in accepted
                     if e["bits"].isdigit() and int(e["bits"]) < 128]
         if low_bits and not flagged:
@@ -163,7 +161,6 @@ def parse_xml(xml_text: str, scope: Scope | None = None) -> list[Finding]:
                 tags=["tls", "sslscan", "weak-cipher"],
             ))
 
-        # -- protocol-level features -------------------------------------
         compression = test.find("compression")
         if compression is not None and compression.get("supported") == "1":
             findings.append(Finding(
@@ -212,7 +209,6 @@ def parse_xml(xml_text: str, scope: Scope | None = None) -> list[Finding]:
                 tags=["tls", "sslscan", "cve"],
             ))
 
-        # -- certificate -------------------------------------------------
         cert = test.find("certificate")
         if cert is not None:
             findings.extend(_certificate_findings(cert, host, port, target))
@@ -256,9 +252,6 @@ def _certificate_findings(cert: ET.Element, host: str, port: int | None,
                           "or an appliance interface (often accepted).",
             tags=["tls", "sslscan", "certificate"],
         ))
-    # No trailing \b: the algorithm name is "sha1WithRSAEncryption", and 1->W
-    # is not a word boundary, so \b here silently matched nothing. The
-    # negative lookahead keeps sha256/sha512 out.
     if re.search(r"\b(?:sha-?1|md5)(?!\d)", sig, re.I):
         out.append(Finding(
             title=f"Certificate signed with a broken hash on {target}: {sig}",

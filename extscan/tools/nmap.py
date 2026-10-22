@@ -29,7 +29,6 @@ def _targets_for(scope: Scope, targets: list[str] | None) -> list[str]:
     """Explicit host list when chunking, otherwise the scope's CIDRs."""
     if targets is None:
         return scope.nmap_target_args()
-    # A chunk is already a list of in-scope hosts, so exclusions are applied.
     return list(targets)
 
 
@@ -72,7 +71,6 @@ def udp_argv(scope: Scope, policy: Policy, out_base: str,
             "--max-retries", str(p.max_retries),
             "--host-timeout", p.host_timeout,
             "--open", "-oA", out_base]
-    # UDP service detection leans on these scripts for SNMP/NTP/DNS/mDNS.
     if p.scripts:
         argv += ["--script", "default,safe"]
     if p.skip_host_discovery:
@@ -97,10 +95,6 @@ def _script_map(node: ET.Element) -> dict[str, str]:
     return out
 
 
-# nmap XML can be large, and the service/script fields inside it carry banner
-# text the target chose. ElementTree is not hardened against hostile XML, so
-# refuse anything with a doctype or entity declaration (nmap never emits one)
-# and cap the input, rather than trusting the file because we spawned the tool.
 MAX_XML_BYTES = 256 * 1024 * 1024
 
 # nmap legitimately emits a bare `<!DOCTYPE nmaprun>` with no internal subset,
@@ -111,23 +105,23 @@ _ENTITY_RE = re.compile(r"<!ENTITY\b", re.I)
 _DOCTYPE_SUBSET_RE = re.compile(r"<!DOCTYPE[^>\[]*\[", re.I)
 
 
-def _reject_hostile_xml(xml_text: str) -> None:
+def reject_hostile_xml(xml_text: str, tool: str = "nmap") -> None:
     """Refuse XML shaped like an entity-expansion attack, before parsing it."""
     if len(xml_text) > MAX_XML_BYTES:
         raise ValueError(
-            f"nmap XML is {len(xml_text)} bytes, over the {MAX_XML_BYTES} limit; "
+            f"{tool} XML is {len(xml_text)} bytes, over the {MAX_XML_BYTES} limit; "
             "refusing to parse. Split the scope into smaller chunks."
         )
     head = xml_text[:200_000]
     if _ENTITY_RE.search(head):
         raise ValueError(
-            "nmap XML contains an ENTITY declaration. nmap does not emit these, "
+            f"{tool} XML contains an ENTITY declaration. {tool} does not emit these, "
             "so this file is not what it claims to be; refusing to parse."
         )
     if _DOCTYPE_SUBSET_RE.search(head):
         raise ValueError(
-            "nmap XML has a DOCTYPE with an internal subset. nmap emits only a "
-            "bare `<!DOCTYPE nmaprun>`; refusing to parse."
+            f"{tool} XML has a DOCTYPE with an internal subset, which {tool} does "
+            "not emit; refusing to parse."
         )
 
 
@@ -143,10 +137,8 @@ def parse_xml(xml_text: str, scope: Scope | None = None,
     services: list[Service] = []
     findings: list[Finding] = []
 
-    _reject_hostile_xml(xml_text)
+    reject_hostile_xml(xml_text)
     try:
-        # _reject_hostile_xml above refuses doctype/entity declarations and
-        # oversized input, which are the vectors S314 warns about.
         root = ET.fromstring(xml_text)  # noqa: S314
     except ET.ParseError as exc:
         raise ValueError(f"could not parse nmap XML: {exc}") from exc
@@ -175,7 +167,6 @@ def parse_xml(xml_text: str, scope: Scope | None = None,
         hosts.append(Host(ip=addr, hostnames=names, state=state,
                           os_guess=os_guess, discovered_by=source))
 
-        # Host-level script output (e.g. smb-os-discovery) is worth keeping.
         # nmap nests these under <hostscript>, not directly under <host>.
         hostscript = hnode.find("hostscript")
         host_scripts = _script_map(hostscript) if hostscript is not None else {}
@@ -217,7 +208,6 @@ def parse_xml(xml_text: str, scope: Scope | None = None,
     return hosts, services, findings
 
 
-# nmap script ids whose output, if present at all, is worth a human's eyes.
 _SCRIPT_SEVERITY: dict[str, tuple[str, str]] = {
     "ssl-heartbleed":        ("critical", "Heartbleed (CVE-2014-0160) reported by nmap."),
     "smb-vuln-ms17-010":     ("critical", "MS17-010 / EternalBlue reported by nmap."),
@@ -277,10 +267,6 @@ def _findings_from_scripts(svc: Service, source: str) -> list[Finding]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# Recovering a scan that did not finish
-# ---------------------------------------------------------------------------
-
 def salvage_partial_xml(xml_text: str) -> tuple[str, bool]:
     """Repair nmap XML that was cut off mid-scan so it can still be parsed.
 
@@ -298,13 +284,8 @@ def salvage_partial_xml(xml_text: str) -> tuple[str, bool]:
     if text.endswith("</nmaprun>"):
         return text, False
 
-    # Keep everything up to the last completed top-level element. A `<host>`
-    # cut off halfway is unparseable, so it has to go; its ports were never
-    # written anyway.
     cut = max(text.rfind("</host>"), text.rfind("</runstats>"))
     if cut == -1:
-        # Nothing completed. If even the root tag is absent there is nothing
-        # to salvage; if it is present we return an empty but valid document.
         start = text.find("<nmaprun")
         if start == -1:
             return "", False
@@ -315,7 +296,6 @@ def salvage_partial_xml(xml_text: str) -> tuple[str, bool]:
 
     repaired = text[: cut + len("</host>") if text.rfind("</host>") == cut
                     else cut + len("</runstats>")]
-    # Close any still-open ancestor elements, outermost last.
     for tag in ("</ports>", "</host>"):
         opener = tag.replace("</", "<").replace(">", "")
         if repaired.count(opener) > repaired.count(tag):

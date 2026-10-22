@@ -17,32 +17,26 @@ from dataclasses import dataclass, field
 
 from .models import Finding, Service, severity_rank
 
-# Findings carrying these tags go to the top of the review queue: they are the
-# cases where a human's judgement changes the severity most.
 HIGH_VALUE_REVIEW_TAGS = [
     "secrets", "api", "openapi", "git", "default-credentials", "exposure",
     "authentication", "graphql", "source-disclosure",
 ]
 
-SYSTEMIC_THRESHOLD = 3          # same issue on this many hosts -> systemic
+SYSTEMIC_THRESHOLD = 3
 
 
 @dataclass
 class ReviewItem:
     """One entry in the manual-review queue."""
 
-    priority: int                      # 1 = look at this first
+    priority: int
     title: str
     target: str
     severity: str
-    question: str                      # what the human must decide
+    question: str
     finding_ids: list[str] = field(default_factory=list)
     hosts: list[str] = field(default_factory=list)
     evidence_hint: str = ""
-    # When normalisation collapses several findings into one item (the same
-    # issue on many hosts, or several URLs on one host), these are the distinct
-    # things it covers. Without them the auditor is told "an API endpoint is
-    # open" and has to go digging for which ones.
     instances: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -81,7 +75,6 @@ class TriageResult:
         }
 
 
-# Strip host/port/URL detail so the same issue on different hosts collapses.
 _NORMALISE = [
     (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"), "<host>"),
     (re.compile(r"\b[0-9a-f]{1,4}(?::[0-9a-f]{0,4}){2,7}\b", re.I), "<host6>"),
@@ -98,7 +91,6 @@ def issue_key(f: Finding) -> str:
 
 
 def _sort_key(f: Finding):
-    # Severity first, then review-flagged items, then host/port for stability.
     try:
         octets = tuple(int(x) for x in f.host.split("."))
     except (ValueError, AttributeError):
@@ -115,12 +107,12 @@ def _review_question(f: Finding) -> str:
 
 def _priority(f: Finding, systemic_hosts: int) -> int:
     """Lower is more urgent. Severity dominates; tags and spread break ties."""
-    base = (4 - severity_rank(f.severity)) * 100          # critical=0 .. info=400
+    base = (4 - severity_rank(f.severity)) * 100
     if any(t in HIGH_VALUE_REVIEW_TAGS for t in f.tags):
         base -= 30
     if f.confidence == "tentative":
-        base += 10                                        # needs confirming, slightly lower
-    base -= min(systemic_hosts, 10)                       # breadth nudges it up
+        base += 10
+    base -= min(systemic_hosts, 10)
     return base
 
 
@@ -140,7 +132,6 @@ def triage(findings: list[Finding], services: list[Service] | None = None) -> Tr
             ))
     systemic.sort(key=lambda s: (-severity_rank(s.severity), -len(s.hosts)))
 
-    # Review queue, one entry per distinct issue rather than per host.
     queue: list[ReviewItem] = []
     for group in groups.values():
         flagged = [f for f in group if f.review_required]
@@ -155,13 +146,9 @@ def triage(findings: list[Finding], services: list[Service] | None = None) -> Tr
             port = worst.port
             target = f"{worst.host}:{port}/{worst.proto}" if port else (worst.host or "n/a")
 
-        # Keep each collapsed finding's own title where they differ, so a group
-        # of several URLs or hosts stays actionable.
         titles = sorted({f.title for f in flagged})
         instances = titles if len(titles) > 1 else []
 
-        # Use the group's highest severity for the headline, which may come
-        # from a finding other than the one whose title we show.
         queue.append(ReviewItem(
             priority=_priority(worst, len(hosts)),
             title=worst.title, target=target, severity=worst.severity,
@@ -173,7 +160,7 @@ def triage(findings: list[Finding], services: list[Service] | None = None) -> Tr
 
     queue.sort(key=lambda r: (r.priority, -severity_rank(r.severity), r.title))
     for i, item in enumerate(queue, start=1):
-        item.priority = i          # renumber to a clean 1..n work order
+        item.priority = i
 
     by_sev: dict[str, int] = {}
     for f in findings:

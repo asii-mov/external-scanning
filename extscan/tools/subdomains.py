@@ -64,10 +64,6 @@ def _under_domain(name: str, domain: str) -> bool:
     return name == domain or name.endswith("." + domain)
 
 
-# ---------------------------------------------------------------------------
-# Passive sources
-# ---------------------------------------------------------------------------
-
 def from_crtsh(domain: str, timeout: float = 30.0,
                use_system_proxy: bool = False) -> tuple[set[str], str]:
     """Query crt.sh for names in issued certificates. Returns (names, error)."""
@@ -76,8 +72,6 @@ def from_crtsh(domain: str, timeout: float = 30.0,
     if not use_system_proxy:
         handlers.append(urllib.request.ProxyHandler({}))
     opener = urllib.request.build_opener(*handlers)
-    # The URL is built from a fixed https:// template with only the
-    # domain interpolated and percent-encoded, so no scheme is user-controlled.
     req = urllib.request.Request(url, headers={  # noqa: S310
         "User-Agent": "extscan/0.2 (authorised security assessment)",
         "Accept": "application/json",
@@ -140,10 +134,6 @@ def from_amass(runner: Runner, domain: str,
     return names, ""
 
 
-# ---------------------------------------------------------------------------
-# Resolution and scope split
-# ---------------------------------------------------------------------------
-
 def resolve(name: str, timeout: float = 5.0) -> tuple[list[str], str]:
     """Resolve a hostname to addresses using the stdlib resolver.
 
@@ -194,8 +184,6 @@ def enumerate_domain(runner: Runner, scope: Scope, domain: str, *,
     results: list[Enumerated] = []
     for name in sorted(collected)[:max_names]:
         addresses, resolve_error = resolve(name, timeout=resolve_timeout)
-        # In scope only if it resolves into an authorised range. A name that
-        # does not resolve is not scannable either way.
         in_scope = bool(addresses) and all(scope.contains(a) for a in addresses)
         results.append(Enumerated(
             name=name, addresses=addresses,
@@ -242,7 +230,6 @@ def to_findings(results: list[Enumerated], domain: str) -> tuple[list[Finding], 
             tags=["recon", "subdomains"],
         ))
 
-    # The finding that earns this stage its place.
     if out_of_scope:
         by_host = "\n".join(f"{r.name:<50} -> {', '.join(r.addresses)}"
                             for r in out_of_scope[:80])

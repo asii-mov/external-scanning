@@ -33,8 +33,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-# Hard ceiling on what any single analysis may send, independent of policy.
-# Cost control, but also a guard against a 200MB response body becoming a bill.
 ABSOLUTE_MAX_INPUT_CHARS = 200_000
 
 
@@ -65,14 +63,14 @@ class Analysis:
     """
 
     summary: str = ""
-    severity_opinion: str = ""          # advisory only; never overrides a probe
+    severity_opinion: str = ""
     reasoning: str = ""
     questions_for_auditor: list[str] = field(default_factory=list)
     suggested_followups: list[str] = field(default_factory=list)
     model: str = ""
     provider: str = ""
     input_truncated: bool = False
-    raw: str = ""                       # the model's unparsed reply, for audit
+    raw: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -86,10 +84,6 @@ class Analysis:
             "input_truncated": self.input_truncated,
         }
 
-
-# ---------------------------------------------------------------------------
-# Prompting
-# ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """\
 You are assisting a security auditor on an authorised external penetration \
@@ -121,21 +115,14 @@ Reply with a single JSON object and nothing else:
   "suggested_followups": ["further read-only checks worth running, if any"]
 }"""
 
-# The model is told the delimiter, and the delimiter is stripped from the
-# content, so content cannot close the block early and escape into the
-# instruction channel.
 _DELIM = "<<<EVIDENCE>>>"
 _DELIM_END = "<<<END_EVIDENCE>>>"
 _DELIM_RE = re.compile(r"<<<\s*/?\s*(?:END_)?EVIDENCE\s*>>>", re.I)
 
-# Values that must never be transmitted, matched on key name. Mirrors the
-# report's redaction so a secret cannot reach a model but miss the report, or
-# the reverse.
-_SECRET_RE = re.compile(
+SECRET_LINE_RE = re.compile(
     r"(?im)^([A-Za-z0-9_.\-]*(?:KEY|TOKEN|SECRET|PASS|PASSWORD|CREDENTIAL|DSN|URI|URL|CONN)"
     r"[A-Za-z0-9_.\-]*)\s*[=:]\s*(.+)$"
 )
-# Common inline credential shapes that are not key=value lines.
 _INLINE_SECRET_RES = [
     re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9._~+/\-]{12,}={0,2}"),
     re.compile(r"(?i)\b(authorization:\s*\S+\s+)\S{12,}"),
@@ -155,12 +142,11 @@ def sanitise_evidence(text: str, max_chars: int) -> tuple[str, bool]:
     def _kv(match: re.Match) -> str:
         return f"{match.group(1)}=<redacted {len(match.group(2).strip())} chars>"
 
-    cleaned = _SECRET_RE.sub(_kv, text)
+    cleaned = SECRET_LINE_RE.sub(_kv, text)
     for pattern in _INLINE_SECRET_RES:
         cleaned = pattern.sub(lambda m: m.group(1) + "<redacted>" + (
             m.group(2) if m.lastindex and m.lastindex >= 2 else ""), cleaned)
 
-    # Stop the content from forging the end of its own block.
     cleaned = _DELIM_RE.sub("[delimiter removed]", cleaned)
 
     limit = min(max_chars, ABSOLUTE_MAX_INPUT_CHARS)
@@ -216,7 +202,7 @@ def parse_analysis(raw: str) -> Analysis:
 
     severity = str(data.get("severity_opinion", "")).strip().lower()
     if severity not in ("info", "low", "medium", "high", "critical"):
-        severity = ""        # discard anything outside the scale
+        severity = ""
 
     return Analysis(
         summary=str(data.get("summary", "")).strip()[:2000],
@@ -227,10 +213,6 @@ def parse_analysis(raw: str) -> Analysis:
         raw=text[:8000],
     )
 
-
-# ---------------------------------------------------------------------------
-# Provider interface
-# ---------------------------------------------------------------------------
 
 class Provider(ABC):
     """One way of reaching a model. Implementations stay thin on purpose."""

@@ -39,8 +39,6 @@ class Store:
         self.path = Path(path)
         self.raw = self.path / "raw"
 
-    # -- lifecycle -------------------------------------------------------
-
     @classmethod
     def create(cls, runs_dir: str | Path, engagement: str, run_id: str | None = None) -> Store:
         runs_dir = Path(runs_dir)
@@ -75,8 +73,6 @@ class Store:
     def run_id(self) -> str:
         return self.path.name
 
-    # -- raw json helpers ------------------------------------------------
-
     def _read(self, name: str, default):
         p = self.path / name
         if not p.exists():
@@ -92,8 +88,6 @@ class Store:
         tmp = self.path / f".{name}.tmp"
         tmp.write_text(json.dumps(data, indent=2, sort_keys=False, default=str))
         tmp.replace(self.path / name)
-
-    # -- run metadata ----------------------------------------------------
 
     def meta(self) -> dict:
         return self._read("run.json", {})
@@ -116,8 +110,6 @@ class Store:
     def stage_done(self, stage: str) -> bool:
         return stage in self.meta().get("stages", {})
 
-    # -- collections -----------------------------------------------------
-
     def hosts(self) -> list[Host]:
         return [Host.from_dict(d) for d in self._read("hosts.json", [])]
 
@@ -126,7 +118,6 @@ class Store:
         for h in hosts:
             existing = merged.get(h.ip)
             if existing:
-                # Keep the richer record rather than clobbering on re-scan.
                 existing.hostnames = sorted(set(existing.hostnames) | set(h.hostnames))
                 existing.state = h.state or existing.state
                 existing.os_guess = h.os_guess or existing.os_guess
@@ -203,12 +194,6 @@ class Store:
         self._write("leads.json", [ld.to_dict() for ld in leads])
         return hit
 
-    # -- degradations ----------------------------------------------------
-    #
-    # Recorded coverage losses. These are kept with the findings rather than in
-    # a log file precisely because they have to reach the report: a gap nobody
-    # reads about is the failure mode this whole module exists to prevent.
-
     def degradations(self) -> list[Degradation]:
         return [Degradation.from_dict(d) for d in self._read("degradations.json", [])]
 
@@ -216,15 +201,9 @@ class Store:
         existing = self.degradations()
         key = (deg.stage, deg.component, deg.reason)
         if any((d.stage, d.component, d.reason) == key for d in existing):
-            return                      # already recorded this run
+            return
         existing.append(deg)
         self._write("degradations.json", [d.to_dict() for d in existing])
-
-    # -- checkpoints -----------------------------------------------------
-    #
-    # Chunked work (a /20 split into batches, a per-host probe sweep) records
-    # which units finished, so a resumed run does not rescan what it already
-    # has -- and does not skip what it does not.
 
     def checkpoint(self, stage: str, key: str) -> None:
         data = self._read("checkpoints.json", {})
@@ -247,8 +226,6 @@ class Store:
         data.pop(stage, None)
         self._write("checkpoints.json", data)
 
-    # -- audit trail -----------------------------------------------------
-
     def log_command(self, rec: CommandRecord) -> None:
         self.path.mkdir(parents=True, exist_ok=True)
         with (self.path / "commands.jsonl").open("a") as fh:
@@ -268,13 +245,9 @@ class Store:
                     continue
         return out
 
-    # -- raw artefacts ---------------------------------------------------
-
     def raw_path(self, name: str) -> Path:
         """Map an arbitrary label (often target-derived) to a safe filename."""
         safe = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
-        # Collapse dot runs and strip leading dots so nothing resembles a
-        # traversal or a hidden file, even though the join is already confined.
         safe = re.sub(r"\.{2,}", ".", safe).lstrip("._-") or "artifact"
         self.raw.mkdir(parents=True, exist_ok=True)
         return self.raw / safe[:200]
@@ -286,8 +259,6 @@ class Store:
         else:
             p.write_text(content)
         return p
-
-    # -- convenience -----------------------------------------------------
 
     def counts(self) -> dict:
         findings = self.findings()

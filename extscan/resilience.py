@@ -37,10 +37,6 @@ from typing import Any, TypeVar
 T = TypeVar("T")
 
 
-# ---------------------------------------------------------------------------
-# Error classification
-# ---------------------------------------------------------------------------
-
 class PermanentError(Exception):
     """A failure that retrying cannot fix (bad credentials, 400, bad config)."""
 
@@ -57,8 +53,6 @@ class RunAborted(Exception):
     """Raised when the abort threshold decides the environment is broken."""
 
 
-# HTTP status codes worth retrying. 429 and 5xx are the provider telling us to
-# come back; everything else in the 4xx range is our own mistake.
 RETRYABLE_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 507, 509, 529}
 
 _TRANSIENT_EXCEPTIONS = (
@@ -73,8 +67,6 @@ _TRANSIENT_EXCEPTIONS = (
     TransientError,
 )
 
-# Substrings in an error message that indicate a transient condition, for
-# libraries that raise generic exceptions.
 _TRANSIENT_MARKERS = (
     "timed out", "timeout", "connection reset", "broken pipe",
     "temporarily unavailable", "try again", "too many requests",
@@ -95,8 +87,6 @@ def classify(exc: BaseException) -> str:
     if isinstance(exc, urllib.error.URLError):
         return "transient"
     if isinstance(exc, ssl.SSLError):
-        # A handshake failure against one target is permanent for that target;
-        # it is not a reason to retry the whole operation.
         return "permanent"
     message = str(exc).lower()
     if any(marker in message for marker in _TRANSIENT_MARKERS):
@@ -109,26 +99,22 @@ def is_retryable(exc: BaseException, retry_unknown: bool = False) -> bool:
     return verdict == "transient" or (retry_unknown and verdict == "unknown")
 
 
-# ---------------------------------------------------------------------------
-# Retry
-# ---------------------------------------------------------------------------
-
 @dataclass
 class RetryPolicy:
-    attempts: int = 3                  # total tries, not retries
+    attempts: int = 3
     base_delay: float = 1.0
     max_delay: float = 30.0
     multiplier: float = 2.0
-    jitter: float = 0.3               # +/- this fraction, to avoid lockstep
-    retry_unknown: bool = False       # be conservative by default
-    total_budget: float = 120.0       # give up after this much wall clock
+    jitter: float = 0.3
+    retry_unknown: bool = False
+    total_budget: float = 120.0
 
     def delay_for(self, attempt: int) -> float:
         """Backoff for `attempt` (1-based), with jitter."""
         raw = min(self.base_delay * (self.multiplier ** (attempt - 1)), self.max_delay)
         if self.jitter:
             spread = raw * self.jitter
-            raw += random.uniform(-spread, spread)  # noqa: S311 - jitter, not crypto
+            raw += random.uniform(-spread, spread)  # noqa: S311
         return max(0.0, raw)
 
 
@@ -146,32 +132,21 @@ def retry(
     """
     policy = policy or RetryPolicy()
     started = time.monotonic()
-    last: BaseException | None = None
-
-    for attempt in range(1, max(1, policy.attempts) + 1):
+    attempt = 1
+    while True:
         try:
             return fn()
         except BaseException as exc:
-            last = exc
-            if not is_retryable(exc, policy.retry_unknown):
+            if not is_retryable(exc, policy.retry_unknown) or attempt >= policy.attempts:
                 raise
-            if attempt >= policy.attempts:
-                break
             delay = policy.delay_for(attempt)
-            elapsed = time.monotonic() - started
-            if elapsed + delay > policy.total_budget:
-                break
+            if time.monotonic() - started + delay > policy.total_budget:
+                raise
             if on_retry:
                 on_retry(attempt, exc, delay)
             sleep(delay)
+        attempt += 1
 
-    assert last is not None
-    raise last
-
-
-# ---------------------------------------------------------------------------
-# Circuit breaker
-# ---------------------------------------------------------------------------
 
 @dataclass
 class CircuitBreaker:
@@ -186,7 +161,7 @@ class CircuitBreaker:
     name: str = "dependency"
     failure_threshold: int = 4
     cooldown: float = 60.0
-    success_threshold: int = 1        # successes in half-open needed to close
+    success_threshold: int = 1
 
     _failures: int = field(default=0, init=False)
     _successes: int = field(default=0, init=False)
@@ -218,7 +193,6 @@ class CircuitBreaker:
 
     def record_failure(self) -> None:
         if self.state == "half-open":
-            # The probe failed; serve another cooldown.
             self._opened_at = time.monotonic()
             self._successes = 0
             return
@@ -243,18 +217,12 @@ class CircuitBreaker:
         try:
             result = fn()
         except BaseException as exc:
-            # Only count failures the dependency is responsible for. A caller
-            # bug should not trip the breaker.
             if classify(exc) != "permanent":
                 self.record_failure()
             raise
         self.record_success()
         return result
 
-
-# ---------------------------------------------------------------------------
-# Abort threshold
-# ---------------------------------------------------------------------------
 
 @dataclass
 class AbortThreshold:
@@ -293,10 +261,6 @@ class AbortThreshold:
             )
 
 
-# ---------------------------------------------------------------------------
-# Degradation records
-# ---------------------------------------------------------------------------
-
 @dataclass
 class Degradation:
     """A recorded loss of coverage, destined for the report.
@@ -310,7 +274,7 @@ class Degradation:
     component: str
     reason: str
     impact: str
-    severity: str = "warning"          # warning | serious
+    severity: str = "warning"
     hosts: list[str] = field(default_factory=list)
     recoverable: bool = True
     remedy: str = ""

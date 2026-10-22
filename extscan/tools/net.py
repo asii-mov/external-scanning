@@ -67,9 +67,6 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 def _ssl_context(policy: HttpPolicy) -> ssl.SSLContext:
     ctx = ssl.create_default_context()
     if not policy.verify_tls:
-        # Audit targets routinely present expired or self-signed certs; refusing
-        # to connect would hide the very exposure we are looking for. Cert
-        # problems are recorded by the TLS probe instead.
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
     return ctx
@@ -84,6 +81,7 @@ def _opener(policy: HttpPolicy) -> urllib.request.OpenerDirector:
 
 
 def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
+          data: bytes | None = None,
           extra_headers: dict[str, str] | None = None) -> Response:
     """Fetch a URL, following redirects manually with a scope check per hop."""
     chain: list[str] = []
@@ -97,10 +95,7 @@ def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
             return Response(url=current, status=0, redirect_chain=chain,
                             error=f"scope refusal: {exc}")
 
-        # S310's concern is file:/custom schemes. assert_url above rejects any
-        # scheme that is not http/https, which is the mitigation; fetching
-        # operator-supplied target URLs is this module's whole purpose.
-        req = urllib.request.Request(current, method=method)  # noqa: S310
+        req = urllib.request.Request(current, data=data, method=method)  # noqa: S310
         req.add_header("User-Agent", policy.user_agent)
         req.add_header("Accept", "*/*")
         req.add_header("Connection", "close")
@@ -123,6 +118,8 @@ def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
                 target = urllib.parse.urljoin(current, headers["location"])
                 chain.append(f"{current} -> {exc.status} -> {target}")
                 current = target
+                if data is not None and exc.status in (301, 302, 303):
+                    method, data = "GET", None
                 continue
             try:
                 body = exc.read(policy.max_body_bytes)
@@ -137,10 +134,6 @@ def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
     return Response(url=current, status=0, redirect_chain=chain,
                     error=f"exceeded max_redirects ({policy.max_redirects})")
 
-
-# ---------------------------------------------------------------------------
-# TLS
-# ---------------------------------------------------------------------------
 
 @dataclass
 class TlsInfo:
@@ -173,11 +166,7 @@ def _unverified_context() -> ssl.SSLContext:
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-    # Allow legacy suites so we can see what the server offers rather than
-    # failing the handshake on our own client policy.
     # Older OpenSSL builds reject @SECLEVEL, and some reject "ALL" outright.
-    # Either way, fall back to the default suite list rather than failing: the
-    # point is to see what the server offers, not to enforce our own policy.
     for suite in ("ALL:@SECLEVEL=0", "ALL"):
         with contextlib.suppress(ssl.SSLError):
             ctx.set_ciphers(suite)
@@ -299,7 +288,6 @@ def _probe_protocols(host: str, port: int, family: int,
                     results[label] = tls.version() is not None
         except ssl.SSLError as exc:
             msg = str(exc).lower()
-            # Distinguish "server said no" from "our client could not try".
             if any(s in msg for s in ("no protocols available", "unsupported protocol",
                                       "version too low", "no ciphers available")):
                 results[label] = None

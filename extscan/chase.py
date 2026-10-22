@@ -25,7 +25,7 @@ from .runner import have
 from .scope import ScopeError
 from .tools import net, snmp
 
-MAX_LISTED = 40          # how many endpoints/items to enumerate in a finding
+MAX_LISTED = 40
 
 
 @dataclass
@@ -38,10 +38,6 @@ class ChaseResult:
 Handler = Callable[[ProbeContext, Lead], ChaseResult]
 
 
-# ---------------------------------------------------------------------------
-# OpenAPI / Swagger
-# ---------------------------------------------------------------------------
-
 SPEC_CANDIDATES = [
     "/swagger.json", "/openapi.json", "/v3/api-docs", "/v2/swagger.json",
     "/swagger/v1/swagger.json", "/api-docs", "/api/swagger.json",
@@ -49,10 +45,6 @@ SPEC_CANDIDATES = [
 ]
 
 WRITE_METHODS = {"post", "put", "patch", "delete"}
-# Deliberately narrow. An earlier, broader version matched ordinary business
-# nouns (user, account, invoice, payment) and flagged nearly every operation in
-# a billing API, which makes the signal worthless. These are terms that suggest
-# administrative reach or credential handling rather than normal domain data.
 SENSITIVE_PATH_RE = re.compile(
     r"(?i)(admin|internal|debug|dump|token|password|passwd|credential|secret|"
     r"apikey|api[_-]key|private[_-]key|backup|impersonat|sudo|su-|privilege|"
@@ -154,7 +146,6 @@ def chase_openapi(ctx: ProbeContext, lead: Lead) -> ChaseResult:
         if not isinstance(spec, dict):
             raise ValueError("spec is not an object")
     except (json.JSONDecodeError, ValueError):
-        # YAML fallback: report size and coverage, flag for a human.
         yaml_paths = _parse_yaml_paths(resp.text)
         return ChaseResult([Finding(
             title=f"Exposed OpenAPI document (YAML) at {spec_url}",
@@ -178,7 +169,7 @@ def chase_openapi(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     for s in (spec.get("servers") or []):
         if isinstance(s, dict) and s.get("url"):
             servers.append(str(s["url"]))
-    if spec.get("host"):                      # Swagger 2.0 style
+    if spec.get("host"):
         schemes = spec.get("schemes") or ["https"]
         servers.append(f"{schemes[0]}://{spec['host']}{spec.get('basePath', '')}")
 
@@ -283,13 +274,11 @@ def chase_openapi(ctx: ProbeContext, lead: Lead) -> ChaseResult:
             tags=["openapi", "api", "authentication", "owasp-api"],
         ))
 
-        # One lead per unauthenticated read, so a human or the agent can pick
-        # which to verify rather than the tool firing all of them.
         for method, path in unauth[:MAX_LISTED]:
             if method != "get":
                 continue
             if "{" in path:
-                continue       # needs a real identifier; not safely guessable
+                continue
             leads.append(Lead(
                 kind="api_endpoint", host=host, port=port,
                 url=_join_api(servers[0] if servers else spec_url, path),
@@ -332,8 +321,6 @@ def chase_openapi(ctx: ProbeContext, lead: Lead) -> ChaseResult:
             tags=["openapi", "scope", "asset-discovery"],
         ))
 
-    # Optional model commentary, as a separate clearly-labelled finding. The
-    # deterministic findings above are complete without it.
     if ctx.llm is not None and ctx.policy.llm.analyse_openapi:
         from .llm.analyst import analyse_openapi
 
@@ -352,10 +339,6 @@ def chase_openapi(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     return ChaseResult(findings, leads, note=note)
 
 
-# ---------------------------------------------------------------------------
-# GraphQL
-# ---------------------------------------------------------------------------
-
 INTROSPECTION_QUERY = (
     '{"query":"{__schema{queryType{name} mutationType{name} '
     'types{name kind fields{name}}}}"}'
@@ -369,8 +352,9 @@ def chase_graphql(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     except ScopeError as exc:
         return ChaseResult([], [], note=f"skipped: {exc}")
 
-    # Introspection is a read-only query. We never send mutations.
-    resp = _post_json(url, INTROSPECTION_QUERY, ctx)
+    resp = net.fetch(url, ctx.scope, ctx.policy.http, method="POST",
+                     data=INTROSPECTION_QUERY.encode(),
+                     extra_headers={"Content-Type": "application/json"})
 
     if resp.status == 0:
         return ChaseResult([], [], note=f"no response: {resp.error}")
@@ -419,47 +403,6 @@ def chase_graphql(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     )], [], note=f"introspection enabled, {len(type_names)} types")
 
 
-def _post_json(url: str, body: str, ctx: ProbeContext) -> net.Response:
-    """POST a JSON body. Kept separate because net.fetch is GET-shaped."""
-    import ssl
-    import urllib.error
-    import urllib.request
-
-    try:
-        ctx.scope.assert_url(url, context="post json")
-    except ScopeError as exc:
-        return net.Response(url=url, status=0, error=f"scope refusal: {exc}")
-
-    hp = ctx.policy.http
-    # Scheme restricted to http/https by assert_url above.
-    req = urllib.request.Request(url, data=body.encode(), method="POST")  # noqa: S310
-    req.add_header("Content-Type", "application/json")
-    req.add_header("User-Agent", hp.user_agent)
-    handlers: list = [urllib.request.HTTPSHandler(context=net._ssl_context(hp))]
-    if not hp.use_system_proxy:
-        handlers.append(urllib.request.ProxyHandler({}))
-    opener = urllib.request.build_opener(*handlers)
-    try:
-        with opener.open(req, timeout=hp.timeout_sec) as resp:
-            return net.Response(url=url, status=resp.status, reason=resp.reason or "",
-                                headers={k.lower(): v for k, v in resp.headers.items()},
-                                body=resp.read(hp.max_body_bytes))
-    except urllib.error.HTTPError as exc:
-        try:
-            payload = exc.read(hp.max_body_bytes)
-        except Exception:
-            payload = b""
-        return net.Response(url=url, status=exc.status, reason=exc.reason or "",
-                            headers={k.lower(): v for k, v in (exc.headers or {}).items()},
-                            body=payload)
-    except (urllib.error.URLError, TimeoutError, ssl.SSLError, OSError) as exc:
-        return net.Response(url=url, status=0, error=f"{type(exc).__name__}: {exc}")
-
-
-# ---------------------------------------------------------------------------
-# Git exposure
-# ---------------------------------------------------------------------------
-
 def chase_git_exposure(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     base = lead.url.split("/.git")[0] if "/.git" in lead.url else lead.url.rstrip("/")
     results = {}
@@ -491,10 +434,6 @@ def chase_git_exposure(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     )], [], note=f"readable: {', '.join(results)}"
         + (f"; remotes: {', '.join(remotes[:3])}" if remotes else ""))
 
-
-# ---------------------------------------------------------------------------
-# Generic web path / secret file
-# ---------------------------------------------------------------------------
 
 def chase_web_paths(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     url = lead.url
@@ -558,10 +497,6 @@ def chase_secret_file(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     )], [], note=f"{len(uniq)} secret-like keys")
 
 
-# ---------------------------------------------------------------------------
-# API endpoint verification (read-only, one endpoint per lead)
-# ---------------------------------------------------------------------------
-
 _APP_ERROR_MARKERS = ("not found", "404", "page does not exist", "error occurred",
                       "<title>error", "forbidden", "sign in", "log in")
 
@@ -598,16 +533,12 @@ def chase_api_endpoint(ctx: ProbeContext, lead: Lead) -> ChaseResult:
         )], [], note=f"{resp.status}: auth enforced")
 
     if resp.ok and _looks_like_app_error(resp):
-        # A 200 that is really the SPA shell or an error page. Claiming this as
-        # an open API endpoint would put a false positive in a client report.
         return ChaseResult([], [], note=(
             f"{resp.status} but the body looks like an error/placeholder page "
             f"({resp.content_type}, {len(resp.body)} bytes); treating as inconclusive"
         ))
 
     if resp.ok:
-        # An open liveness probe and an open admin collection are not the same
-        # finding. Grade on what the path suggests it reaches.
         path = urlsplit(lead.url).path
         sensitive = bool(SENSITIVE_PATH_RE.search(path))
         severity = "high" if sensitive else "medium"
@@ -632,10 +563,6 @@ def chase_api_endpoint(ctx: ProbeContext, lead: Lead) -> ChaseResult:
 
     return ChaseResult([], [], note=f"{resp.status} {resp.reason}")
 
-
-# ---------------------------------------------------------------------------
-# SNMP walk
-# ---------------------------------------------------------------------------
 
 WALK_ROOTS = {
     "ifDescr": "1.3.6.1.2.1.2.2.1.2",
@@ -688,10 +615,6 @@ def chase_snmp_walk(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     )], [], note=f"{len(interfaces)} interfaces, {len(addresses)} addresses via `{community}`")
 
 
-# ---------------------------------------------------------------------------
-# TLS detail via an external auditor
-# ---------------------------------------------------------------------------
-
 def chase_tls_detail(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     if not have("testssl.sh"):
         return ChaseResult([], [], note=(
@@ -738,5 +661,4 @@ def chase(ctx: ProbeContext, lead: Lead) -> ChaseResult:
     except ScopeError as exc:
         return ChaseResult([], [], note=f"scope refusal: {exc}")
     except Exception as exc:
-        # One bad lead must not abort the run; record and move on.
         return ChaseResult([], [], note=f"handler error: {type(exc).__name__}: {exc}")

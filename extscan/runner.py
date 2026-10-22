@@ -39,7 +39,7 @@ class Result:
     stderr: str
     duration: float
     timed_out: bool = False
-    skipped: bool = False          # true when dry-run
+    skipped: bool = False
     stdout_path: str = ""
 
     @property
@@ -113,8 +113,6 @@ class Runner:
 
         duration = time.time() - started
 
-        # Persist output. Large tool dumps belong on disk, not in memory or in
-        # an agent's context window.
         out_path = err_path = ""
         if stdout_name:
             base = stdout_name
@@ -152,8 +150,6 @@ class Runner:
         return text.splitlines()[0][:200] if text else "unknown"
 
 
-# Install hints shown by `extscan doctor`. Kept here so the runner is the one
-# place that knows about external binaries.
 TOOL_HINTS: dict[str, dict[str, str]] = {
     "nmap": {
         "purpose": "TCP/UDP port and service discovery (required)",

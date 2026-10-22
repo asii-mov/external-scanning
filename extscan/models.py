@@ -36,7 +36,7 @@ def _stable_id(*parts: Any) -> str:
 class Host:
     ip: str
     hostnames: list[str] = field(default_factory=list)
-    state: str = "unknown"          # up | down | unknown
+    state: str = "unknown"
     os_guess: str | None = None
     discovered_by: str = ""
 
@@ -54,13 +54,13 @@ class Service:
 
     host: str
     port: int
-    proto: str                       # tcp | udp
-    state: str = "open"              # open | open|filtered
-    name: str = ""                   # nmap service name, e.g. "http"
+    proto: str
+    state: str = "open"
+    name: str = ""
     product: str = ""
     version: str = ""
     extrainfo: str = ""
-    tunnel: str = ""                 # "ssl" when nmap sees TLS wrapping
+    tunnel: str = ""
     cpe: list[str] = field(default_factory=list)
     scripts: dict[str, str] = field(default_factory=dict)
     probed_by: list[str] = field(default_factory=list)
@@ -93,7 +93,7 @@ class Service:
         scheme = "https" if self.is_tls else "http"
         default = 443 if scheme == "https" else 80
         hostpart = self.host
-        if ":" in hostpart:          # IPv6 literal
+        if ":" in hostpart:
             hostpart = f"[{hostpart}]"
         if self.port == default:
             return f"{scheme}://{hostpart}"
@@ -116,16 +116,14 @@ class Finding:
     host: str = ""
     port: int | None = None
     proto: str = "tcp"
-    source: str = ""                 # which tool or probe produced this
+    source: str = ""
     description: str = ""
-    evidence: str = ""               # raw-ish proof, trimmed
+    evidence: str = ""
     recommendation: str = ""
     references: list[str] = field(default_factory=list)
-    # The human-in-the-loop hook the auditors asked for: automation flags it,
-    # a person decides. review_reason explains what a human needs to judge.
     review_required: bool = False
     review_reason: str = ""
-    confidence: str = "firm"         # firm | tentative
+    confidence: str = "firm"
     tags: list[str] = field(default_factory=list)
     created: float = field(default_factory=_now)
     id: str = ""
@@ -151,19 +149,17 @@ class Lead:
     produce further findings and further leads, down to a depth cap.
     """
 
-    kind: str                        # e.g. openapi | web_paths | snmp_walk | tls_detail
+    kind: str
     host: str
     port: int | None = None
     proto: str = "tcp"
     url: str = ""
     params: dict[str, Any] = field(default_factory=dict)
-    reason: str = ""                 # why this is worth a look
-    origin: str = ""                 # probe/tool that raised it
+    reason: str = ""
+    origin: str = ""
     depth: int = 0
-    status: str = "open"             # open | done | skipped | failed | abandoned
-    note: str = ""                   # outcome once resolved
-    # Attempt tracking makes the chase loop resumable and stops a permanently
-    # broken lead from being retried forever on every resume.
+    status: str = "open"
+    note: str = ""
     attempts: int = 0
     last_error: str = ""
     created: float = field(default_factory=_now)

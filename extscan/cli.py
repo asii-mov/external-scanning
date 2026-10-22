@@ -9,9 +9,9 @@ frozen into the tool.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
-from pathlib import Path
 
 from . import __version__, pipeline
 from .models import Finding, severity_rank
@@ -57,17 +57,8 @@ def _policy_for(store: Store, args) -> Policy:
     profile = meta.get("profile", "standard")
     policy = Policy.for_profile(profile)
     if saved:
-        # Rebuild from the saved dict so a resumed run keeps its settings.
-        import tempfile
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
-            json.dump(saved, fh)
-            tmp = fh.name
-        try:
-            policy = Policy.load(tmp, profile=profile)
-        except (ValueError, KeyError):
-            pass
-        finally:
-            Path(tmp).unlink(missing_ok=True)
+        with contextlib.suppress(ValueError, KeyError):
+            policy = Policy.from_dict(saved, profile=profile)
     return policy
 
 
@@ -102,10 +93,6 @@ def _runner(store: Store, args) -> Runner:
     return Runner(store, dry_run=getattr(args, "dry_run", False),
                   verbose=getattr(args, "verbose", False))
 
-
-# ---------------------------------------------------------------------------
-# Commands
-# ---------------------------------------------------------------------------
 
 def cmd_doctor(args) -> int:
     rows = doctor()
@@ -473,10 +460,6 @@ def cmd_probes(args) -> int:
         print(f"  {r['name']:<20} {r['description']}") for r in rows])
     return 0
 
-
-# ---------------------------------------------------------------------------
-# Parser
-# ---------------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(

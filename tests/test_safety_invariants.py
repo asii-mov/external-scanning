@@ -6,11 +6,14 @@ future change erodes one.
 """
 
 import ast
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from extscan.policy import Policy
-from extscan.tools import nuclei
+from extscan.scope import Authorization, Scope
+from extscan.tools import net, nuclei
 
 SOURCE_DIR = Path(__file__).resolve().parent.parent / "extscan"
 SOURCE_FILES = sorted(SOURCE_DIR.rglob("*.py"))
@@ -169,7 +172,7 @@ class TestChaseHandlersRefuseWrites(unittest.TestCase):
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and node.value == "POST":
                 posts.append(node.lineno)
-        # One in _post_json's Request(), and no others.
+        # The GraphQL introspection call, and no others.
         self.assertLessEqual(len(posts), 2, f"unexpected POST at lines {posts}")
         self.assertIn("__schema", source)
 
@@ -190,13 +193,40 @@ class TestScopeEnforcementIsPresentOnNetworkPaths(unittest.TestCase):
         source = (SOURCE_DIR / "tools" / "net.py").read_text()
         self.assertIn("scope.assert_host", source)
 
-    def test_post_json_asserts_url_scope(self):
+    def test_chase_makes_no_requests_outside_net_fetch(self):
         source = (SOURCE_DIR / "chase.py").read_text()
-        self.assertIn("assert_url(url", source)
+        self.assertNotIn("urllib.request", source)
 
     def test_snmp_probe_asserts_host_scope(self):
         source = (SOURCE_DIR / "probes.py").read_text()
         self.assertIn("assert_host", source)
+
+    def test_post_redirect_off_scope_is_refused(self):
+        class Redirect(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.send_response(302)
+                self.send_header("Location", "http://169.254.169.254/latest/meta-data/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Redirect)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+
+        scope = Scope(engagement="redirect test", client="self-test",
+                      authorization=Authorization(reference="LOCAL-TEST",
+                                                  authorized_by="test harness"),
+                      targets=["127.0.0.1/32"], allow_private=True)
+        resp = net.fetch(f"http://127.0.0.1:{server.server_address[1]}/graphql", scope,
+                         Policy().http, method="POST", data=b"{}")
+        self.assertEqual(resp.status, 0)
+        self.assertIn("scope refusal", resp.error)
+        self.assertIn("169.254.169.254", resp.url)
 
     def test_redirects_are_not_followed_automatically(self):
         """urllib's default redirect handling would bypass the per-hop check."""
