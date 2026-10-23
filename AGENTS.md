@@ -7,9 +7,8 @@ A map of this repo and its working notes, for any agent picking up the work.
 
 | What | Where |
 |---|---|
-| Near-term tasks | `todo.md` |
+| Near-term tasks and known unfixed gaps (the `Open` section) | `todo.md` |
 | Longer-term feature ideas, prioritised, with the catch for each | `docs/ROADMAP.md` |
-| Known unfixed gaps (UDP sudo command, doctor blind spots, sslscan timeout) | Claude's local notes, see below |
 
 ## Claude's local notes
 
@@ -19,12 +18,13 @@ It exists only on the original workstation. Cloud sessions and other
 machines don't have it.
 
 - `MEMORY.md` is the index, loaded into each local session.
-- `extscan-open-issues.md` lists known unfixed gaps, with the first fix to do.
+- `extscan-open-issues.md` records which gaps were fixed and when. Open
+  ones are copied into `todo.md`.
 - `nuclei-killed-by-edr.md` records why nuclei was SIGKILLed on that machine
   (an EDR agent, since removed).
 
-If you're working where these notes don't exist and need the open-issues
-list, ask the user, or check whether it has been copied into `todo.md`.
+You don't need these notes to find open work. `todo.md` is the source of
+truth.
 
 ## Documentation
 
