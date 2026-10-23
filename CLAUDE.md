@@ -3,6 +3,11 @@
 External attack-surface scanner for authorised assessments. `README.md` is
 the full description. This file is what a fresh session needs to work here.
 
+`AGENTS.md` maps where everything lives: plans, docs, code, test data and
+Claude's local notes.
+
+@AGENTS.md
+
 ## Setup
 
 ```bash
