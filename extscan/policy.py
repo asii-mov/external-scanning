@@ -9,12 +9,28 @@ file on purpose and the engagement covers it.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 TCP_TOP = "1-1024,1080,1194,1433,1521,2049,2082,2083,2375,2376,2483,2484,3000,3128,3268,3306,3389,4443,4444,4786,5000,5432,5555,5601,5672,5900,5984,5985,5986,6379,6443,7001,7002,8000,8008,8009,8080,8081,8088,8089,8161,8200,8443,8500,8834,8888,9000,9042,9090,9092,9200,9300,9443,10000,11211,15672,27017,27018,50000"
 
+TCP_QUICK = "21,22,23,25,53,80,110,135,139,143,443,445,993,995,1433,3306,3389,5432,5900,6379,8000,8080,8443,9200,27017"
+
+# Named choices for `--tcp-ports`. Anything else must be an nmap port spec.
+TCP_PORT_PRESETS = {"quick": TCP_QUICK, "top": TCP_TOP, "all": "1-65535"}
+
 UDP_TOP = "53,67,69,123,137,138,161,162,500,514,520,623,1434,1604,1900,3391,4500,5353,11211"
+
+
+def tcp_port_spec(choice: str) -> str:
+    """Resolve a preset name, or check a literal nmap spec such as `22,80,8000-8100`."""
+    if choice in TCP_PORT_PRESETS:
+        return TCP_PORT_PRESETS[choice]
+    if not re.fullmatch(r"\d+(-\d+)?(,\d+(-\d+)?)*", choice):
+        raise ValueError(f"{choice!r}: use {'|'.join(TCP_PORT_PRESETS)} "
+                         "or a port list such as 22,80,8000-8100")
+    return choice
 
 
 @dataclass
@@ -196,7 +212,7 @@ class Policy:
     def for_profile(cls, name: str) -> Policy:
         p = cls(profile=name)
         if name == "quick":
-            p.nmap.tcp_ports = "21,22,23,25,53,80,110,135,139,143,443,445,993,995,1433,3306,3389,5432,5900,6379,8000,8080,8443,9200,27017"
+            p.nmap.tcp_ports = TCP_QUICK
             p.nmap.udp_ports = "53,123,161,500,1900,5353"
             p.nmap.scripts = "default,safe"
             p.nmap.version_intensity = 5

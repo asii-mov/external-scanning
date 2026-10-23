@@ -139,7 +139,10 @@ Or unattended: `extscan run --scope scope.json`
 engagement before the real thing.
 
 Profiles: `quick`, `standard`, `thorough` (all 65535 TCP ports — hours on a
-wide range). Override anything with a policy file; see
+wide range). To choose the TCP ports on their own, pass `--tcp-ports` to
+`init` or `run`: `all` (1-65535), `top` (the standard list), `quick` (25
+common ports), or a list such as `22,80,8000-8100`. Override anything else
+with a policy file; see
 `examples/policy.gentle.json` for a rate-limited configuration suitable for
 fragile infrastructure.
 

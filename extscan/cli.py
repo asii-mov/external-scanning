@@ -15,7 +15,7 @@ import sys
 
 from . import __version__, pipeline
 from .models import Finding, severity_rank
-from .policy import Policy
+from .policy import Policy, tcp_port_spec
 from .probes import REGISTRY
 from .resilience import Degradation
 from .runner import Runner, doctor
@@ -119,6 +119,8 @@ def cmd_doctor(args) -> int:
 def cmd_init(args) -> int:
     scope = Scope.load(args.scope)
     policy = Policy.load(args.policy, profile=args.profile)
+    if args.tcp_ports:
+        policy.nmap.tcp_ports = args.tcp_ports
     store = pipeline.init_run(args.runs_dir, scope, policy, run_id=args.id)
     data = {"run_id": store.run_id, "path": str(store.path), "scope": scope.summary()}
 
@@ -419,6 +421,8 @@ def cmd_resume(args) -> int:
 def cmd_run(args) -> int:
     scope = Scope.load(args.scope)
     policy = Policy.load(args.policy, profile=args.profile)
+    if args.tcp_ports:
+        policy.nmap.tcp_ports = args.tcp_ports
     store = pipeline.init_run(args.runs_dir, scope, policy, run_id=args.id)
     print(f"Run {store.run_id}\n")
     runner = _runner(store, args)
@@ -473,6 +477,18 @@ def cmd_probes(args) -> int:
     return 0
 
 
+TCP_PORTS_HELP = ("TCP ports to scan: all (1-65535), top (1-1024 plus common service "
+                  "ports), quick (25 common ports), or an nmap list like 22,80,8000-8100. "
+                  "Default: the profile's list")
+
+
+def _tcp_ports(value: str) -> str:
+    try:
+        return tcp_port_spec(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="extscan",
@@ -513,6 +529,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scope", required=True, help="path to the scope/authorisation file")
     p.add_argument("--policy", help="optional policy JSON overlay")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])
+    p.add_argument("--tcp-ports", type=_tcp_ports, metavar="all|top|quick|LIST",
+                   help=TCP_PORTS_HELP)
     p.add_argument("--id", help="explicit run id")
     p.set_defaults(func=cmd_init)
 
@@ -624,6 +642,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scope", required=True)
     p.add_argument("--policy")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])
+    p.add_argument("--tcp-ports", type=_tcp_ports, metavar="all|top|quick|LIST",
+                   help=TCP_PORTS_HELP)
     p.add_argument("--id")
     p.add_argument("--rounds", type=int, default=2)
     p.set_defaults(func=cmd_run)

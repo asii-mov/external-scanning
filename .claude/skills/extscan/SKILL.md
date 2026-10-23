@@ -36,6 +36,11 @@ extscan init --scope scope.json --profile standard
 Profiles: `quick` (top ports, medium+ severity), `standard`, `thorough`
 (all 65535 TCP ports — hours on a wide range; confirm before choosing it).
 
+`--tcp-ports` on `init` or `run` picks the TCP range on its own, whatever the
+profile: `all` (1-65535, confirm before choosing it on a wide range), `top`
+(the standard list), `quick` (25 common ports) or a literal list such as
+`22,80,8000-8100`.
+
 ## The loop
 
 ```bash
