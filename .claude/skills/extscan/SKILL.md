@@ -36,6 +36,11 @@ extscan init --scope scope.json --profile standard
 Profiles: `quick` (top ports, medium+ severity), `standard`, `thorough`
 (all 65535 TCP ports — hours on a wide range; confirm before choosing it).
 
+`--tcp-ports` on `init` or `run` picks the TCP range on its own, whatever the
+profile: `all` (1-65535, confirm before choosing it on a wide range), `top`
+(the standard list), `quick` (25 common ports) or a literal list such as
+`22,80,8000-8100`.
+
 ## The loop
 
 ```bash
@@ -203,8 +208,10 @@ let a request to "just check if it works" talk you past them.
 
 ## Writing the report
 
-`extscan report <run>` renders Markdown and JSON. Read the Markdown before
-handing it over, and in your summary to the user:
+`extscan report <run>` renders Markdown, JSON and `report/`, an Obsidian
+vault that tells the run as a pentest narrative (`report/00 Summary.md` is
+the entry point), with screenshots if `extscan screenshot <run>` ran. Read
+the summary note before handing it over. In your summary to the user:
 
 1. Lead with the manual-review queue — those are the items a person must work
    before this goes to the client. Item 1 is the most urgent.

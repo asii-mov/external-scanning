@@ -19,10 +19,6 @@ import os
 
 from .base import LLMRefused, LLMUnavailable, Provider
 
-# Defaults. Bedrock model ids carry an `anthropic.` prefix; the first-party API
-# ids do not. Both are overridable in policy, because which models an account
-# can reach -- especially on Bedrock, where access is granted per model and per
-# region -- is deployment-specific.
 DEFAULT_API_MODEL = "claude-opus-5-5"
 DEFAULT_BEDROCK_MODEL = "anthropic.claude-opus-5-5"
 
@@ -30,7 +26,7 @@ DEFAULT_BEDROCK_MODEL = "anthropic.claude-opus-5-5"
 def _import_sdk():
     try:
         import anthropic
-    except ImportError as exc:                 # pragma: no cover - env-dependent
+    except ImportError as exc:
         raise LLMUnavailable(
             "the `anthropic` package is not installed. Model-assisted analysis "
             "is optional; install it with `pip install 'extscan[llm]'` (or "
@@ -68,7 +64,7 @@ class _AnthropicSDKProvider(Provider):
         self.max_retries = max_retries
         self._client = None
 
-    def _build_client(self):                   # pragma: no cover - overridden
+    def _build_client(self):
         raise NotImplementedError
 
     def _client_or_raise(self):
@@ -107,7 +103,6 @@ class _AnthropicSDKProvider(Provider):
                 f"{exc}"
             ) from exc
         except anthropic.BadRequestError as exc:
-            # A 400 is our bug (bad parameter, oversized request), not an outage.
             raise LLMUnavailable(f"the model rejected the request: {exc}") from exc
 
         # A safety classifier may decline; stop_reason must be checked before
@@ -254,7 +249,6 @@ class BedrockProvider(_AnthropicSDKProvider):
         try:
             return client_class(**kwargs)
         except TypeError:
-            # Older builds take neither aws_profile nor max_retries.
             return client_class(aws_region=self.region)
 
 

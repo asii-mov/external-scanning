@@ -6,11 +6,14 @@ future change erodes one.
 """
 
 import ast
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from extscan.policy import Policy
-from extscan.tools import nuclei
+from extscan.scope import Authorization, Scope
+from extscan.tools import net, nuclei
 
 SOURCE_DIR = Path(__file__).resolve().parent.parent / "extscan"
 SOURCE_FILES = sorted(SOURCE_DIR.rglob("*.py"))
@@ -98,6 +101,14 @@ class TestDefaultPolicyIsNonDestructive(unittest.TestCase):
             for tag in ("dos", "intrusive", "fuzz", "brute-force"):
                 self.assertIn(tag, excluded, f"{name} does not exclude {tag}")
 
+    def test_credential_templates_excluded_in_every_profile(self):
+        """default-login templates submit passwords; that is credential testing."""
+        for name, policy in self.profiles.items():
+            argv = nuclei.argv(policy, "/t", "/o")
+            excluded = argv[argv.index("-exclude-tags") + 1].split(",")
+            for tag in ("default-login", "default-logins", "creds-stuffing"):
+                self.assertIn(tag, excluded, f"{name} does not exclude {tag}")
+
     def test_intrusive_is_opt_in_in_every_profile(self):
         for name, policy in self.profiles.items():
             self.assertFalse(policy.nuclei.allow_intrusive, name)
@@ -169,7 +180,7 @@ class TestChaseHandlersRefuseWrites(unittest.TestCase):
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and node.value == "POST":
                 posts.append(node.lineno)
-        # One in _post_json's Request(), and no others.
+        # The GraphQL introspection call, and no others.
         self.assertLessEqual(len(posts), 2, f"unexpected POST at lines {posts}")
         self.assertIn("__schema", source)
 
@@ -190,19 +201,132 @@ class TestScopeEnforcementIsPresentOnNetworkPaths(unittest.TestCase):
         source = (SOURCE_DIR / "tools" / "net.py").read_text()
         self.assertIn("scope.assert_host", source)
 
-    def test_post_json_asserts_url_scope(self):
+    def test_chase_makes_no_requests_outside_net_fetch(self):
         source = (SOURCE_DIR / "chase.py").read_text()
-        self.assertIn("assert_url(url", source)
+        self.assertNotIn("urllib.request", source)
 
     def test_snmp_probe_asserts_host_scope(self):
         source = (SOURCE_DIR / "probes.py").read_text()
         self.assertIn("assert_host", source)
+
+    def test_post_redirect_off_scope_is_refused(self):
+        class Redirect(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.send_response(302)
+                self.send_header("Location", "http://169.254.169.254/latest/meta-data/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Redirect)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+
+        scope = Scope(engagement="redirect test", client="self-test",
+                      authorization=Authorization(reference="LOCAL-TEST",
+                                                  authorized_by="test harness"),
+                      targets=["127.0.0.1/32"], allow_private=True)
+        resp = net.fetch(f"http://127.0.0.1:{server.server_address[1]}/graphql", scope,
+                         Policy().http, method="POST", data=b"{}")
+        self.assertEqual(resp.status, 0)
+        self.assertIn("scope refusal", resp.error)
+        self.assertIn("169.254.169.254", resp.url)
 
     def test_redirects_are_not_followed_automatically(self):
         """urllib's default redirect handling would bypass the per-hop check."""
         source = (SOURCE_DIR / "tools" / "net.py").read_text()
         self.assertIn("_NoRedirect", source)
         self.assertIn("return None", source)
+
+
+def _have_chromium() -> bool:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+    try:
+        with sync_playwright() as pw:
+            pw.chromium.launch().close()
+    except Exception:
+        return False
+    return True
+
+
+@unittest.skipUnless(_have_chromium(), "needs the screenshots extra and its Chromium")
+class TestScreenshotsStayInScope(unittest.TestCase):
+    """The browser must not send one request outside scope, redirects included.
+
+    Playwright follows a fulfilled 3xx without routing the next hop, so this
+    is the property most likely to regress silently.
+    """
+
+    def test_no_request_reaches_an_off_scope_server(self):
+        import tempfile
+
+        from extscan.policy import ScreenshotPolicy
+        from extscan.screenshots import browser_shooter
+
+        hits: list[str] = []
+
+        class Off(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                hits.append(self.path)
+                self.send_response(200)
+                self.end_headers()
+
+        off = ThreadingHTTPServer(("127.0.0.1", 0), Off)
+        off_url = f"http://127.0.0.1:{off.server_address[1]}"
+
+        class In(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                redirects = {"/away": f"{off_url}/stolen", "/hop": "/away",
+                             "/img": f"{off_url}/via-img.png"}
+                if self.path in redirects:
+                    self.send_response(302)
+                    self.send_header("Location", redirects[self.path])
+                    self.end_headers()
+                    return
+                body = (f'<title>in</title><img src="{off_url}/pixel.png">'
+                        f'<img src="/img"><iframe src="{off_url}/frame"></iframe>'
+                        f'<script>fetch("{off_url}/xhr")</script>').encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(body)
+
+        inside = ThreadingHTTPServer(("127.0.0.2", 0), In)
+        for server in (off, inside):
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            self.addCleanup(server.server_close)
+            self.addCleanup(server.shutdown)
+
+        scope = Scope(engagement="screenshot test", client="self-test",
+                      authorization=Authorization(reference="LOCAL-TEST",
+                                                  authorized_by="test harness"),
+                      targets=["127.0.0.2/32"], allow_private=True)
+        base = f"http://127.0.0.2:{inside.server_address[1]}"
+        with tempfile.TemporaryDirectory() as tmp, \
+                browser_shooter(scope, ScreenshotPolicy(timeout_sec=10)) as shoot:
+            page = shoot(f"{base}/page", Path(tmp) / "page.png")
+            hop = shoot(f"{base}/hop", Path(tmp) / "hop.png")
+            self.assertTrue((Path(tmp) / "hop.png").is_file())
+
+        self.assertEqual(hits, [])
+        self.assertEqual(page["title"], "in")
+        self.assertIn(f"{off_url}/pixel.png", page["blocked"])
+        self.assertIn(f"{off_url}/via-img.png", page["blocked"])
+        self.assertEqual(hop["blocked"], [f"{off_url}/stolen"])
+        self.assertTrue(hop["final_url"].startswith(base))
 
 
 class TestRedactionIsAppliedToSensitiveEvidence(unittest.TestCase):

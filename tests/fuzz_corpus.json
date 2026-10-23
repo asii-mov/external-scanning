@@ -1,0 +1,34 @@
+{
+  "//": "Minimized counterexamples from tests/fuzz_failures.py, replayed on every fuzz run before any random examples. Output is one of: null (no file), {\"hex\": ...}, or {\"fixture\": name, \"truncate\": n} / {\"fixture\": name, \"flips\": [[offset, byte], ...]}. Append new finds here.",
+
+  "discovery": [
+    {"note": "unparseable XML (NUL at byte 0) crashed discover instead of recording a gap",
+     "nmap": {"exit": ["code", 0], "output": {"fixture": "nmap-tcp.xml", "flips": [[0, 0]]}}},
+    {"note": "oracle check: invalid UTF-8 inside an XML comment loses no hosts, so no gap is required",
+     "nmap": {"exit": ["hang", 0], "output": {"fixture": "nmap-tcp.xml", "flips": [[43, 128]]}}},
+    {"note": "nmap killed mid-scan leaves a truncated file that salvage must recover",
+     "nmap": {"exit": ["signal", 9], "output": {"fixture": "nmap-tcp.xml", "truncate": 2600}}}
+  ],
+
+  "probe": [
+    {"note": "realtime signal 35 has no signal.Signals member and crashed the probe stage",
+     "nuclei": {"exit": ["signal", 35], "output": null},
+     "sslscan": {"exit": ["code", 0], "output": null}},
+    {"note": "sslscan exit status was ignored, so a failed audit was marked as checked",
+     "nuclei": {"exit": ["hang", 0], "output": null},
+     "sslscan": {"exit": ["code", 1], "output": null}},
+    {"note": "nuclei killed mid-write left partial UTF-8 that crashed the strict decode",
+     "nuclei": {"exit": ["hang", 0], "output": {"hex": "80"}},
+     "sslscan": {"exit": ["code", 0], "output": null}},
+    {"note": "oracle check: sslscan exit 0 with unreadable output is a gap, not a clean run",
+     "nuclei": {"exit": ["hang", 0], "output": null},
+     "sslscan": {"exit": ["code", 0], "output": {"hex": "3c"}}}
+  ],
+
+  "parsers": {
+    "nmap": [{"fixture": "nmap-tcp.xml", "flips": [[0, 0]]}],
+    "nuclei": [{"hex": "80"}, {"fixture": "nuclei.jsonl", "truncate": 100}],
+    "sslscan": [{"hex": "00"}, {"hex": "0000"}],
+    "snmp": [{"hex": "30"}, {"hex": "3003020100"}]
+  }
+}

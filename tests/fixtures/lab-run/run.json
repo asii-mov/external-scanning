@@ -1,0 +1,215 @@
+{
+  "run_id": "20261023-090822-extscan-local-lab",
+  "extscan_version": "0.1.0",
+  "created": 1792746502.6929598,
+  "profile": "quick",
+  "scope": {
+    "engagement": "extscan local lab",
+    "client": "Local workstation (operator-owned)",
+    "authorization": {
+      "reference": "LOCAL-LAB",
+      "authorized_by": "operator (owns this host)",
+      "window_start": "2026-01-01T00:00:00Z",
+      "window_end": "2027-12-31T23:59:59Z",
+      "notes": "Loopback-only test lab started by `python -m tests.lab`. Nothing here leaves the machine."
+    },
+    "targets": [
+      "127.0.0.2/32"
+    ],
+    "exclude": [],
+    "domains": [],
+    "host_count": 1,
+    "window_ok": true,
+    "window_note": "within authorised window",
+    "source_path": "examples/lab/scope.json"
+  },
+  "policy": {
+    "profile": "quick",
+    "nmap": {
+      "tcp_ports": "2222,2375,3306,6379,8080,8081,8443,9200",
+      "udp_ports": "10161",
+      "timing": "-T4",
+      "version_intensity": 5,
+      "host_timeout": "30m",
+      "max_retries": 2,
+      "min_rate": 0,
+      "scripts": "default,safe",
+      "exclude_scripts": [
+        "dos",
+        "external",
+        "http-slowloris-check"
+      ],
+      "skip_host_discovery": true,
+      "do_udp": true,
+      "extra_args": [],
+      "timeout_sec": 900,
+      "chunk_size": 32
+    },
+    "nuclei": {
+      "severities": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "exclude_tags": [
+        "dos",
+        "intrusive",
+        "fuzz",
+        "brute-force",
+        "default-login",
+        "default-logins",
+        "creds-stuffing"
+      ],
+      "include_tags": [],
+      "rate_limit": 150,
+      "concurrency": 15,
+      "retries": 1,
+      "request_timeout": 10,
+      "templates": [],
+      "extra_args": [],
+      "timeout_sec": 1200,
+      "allow_intrusive": false,
+      "interactsh": false,
+      "interactsh_server": ""
+    },
+    "http": {
+      "timeout_sec": 12,
+      "max_redirects": 3,
+      "max_body_bytes": 2000000,
+      "user_agent": "extscan/0.1 (authorised security assessment)",
+      "verify_tls": false,
+      "path_checks": true,
+      "paths": [
+        "/robots.txt",
+        "/.well-known/security.txt",
+        "/.git/config",
+        "/.env",
+        "/swagger.json",
+        "/openapi.json",
+        "/swagger/v1/swagger.json",
+        "/v2/swagger.json",
+        "/v3/api-docs",
+        "/swagger-ui.html",
+        "/api-docs",
+        "/graphql",
+        "/actuator",
+        "/actuator/env",
+        "/actuator/heapdump",
+        "/server-status",
+        "/phpinfo.php",
+        "/metrics",
+        "/debug/pprof/",
+        "/.DS_Store",
+        "/web.config",
+        "/config.json"
+      ],
+      "inter_request_delay": 0.0,
+      "use_system_proxy": false
+    },
+    "snmp": {
+      "communities": [
+        "public",
+        "private",
+        "community",
+        "manager",
+        "admin",
+        "cisco",
+        "default",
+        "read",
+        "write",
+        "snmp",
+        "monitor"
+      ],
+      "timeout_sec": 2.0,
+      "retries": 1,
+      "versions": [
+        1,
+        2
+      ],
+      "walk_on_hit": true
+    },
+    "recon": {
+      "sources": [
+        "crt.sh",
+        "subfinder"
+      ],
+      "resolve_timeout": 5.0,
+      "max_names": 2000,
+      "allow_bruteforce": false
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "none",
+      "model": "",
+      "effort": "medium",
+      "max_tokens": 1500,
+      "timeout_sec": 60,
+      "aws_region": "",
+      "aws_profile": "",
+      "base_url": "",
+      "max_input_chars": 40000,
+      "sdk_retries": 0,
+      "retry_attempts": 3,
+      "retry_base_delay": 2.0,
+      "retry_budget_sec": 90,
+      "circuit_failure_threshold": 3,
+      "circuit_cooldown_sec": 120,
+      "analyse_openapi": true,
+      "analyse_findings_above": "medium"
+    },
+    "max_lead_depth": 2,
+    "max_leads_per_run": 500,
+    "stop_on_tool_error": false,
+    "max_lead_attempts": 3,
+    "max_workers": 8
+  },
+  "stages": {
+    "discover": {
+      "completed": 1792746720.0513287,
+      "tcp": {
+        "hosts": 1,
+        "services": 8,
+        "chunks": 1,
+        "chunks_done": 1,
+        "chunks_failed": 0,
+        "salvaged": 0,
+        "skipped": 0
+      },
+      "udp": {
+        "hosts": 1,
+        "services": 1,
+        "chunks": 1,
+        "chunks_done": 1,
+        "chunks_failed": 0,
+        "salvaged": 0,
+        "skipped": 0
+      }
+    },
+    "probe": {
+      "completed": 1792747120.852416,
+      "findings": 84,
+      "leads": 24,
+      "probes_run": 14
+    },
+    "chase": {
+      "completed": 1792747121.0476592,
+      "leads_handled": 30,
+      "findings": 25,
+      "new_leads": 6,
+      "abandoned": 0
+    },
+    "report": {
+      "completed": 1792747121.1504803,
+      "markdown": "runs/20261023-090822-extscan-local-lab/report.md",
+      "json": "runs/20261023-090822-extscan-local-lab/report.json"
+    }
+  },
+  "warnings": [],
+  "tool_versions": {
+    "nmap": "Nmap version 7.94SVN ( https://nmap.org )",
+    "nuclei": "[\u001b[34mINF\u001b[0m] Nuclei Engine Version: v3.4.10",
+    "openssl": "OpenSSL 3.0.13 30 Jan 2024 (Library: OpenSSL 3.0.13 30 Jan 2024)"
+  }
+}

@@ -25,8 +25,6 @@ class ScopeError(Exception):
     """Raised when something would be touched that is not authorised."""
 
 
-# Ranges that mean "internal network" for the purposes of an *external* audit.
-#
 # Listed explicitly rather than using ipaddress' .is_private, which also covers
 # the RFC 5737 documentation ranges (192.0.2.0/24, 198.51.100.0/24,
 # 203.0.113.0/24) and RFC 2544 benchmarking space. Those are not internal
@@ -34,15 +32,15 @@ class ScopeError(Exception):
 # write-up that uses documentation addresses.
 _INTERNAL_NETS = [
     ipaddress.ip_network(n) for n in (
-        "10.0.0.0/8",            # RFC 1918
-        "172.16.0.0/12",         # RFC 1918
-        "192.168.0.0/16",        # RFC 1918
-        "127.0.0.0/8",           # loopback
-        "169.254.0.0/16",        # link-local, incl. cloud metadata
-        "100.64.0.0/10",         # RFC 6598 CGNAT
-        "::1/128",               # IPv6 loopback
-        "fc00::/7",              # IPv6 unique local
-        "fe80::/10",             # IPv6 link-local
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "100.64.0.0/10",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10",
     )
 ]
 
@@ -97,15 +95,10 @@ class Scope:
     targets: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
     allow_hostnames: list[str] = field(default_factory=list)
-    # Domains the client owns, for subdomain enumeration. Listing a domain
-    # authorises *enumeration* of it, not scanning of whatever it resolves to:
-    # a discovered name is only scannable if its address is in `targets`.
     domains: list[str] = field(default_factory=list)
     max_hosts: int = 1024
     allow_private: bool = False
     source_path: str = ""
-
-    # -- loading ---------------------------------------------------------
 
     @classmethod
     def load(cls, path: str | Path) -> Scope:
@@ -161,8 +154,6 @@ class Scope:
                 "Raise max_hosts deliberately or narrow the targets."
             )
 
-    # -- expansion -------------------------------------------------------
-
     @staticmethod
     def _networks(specs: list[str]) -> list[ipaddress._BaseNetwork]:
         return [ipaddress.ip_network(s, strict=False) for s in specs]
@@ -173,9 +164,7 @@ class Scope:
     def _iter_hosts(self):
         seen: set[str] = set()
         for net in self._networks(self.targets):
-            # /32 and /31 have no "hosts" in ipaddress terms; iterate the net.
-            iterator = net.hosts() if net.num_addresses > 2 else iter(net)
-            for addr in iterator:
+            for addr in net.hosts():
                 s = str(addr)
                 if s in seen or self.is_excluded(s):
                     continue
@@ -191,8 +180,6 @@ class Scope:
         if self.exclude:
             args += ["--exclude", ",".join(self.exclude)]
         return args
-
-    # -- enforcement -----------------------------------------------------
 
     def is_excluded(self, host: str) -> bool:
         try:

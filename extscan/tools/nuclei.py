@@ -3,7 +3,8 @@
 Two things this module does beyond shelling out:
 
 * it constrains nuclei to non-destructive template families. The default
-  exclude list drops dos/intrusive/fuzz/brute-force, and out-of-band
+  exclude list drops dos/intrusive/fuzz/brute-force and the default-login
+  templates (which submit passwords), and out-of-band
   (interactsh) detection is off, because the public interactsh relay would see
   client traffic;
 * it reads results as *leads*, not just findings. A nuclei hit on a swagger
@@ -52,7 +53,6 @@ def argv(policy: Policy, targets_file: str, jsonl_out: str) -> list[str]:
 def write_targets(runner: Runner, services: list[Service]) -> tuple[str, list[str]]:
     """Write the URL list nuclei will read. Returns (path, urls)."""
     urls = [s.base_url() for s in services if s.is_http]
-    # Deduplicate while keeping order, so the file matches what we reported.
     seen, ordered = set(), []
     for u in urls:
         if u not in seen:
@@ -63,12 +63,6 @@ def write_targets(runner: Runner, services: list[Service]) -> tuple[str, list[st
     return str(path), ordered
 
 
-# ---------------------------------------------------------------------------
-# Result interpretation
-# ---------------------------------------------------------------------------
-
-# Template id/tag substrings that should spawn a deeper look. The handler name
-# must exist in extscan.chase.HANDLERS.
 LEAD_TRIGGERS: list[tuple[tuple[str, ...], str, str]] = [
     (("swagger", "openapi", "api-docs", "apidocs", "redoc"), "openapi",
      "An API description document is exposed; enumerate what it describes."),
@@ -92,8 +86,6 @@ LEAD_TRIGGERS: list[tuple[tuple[str, ...], str, str]] = [
      "A named application is exposed; check authentication and version."),
 ]
 
-# Hits that automation can confirm exists but cannot judge the impact of.
-# These are the "a human must look at this" cases the auditors described.
 REVIEW_TRIGGERS: list[tuple[tuple[str, ...], str]] = [
     (("swagger", "openapi", "api-docs", "redoc"),
      "Exposed API documentation. An auditor must decide whether the described "
@@ -190,8 +182,6 @@ def parse_jsonl(text: str, scope: Scope | None = None,
             evidence_parts.append("extracted: " + ", ".join(str(e)[:200] for e in extracted[:10]))
         if rec.get("matcher-name"):
             evidence_parts.append(f"matcher: {rec['matcher-name']}")
-        # The raw request/response pair is the proof an auditor wants in the
-        # report, but it is bulky -- keep a trimmed copy.
         for key in ("request", "response"):
             if rec.get(key):
                 evidence_parts.append(f"--- {key} ---\n{str(rec[key])[:1500]}")
@@ -240,6 +230,6 @@ def run(runner: Runner, scope: Scope, policy: Policy,
     cmd = argv(policy, targets_file, str(out_path))
     res = runner.run(cmd, stage="probe:nuclei", timeout=policy.nuclei.timeout_sec,
                      stdout_name="nuclei")
-    text = out_path.read_text() if out_path.exists() else ""
+    text = out_path.read_text(errors="replace") if out_path.exists() else ""
     findings, leads = parse_jsonl(text, scope=scope)
     return res, findings, leads

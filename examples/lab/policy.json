@@ -1,0 +1,16 @@
+{
+  "profile": "quick",
+  "nmap": {
+    "tcp_ports": "2222,2375,3306,6379,8080,8081,8443,9200",
+    "udp_ports": "10161",
+    "timing": "-T4",
+    "scripts": "default,safe",
+    "skip_host_discovery": true,
+    "timeout_sec": 900
+  },
+  "nuclei": {
+    "severities": ["info", "low", "medium", "high", "critical"],
+    "rate_limit": 150,
+    "timeout_sec": 1200
+  }
+}

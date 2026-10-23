@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<?xml-stylesheet href="file:///usr/bin/../share/nmap/nmap.xsl" type="text/xsl"?>
+<!-- Nmap 7.94SVN scan initiated Fri Oct 23 09:09:52 2026 as: nmap -sU -sV -&#45;version-intensity 5 -p 10161 -T4 -&#45;max-retries 2 -&#45;host-timeout 30m -&#45;open -oA runs/20261023-090822-extscan-local-lab/raw/nmap-udp-0001 -&#45;script &quot;(default or safe) and not (dos or external or http-slowloris-check)&quot; -Pn 127.0.0.2 -->
+<nmaprun scanner="nmap" args="nmap -sU -sV -&#45;version-intensity 5 -p 10161 -T4 -&#45;max-retries 2 -&#45;host-timeout 30m -&#45;open -oA runs/20261023-090822-extscan-local-lab/raw/nmap-udp-0001 -&#45;script &quot;(default or safe) and not (dos or external or http-slowloris-check)&quot; -Pn 127.0.0.2" start="1792746592" startstr="Fri Oct 23 09:09:52 2026" version="7.94SVN" xmloutputversion="1.05">
+<scaninfo type="udp" protocol="udp" numservices="1" services="10161"/>
+<verbose level="0"/>
+<debugging level="0"/>
+<prescript><script id="eap-info" output="please specify an interface with -e"/><script id="broadcast-igmp-discovery" output="&#xa;  172.17.0.1&#xa;    Interface: eth0&#xa;    Version: 2&#xa;    Group: 224.0.0.106&#xa;    Description: All-Snoopers (rfc4286)&#xa;  172.17.0.1&#xa;    Interface: eth0&#xa;    Version: 2&#xa;    Group: 224.0.0.251&#xa;    Description: mDNS (rfc6762)&#xa;  Use the newtargets script-arg to add the results as targets&#xa;"/></prescript><host starttime="1792746632" endtime="1792746720"><status state="up" reason="user-set" reason_ttl="0"/>
+<address addr="127.0.0.2" addrtype="ipv4"/>
+<hostnames>
+</hostnames>
+<ports><port protocol="udp" portid="10161"><state state="open" reason="udp-response" reason_ttl="0"/><service name="snmpdtls" servicefp="SF-Port10161-UDP:V=7.94SVN%I=5%D=10/23%Time=6ADB24B8%P=x86_64-pc-linux-gnu%r(SNMPv1public,50,&quot;0N\x02\x01\x01\x04\x06public\xa2A\x02\x04L3\xa7V\x02\x01\0\x02\x01\x000301\x06\x08\+\x06\x01\x02\x01\x01\x05\0\x04%Linux\x20lab-router\x204\.19\.0\x20#1\x20SMP\x20x86_64&quot;);" method="table" conf="3"/><script id="fingerprint-strings" output="&#xa;  SNMPv1public: &#xa;    public&#xa;    0301&#xa;    %Linux lab-router 4.19.0 #1 SMP x86_64"><elem key="SNMPv1public">&#xa;    public&#xa;    0301&#xa;    %Linux lab-router 4.19.0 #1 SMP x86_64</elem>
+</script></port>
+</ports>
+<hostscript><script id="unusual-port" output="&#xa;  WARNING: this script depends on Nmap&apos;s service/version detection (-sV)&#xa;"/><script id="port-states" output="&#xa;  udp: &#xa;    open: 10161"><table key="udp">
+<elem key="open">10161</elem>
+</table>
+</script><script id="fcrdns" output="FAIL (No PTR record)"><table key="&lt;none&gt;">
+<elem key="status">fail</elem>
+<elem key="reason">No PTR record</elem>
+</table>
+</script></hostscript></host>
+<postscript><script id="reverse-index" output="&#xa;  10161/udp: 127.0.0.2"><table key="10161/udp">
+<elem>127.0.0.2</elem>
+</table>
+</script></postscript><runstats><finished time="1792746720" timestr="Fri Oct 23 09:12:00 2026" summary="Nmap done at Fri Oct 23 09:12:00 2026; 1 IP address (1 host up) scanned in 128.06 seconds" elapsed="128.06" exit="success"/><hosts up="1" down="0" total="1"/>
+</runstats>
+</nmaprun>

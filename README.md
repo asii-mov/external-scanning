@@ -59,22 +59,31 @@ uv pip install 'extscan[bedrock]'   # AWS Bedrock
 uv run extscan providers            # check what is reachable
 ```
 
+Screenshots of web services for the report need headless Chromium:
+
+```bash
+uv sync --extra screenshots && uv run playwright install chromium
+```
+
+Without it the screenshot stage records a coverage gap and the report
+describes web services in text only.
+
 External tools: **nmap** (required), **nuclei** (required for web checks),
-`sslscan`, `httpx`, `testssl.sh`, `subfinder`/`amass` (all optional —
+`sslscan`, `testssl.sh`, `subfinder`/`amass` (all optional —
 each degrades to a recorded coverage gap rather than a failure).
 `extscan doctor` prints install commands for what is missing.
 
 Lint with `uv run ruff check .`. The formatter is configured but not
 enforced; `pyproject.toml` explains why and how to turn it on.
 
-UDP scanning needs raw sockets:
+UDP scanning needs root. Run unprivileged, extscan says up front that the run
+is TCP only, prints the command to add UDP afterwards, and records a coverage
+gap, because "no SNMP findings" and "SNMP was never checked" must never look
+the same in a report:
 
 ```bash
-sudo setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip $(which nmap)
+sudo .venv/bin/extscan discover <run> --udp-only   # clears the gap once UDP has run
 ```
-
-Without it, extscan **warns loudly and continues** — because "no SNMP findings"
-and "SNMP was never checked" must never look the same in a report.
 
 ## Authorisation is mandatory
 
@@ -117,7 +126,8 @@ extscan services latest              # what is open
 extscan probe latest                 # nuclei + per-service probes
 extscan leads latest                 # what is worth a closer look
 extscan chase latest --rounds 2      # resolve the follow-ups
-extscan report latest                # report.md + report.json
+extscan screenshot latest            # headless Chromium, every request scope-checked
+extscan report latest                # report.md, report.json, report/ (Obsidian vault)
 extscan gaps latest                  # what did NOT get checked
 ```
 
@@ -129,7 +139,10 @@ Or unattended: `extscan run --scope scope.json`
 engagement before the real thing.
 
 Profiles: `quick`, `standard`, `thorough` (all 65535 TCP ports — hours on a
-wide range). Override anything with a policy file; see
+wide range). To choose the TCP ports on their own, pass `--tcp-ports` to
+`init` or `run`: `all` (1-65535), `top` (the standard list), `quick` (25
+common ports), or a list such as `22,80,8000-8100`. Override anything else
+with a policy file; see
 `examples/policy.gentle.json` for a rate-limited configuration suitable for
 fragile infrastructure.
 
@@ -171,7 +184,8 @@ loud abort. Never a silent pass.
 | **nmap times out or is killed** | Partial XML is salvaged — completed hosts are recovered from the truncated file instead of the whole batch being lost. The gap names which hosts went unscanned. `-oA` output means `nmap --resume` also works. |
 | **Scope is large** | Discovery runs in batches of `nmap.chunk_size` hosts, each checkpointed. A timeout costs one batch; `extscan resume` skips what finished. |
 | **nmap/nuclei/sslscan not installed** | Recorded as a coverage gap naming what was not checked, and the run continues. `doctor` tells you up front. |
-| **UDP needs root** | Loud warning plus a *serious* coverage gap, because "no SNMP findings" and "SNMP was never checked" must never look alike. |
+| **nuclei or a probe fails** | A killed, timed-out or crashing tool is a coverage gap naming the services it did not finish, and those services stay unmarked so `extscan probe <run> --only <probe>` retries them. |
+| **UDP needs root** | A TCP-only notice before discovery starts, plus a *serious* coverage gap, because "no SNMP findings" and "SNMP was never checked" must never look alike. |
 | **Model endpoint is down** | Retried with jittered backoff, then a circuit breaker opens and stops trying. 100 leads against a dead endpoint cost ~6 HTTP attempts, not 200. Findings keep their deterministic evidence and get a human-review flag. |
 | **Model returns garbage** | Not retried — it answered, just not usefully. Counted separately from an outage. |
 | **A lead keeps failing** | Retried up to `max_lead_attempts` *across runs*, then abandoned with its error recorded, so one unreachable host cannot block the stage on every resume. |
@@ -218,7 +232,8 @@ so. Nothing depends on it — which is what makes it safe to use.
 
 Deliberate, tested, and not configurable away:
 
-- **Read-only.** GET, connect, query. No credential testing, no SNMP SET, no
+- **Read-only.** GET, connect, query. No credential testing (nuclei's
+  `default-login` and `creds-stuffing` templates are excluded), no SNMP SET, no
   writes to discovered services, no exploitation. Where impact cannot be
   established without going further, the finding says so and asks a human.
 - **Scope re-checked per request.** Leads come from scanner output, HTTP
@@ -227,6 +242,11 @@ Deliberate, tested, and not configurable away:
   not followed.
 - **No shell.** Every command runs as an argv list. Target-derived strings
   never reach a shell.
+- **Disruptive and leaky NSE scripts excluded by default.** The `dos` and
+  `external` categories and `http-slowloris-check` do not run. `external`
+  covers scripts such as `vulners` and `dns-blacklist`, which send target
+  details to third-party services. This is the one item here a policy can
+  change (`nmap.exclude_scripts`), for an engagement that permits it.
 - **Destructive nuclei templates excluded** (`dos`, `intrusive`, `fuzz`,
   `brute-force`), and out-of-band detection is off by default — public
   interactsh relays would see client traffic.
@@ -235,7 +255,14 @@ Deliberate, tested, and not configurable away:
   target.
 - **Secrets redacted.** Evidence proves an `.env` is readable and names the
   keys; it does not copy the values into the report, the ticket and three
-  mailboxes.
+  mailboxes. Every rendered report (`report.md`, `report.json`, the vault)
+  also drops session ids, cookie values, credentials in URLs and SNMP
+  community strings that are not well-known defaults. Pages whose evidence
+  holds secrets are never screenshotted, because an image cannot be redacted.
+  The run state keeps raw values, so findings can be re-checked.
+- **Screenshots stay in scope.** The browser's every request, subresources and
+  each redirect hop included, is scope-checked before it is sent. Off-scope
+  requests are blocked and listed in the caption.
 - **Full audit trail.** Every command, exit code and timing in
   `commands.jsonl`, summarised in the report so a client can reproduce any
   finding.
@@ -254,6 +281,26 @@ Deliberate, tested, and not configurable away:
 6. **Service inventory**
 7. **Methodology and limitations** — stages run, coverage gaps, tool versions,
    command log
+
+`report/` is the same run as an Obsidian vault, written as a pentest
+narrative. Open the folder in Obsidian and start at `00 Summary.md`:
+
+- **00 Summary** tells the story in the order the work happened: scope and
+  authorisation, discovery (with the nmap commands as run), each service
+  family with screenshots and a fenced proof block per finding, the
+  follow-ups, and what was not covered. The manual review queue and coverage
+  gaps are flagged before the story starts.
+- **hosts/** has one note per host: services, the checks run on each,
+  screenshots, findings.
+- **findings/** has one note per finding: evidence, proof, a command to
+  reproduce it, remediation.
+- **Manual review queue**, **Coverage gaps** and **Methodology** (with the
+  full command log) are notes of their own.
+
+Notes have YAML frontmatter (severity, host, port, tags) for Dataview, and
+link with `[[wikilinks]]`. Scanner text is escaped, so a hostile page title
+cannot embed notes or make Obsidian fetch a URL. Re-rendering replaces the
+notes extscan wrote and leaves your own notes and `.obsidian/` alone.
 
 Findings are marked `tentative` when derived from a version banner or a
 specification rather than observed behaviour. Keep that distinction when
@@ -276,13 +323,34 @@ the loop — the branching logic is not frozen into the tool.
 ## Tests
 
 ```bash
-uv run python -m unittest discover -s tests -t .   # 367 tests, ~5s, no network
+uv run python -m unittest discover -s tests -t .   # ~415 tests, ~10s, no network
 ```
 
 Fixture-driven, so no scanners are needed: captured nmap/sslscan XML and
 nuclei JSONL for the parsers, a fake SNMP agent over a real UDP socket for the
 wire format, and local HTTP targets (one deliberately exposed, one IIS-flavoured,
 one correctly hardened) for the probe → chase → report path.
+
+`tests/fuzz_failures.py` fuzzes the failure paths with Hypothesis. Fake
+`nmap`, `nuclei` and `sslscan` binaries exit with random codes and signals,
+hang, or write truncated, random or bit-flipped output. Each run is checked
+for a crash, a failed tool with no coverage gap, or a failed tool marked as
+having checked a service. Past counterexamples in `tests/fuzz_corpus.json`
+replay first on every run. It is opt-in because it takes several minutes:
+
+```bash
+uv run python -m unittest tests.fuzz_failures -v
+```
+
+`tests/fixtures/lab-run/` is a complete lab run with real nmap and nuclei
+output, for working on reporting without running scanners.
+`bash scripts/cloud-setup.sh` provisions a fresh Linux box (a cloud session,
+CI) with nmap, sslscan and pinned nuclei and templates.
+
+To exercise the real scanners too, `uv run python -m tests.lab` starts nine
+exposed services on `127.0.0.2` (HTTP, HTTPS, IIS, SSH, Redis, MySQL,
+Elasticsearch, Docker API, SNMP) with a matching scope and policy in
+`examples/lab/`. See `docs/LAB.md`.
 
 The suite deliberately covers the things that cause false positives in client
 reports — soft-404 filtering, OpenAPI base-path joining, secret redaction,
@@ -294,8 +362,8 @@ optional `anthropic` extra installed.
 ## Further work
 
 `docs/ROADMAP.md` has a prioritised list of what else is worth adding, with
-the catch for each. The top of it: web-service screenshotting, virtual-host
-enumeration, and run-to-run diffing.
+the catch for each. The top of it: virtual-host enumeration and run-to-run
+diffing.
 
 ## Legal
 

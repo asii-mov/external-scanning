@@ -18,9 +18,10 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from .llm.base import SECRET_LINE_RE
 from .models import Finding, Lead, Service
 from .policy import Policy
-from .runner import Runner, have
+from .runner import Runner
 from .scope import Scope
 from .tools import iis, net, snmp, sslscan
 
@@ -30,9 +31,6 @@ class ProbeContext:
     scope: Scope
     policy: Policy
     runner: Runner
-    # Optional model client. None means "no model available", which every
-    # consumer must handle by falling back to deterministic analysis rather
-    # than skipping the check -- see extscan/llm/__init__.py.
     llm: object | None = None
 
 
@@ -61,13 +59,8 @@ def probes_for(service: Service) -> list[Probe]:
     return [p for p in REGISTRY if p.matches(service)]
 
 
-# ---------------------------------------------------------------------------
-# HTTP fingerprint + disclosure paths
-# ---------------------------------------------------------------------------
-
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 
-# Response bodies that hint at something worth chasing.
 _BODY_HINTS: list[tuple[str, str, str]] = [
     ("swagger-ui", "openapi", "The page loads Swagger UI; locate and read the spec it renders."),
     ("swagger", "openapi", "Swagger references in the page body."),
@@ -85,7 +78,6 @@ SECURITY_HEADERS = {
     "x-frame-options": "No framing restriction (unless CSP frame-ancestors is set).",
 }
 
-# Headers that routinely give away more than intended.
 VERBOSE_HEADERS = ["server", "x-powered-by", "x-aspnet-version", "x-aspnetmvc-version",
                    "x-generator", "x-drupal-cache", "x-runtime", "via"]
 
@@ -178,7 +170,6 @@ def http_fingerprint(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], li
     return findings, leads
 
 
-# What a hit on each path means. (severity, description, lead kind)
 _PATH_MEANING: dict[str, tuple[str, str, str]] = {
     "/.git/config":       ("high", "A .git directory is served, which usually means the "
                                    "full source history is retrievable.", "git_exposure"),
@@ -228,7 +219,7 @@ def _looks_like_real_hit(path: str, resp: net.Response) -> bool:
         return False
     body = resp.body
     if not body:
-        return path in ("/robots.txt",)        # an empty robots.txt is still a hit
+        return path in ("/robots.txt",)
     text = resp.text[:4000].lower()
     ctype = resp.content_type
 
@@ -255,10 +246,7 @@ def _looks_like_real_hit(path: str, resp: net.Response) -> bool:
     if path.startswith("/actuator"):
         return "json" in ctype or text.lstrip().startswith("{")
     if path == "/graphql":
-        # A bare GET on GraphQL usually 400s with a JSON error; that still
-        # proves the endpoint is live.
         return "graphql" in text or "query" in text or "json" in ctype
-    # Default: treat an HTML page that looks like the site's 404 as a miss.
     return not any(s in text for s in ("not found", "404", "page does not exist"))
 
 
@@ -279,7 +267,6 @@ def _check_paths(ctx: ProbeContext, svc: Service,
         sev, desc, lead_kind = _PATH_MEANING.get(path, ("info", f"{path} is reachable.", ""))
         hit = _looks_like_real_hit(path, resp)
 
-        # A 401/403 is itself informative: the resource exists but is protected.
         if not hit and resp.status in (401, 403) and path not in ("/robots.txt",):
             findings.append(Finding(
                 title=f"{path} present but access-controlled on {svc.host}:{svc.port}",
@@ -323,11 +310,6 @@ def _check_paths(ctx: ProbeContext, svc: Service,
     return findings, leads
 
 
-_SECRET_KEY_RE = re.compile(
-    r"(?im)^([A-Za-z0-9_.\-]*(?:KEY|TOKEN|SECRET|PASS|PASSWORD|CREDENTIAL|DSN|URI|URL|CONN)[A-Za-z0-9_.\-]*)\s*[=:]\s*(.+)$"
-)
-
-
 def _redact(text: str) -> str:
     """Keep key names, drop values.
 
@@ -337,12 +319,8 @@ def _redact(text: str) -> str:
     def sub(m: re.Match) -> str:
         value = m.group(2).strip()
         return f"{m.group(1)}=<redacted, {len(value)} chars>"
-    return _SECRET_KEY_RE.sub(sub, text)
+    return SECRET_LINE_RE.sub(sub, text)
 
-
-# ---------------------------------------------------------------------------
-# TLS
-# ---------------------------------------------------------------------------
 
 @register("tls", lambda s: s.proto == "tcp" and s.is_tls,
           "Inspect certificate and offered protocol versions.")
@@ -440,10 +418,6 @@ def tls_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead
     return findings, leads
 
 
-# ---------------------------------------------------------------------------
-# SNMP
-# ---------------------------------------------------------------------------
-
 def _is_snmp(s: Service) -> bool:
     return s.proto == "udp" and (s.port in (161, 10161) or "snmp" in s.name.lower())
 
@@ -466,11 +440,6 @@ def snmp_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lea
     return findings, leads
 
 
-# ---------------------------------------------------------------------------
-# Services that should not face the internet
-# ---------------------------------------------------------------------------
-
-# port -> (label, severity, why it matters)
 SENSITIVE_TCP: dict[int, tuple[str, str, str]] = {
     23:    ("Telnet", "high", "Telnet carries credentials in cleartext."),
     69:    ("TFTP", "medium", "TFTP is unauthenticated by design."),
@@ -548,10 +517,6 @@ def exposure_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list
     )], []
 
 
-# ---------------------------------------------------------------------------
-# SSH
-# ---------------------------------------------------------------------------
-
 @register("ssh", lambda s: s.proto == "tcp" and (s.port == 22 or "ssh" in s.name.lower()),
           "Record the SSH banner and flag outdated server versions.")
 def ssh_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
@@ -571,32 +536,24 @@ def ssh_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead
     return findings, []
 
 
-# ---------------------------------------------------------------------------
-# IIS / ASP.NET
-# ---------------------------------------------------------------------------
-
 @register("iis", lambda s: s.is_http and iis.looks_like_iis(s),
           "IIS/ASP.NET checks: diagnostic handlers, WebDAV, 8.3 names, error pages.")
 def iis_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     return iis.probe_iis(svc, ctx.scope, ctx.policy.http)
 
 
-# ---------------------------------------------------------------------------
-# sslscan
-# ---------------------------------------------------------------------------
-
 @register("sslscan", lambda s: s.proto == "tcp" and s.is_tls,
-          "Cipher-level TLS audit via sslscan (skipped when not installed).")
+          "Cipher-level TLS audit via sslscan (a coverage gap when not installed).")
 def sslscan_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     """Cipher enumeration, which the built-in TLS probe cannot do.
 
     Python's ssl module only offers what the local OpenSSL build supports, so
     it cannot prove a server accepts RC4. sslscan links its own crypto and can.
-    Absent, this is a no-op: the built-in probe already covered protocols.
     """
-    if not have("sslscan"):
-        return [], []
-    _res, findings = sslscan.run(ctx.runner, ctx.scope, svc.host, svc.port)
+    res, findings = sslscan.run(ctx.runner, ctx.scope, svc.host, svc.port,
+                                timeout=ctx.policy.sslscan.timeout_sec)
+    if res.failure:
+        raise RuntimeError(f"sslscan {res.failure}")
     return findings, []
 
 

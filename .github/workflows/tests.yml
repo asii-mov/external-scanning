@@ -14,10 +14,6 @@ jobs:
           enable-cache: true
       - name: Lint
         run: uv run ruff check --output-format=github .
-      # `ruff format` is configured but not enforced; see the note in
-      # pyproject.toml for why. Uncomment to adopt it:
-      # - name: Format check
-      #   run: uv run ruff format --check .
 
   test:
     runs-on: ubuntu-latest
@@ -31,9 +27,6 @@ jobs:
         with:
           enable-cache: true
       - name: Run tests
-        # extscan has no runtime dependencies by design, and the suite uses
-        # fixtures plus loopback servers rather than real scanners, so this
-        # needs no install step and no network.
         run: uv run --python ${{ matrix.python-version }} python -m unittest discover -s tests -t . -v
 
       - name: Smoke-test the CLI
@@ -41,5 +34,4 @@ jobs:
           uv run --python ${{ matrix.python-version }} python -m extscan --version
           uv run --python ${{ matrix.python-version }} python -m extscan probes
           uv run --python ${{ matrix.python-version }} python -m extscan providers
-          # doctor exits non-zero when nmap is absent, which it is on a runner
           uv run --python ${{ matrix.python-version }} python -m extscan doctor || true

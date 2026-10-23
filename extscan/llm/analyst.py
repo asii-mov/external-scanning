@@ -19,9 +19,6 @@ from extscan.models import Finding
 
 from .base import Analysis
 
-# A visible marker on every model-derived finding. An auditor skimming a report
-# must be able to tell at a glance which sentences a machine wrote about
-# attacker-supplied input.
 LLM_SOURCE = "llm-analysis"
 
 
@@ -116,10 +113,6 @@ def unavailable_finding(*, host: str, port: int | None, subject: str,
     )
 
 
-# ---------------------------------------------------------------------------
-# Analyses
-# ---------------------------------------------------------------------------
-
 OPENAPI_QUESTION = """\
 An external scan found this API specification published without authentication.
 
@@ -186,7 +179,7 @@ def analyse_finding(client, finding: Finding) -> Finding | None:
                  "scanner_confidence": finding.confidence},
     )
     if analysis is None:
-        return None            # the finding already stands; no need to annotate
+        return None
     return analysis_to_finding(
         analysis, host=finding.host, port=finding.port, proto=finding.proto,
         subject=finding.title,

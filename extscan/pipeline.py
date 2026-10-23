@@ -11,10 +11,11 @@ from __future__ import annotations
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import __version__
+from . import __version__, redact, vault
 from . import chase as chase_mod
 from . import probes as probes_mod
 from . import report as report_mod
+from . import screenshots as shots_mod
 from .models import Finding, Lead
 from .policy import Policy
 from .probes import ProbeContext
@@ -27,7 +28,7 @@ from .resilience import (
     classify,
     retry,
 )
-from .runner import Runner, ToolMissing, doctor
+from .runner import Runner, ToolMissing, doctor, udp_rerun_command
 from .scope import Scope
 from .store import Store
 from .tools import nmap, nuclei, subdomains
@@ -52,6 +53,15 @@ def init_run(runs_dir: str, scope: Scope, policy: Policy,
     return store
 
 
+def _coverage_lost(store: Store, deg: Degradation) -> None:
+    store.add_degradation(deg)
+    print(f"  ! {deg.reason}")
+    print(f"    {deg.impact}")
+
+
+UDP_NEEDS_ROOT = "nmap -sU requires root and the run is unprivileged"
+
+
 def _warn(store: Store, message: str) -> None:
     meta = store.meta()
     warnings = meta.setdefault("warnings", [])
@@ -60,10 +70,6 @@ def _warn(store: Store, message: str) -> None:
     store.write_meta(meta)
     print(f"  ! {message}")
 
-
-# ---------------------------------------------------------------------------
-# Discovery
-# ---------------------------------------------------------------------------
 
 def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
                    kind: str, resume: bool) -> dict | None:
@@ -110,13 +116,16 @@ def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
             _warn(store, str(exc))
             return None
 
-        if res.skipped:                       # dry run
+        if res.skipped:
             print("    (dry run)")
             continue
 
-        if xml:
-            hosts, services, findings = nmap.parse_xml(xml, scope=scope,
-                                                        source=f"nmap-{kind}")
+        try:
+            parsed = nmap.parse_xml(xml, scope=scope, source=f"nmap-{kind}") if xml else None
+        except ValueError:
+            parsed = None
+        if parsed:
+            hosts, services, findings = parsed
             store.save_hosts(hosts)
             store.save_services(services)
             store.add_findings(findings)
@@ -155,8 +164,6 @@ def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
             ))
             print(f"    ! batch failed; {len(targets)} host(s) not covered")
 
-        # If every batch is failing, the fault is local -- stop now rather than
-        # producing a report that says the client's estate is dark.
         aborter.check(context=f"{kind} discovery")
 
     return totals
@@ -167,7 +174,13 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
              resume: bool = False) -> dict:
     scope.assert_window()
     do_udp = policy.nmap.do_udp if udp is None else udp
+    udp_blocked = do_udp and nmap.udp_requires_root()
     summary: dict = {"tcp": None, "udp": None}
+    rerun = udp_rerun_command(store.path.name)
+
+    if udp_blocked:
+        print("Not running as root: this run is TCP only.")
+        print(f"  Re-run as root to add UDP: {rerun}")
 
     if tcp:
         print("→ nmap TCP discovery")
@@ -176,33 +189,25 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
             print(f"  {summary['tcp']['hosts']} host(s), "
                   f"{summary['tcp']['services']} open TCP port(s)")
 
-    if do_udp:
-        if nmap.udp_requires_root():
-            store.add_degradation(Degradation(
-                stage="discover:udp", component="nmap",
-                reason="nmap -sU requires root and the run is unprivileged",
-                impact="No UDP scanning was performed. SNMP, IPMI, NTP, mDNS and "
-                       "other UDP exposure is NOT covered by this report. Absence "
-                       "of UDP findings here means the check never ran.",
-                severity="serious", recoverable=True,
-                remedy="Re-run `extscan discover <run> --udp-only` as root, or grant "
-                       "CAP_NET_RAW: setcap cap_net_raw,cap_net_admin+eip $(which nmap)",
-            ))
-            _warn(store, "UDP scan skipped: nmap -sU needs root. Without it, SNMP "
-                         "and other UDP exposure is NOT covered by this report.")
-        else:
-            print("→ nmap UDP discovery")
-            summary["udp"] = _run_nmap_pass(store, scope, policy, runner, "udp", resume)
-            if summary["udp"]:
-                print(f"  {summary['udp']['services']} open/responding UDP port(s)")
+    if udp_blocked:
+        store.add_degradation(Degradation(
+            stage="discover:udp", component="nmap", reason=UDP_NEEDS_ROOT,
+            impact="No UDP scanning was performed. SNMP, IPMI, NTP, mDNS and "
+                   "other UDP exposure is NOT covered by this report. Absence "
+                   "of UDP findings here means the check never ran.",
+            severity="serious", recoverable=True,
+            remedy=f"Re-run as root: `{rerun}`",
+        ))
+    elif do_udp:
+        store.remove_degradations("discover:udp", UDP_NEEDS_ROOT)
+        print("→ nmap UDP discovery")
+        summary["udp"] = _run_nmap_pass(store, scope, policy, runner, "udp", resume)
+        if summary["udp"]:
+            print(f"  {summary['udp']['services']} open/responding UDP port(s)")
 
     store.mark_stage("discover", **{k: v for k, v in summary.items() if v})
     return summary
 
-
-# ---------------------------------------------------------------------------
-# Recon (subdomain enumeration)
-# ---------------------------------------------------------------------------
 
 def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
     """Enumerate subdomains of the scope's domains, then split them by scope.
@@ -257,10 +262,6 @@ def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
     return totals
 
 
-# ---------------------------------------------------------------------------
-# Probing
-# ---------------------------------------------------------------------------
-
 def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
           only: list[str] | None = None, force: bool = False,
           skip_nuclei: bool = False) -> dict:
@@ -274,25 +275,30 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
     all_findings: list[Finding] = []
     all_leads: list[Lead] = []
 
-    # nuclei runs once across every web target rather than per service: it
-    # manages its own concurrency and rate limiting better than we can by
-    # invoking it repeatedly.
     web = [s for s in services if s.is_http]
     if web and not skip_nuclei and (only is None or "nuclei" in only):
         print(f"→ nuclei against {len(web)} web service(s)")
         try:
             res, findings, leads = nuclei.run(runner, scope, policy, services)
-            all_findings += findings
-            all_leads += leads
-            print(f"  {len(findings)} result(s), {len(leads)} lead(s)")
-            if res is not None and not res.ok and not res.skipped:
-                _warn(store, f"nuclei exited {res.returncode}; results may be partial")
-            for s in web:
-                store.mark_probed(s.id, "nuclei")
+            failure = res.failure if res else ""
         except ToolMissing as exc:
-            _warn(store, f"{exc} Web vulnerability checks did NOT run.")
+            findings, leads, failure = [], [], str(exc)
+        all_findings += findings
+        all_leads += leads
+        print(f"  {len(findings)} result(s), {len(leads)} lead(s)")
+        if failure:
+            _coverage_lost(store, Degradation(
+                stage="probe:nuclei", component="nuclei", reason=f"nuclei {failure}",
+                impact=f"Templated web checks did not complete against {len(web)} web "
+                       "service(s). Any nuclei finding may be missing from this report.",
+                severity="serious", hosts=sorted({w.host for w in web}),
+                remedy="Run nuclei by hand against raw/nuclei-targets.txt to see why, "
+                       "then `extscan probe <run> --only nuclei`.",
+            ))
+        else:
+            for w in web:
+                store.mark_probed(w.id, "nuclei")
 
-    # Per-service probes, in a small pool since each is network-bound.
     jobs: list[tuple[probes_mod.Probe, object]] = []
     for svc in services:
         for p in probes_mod.probes_for(svc):
@@ -302,6 +308,7 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 continue
             jobs.append((p, svc))
 
+    failed: set[tuple[str, str]] = set()
     if jobs:
         print(f"→ {len(jobs)} per-service probe(s) across {len(services)} service(s)")
         with ThreadPoolExecutor(max_workers=max(1, policy.max_workers)) as pool:
@@ -312,17 +319,23 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 try:
                     findings, leads = fut.result()
                 except Exception as exc:
-                    _warn(store, f"probe {p.name} failed on {svc.id}: "
-                                 f"{type(exc).__name__}: {exc}")
+                    failed.add((p.name, svc.id))
+                    _coverage_lost(store, Degradation(
+                        stage=f"probe:{p.name}", component=p.name,
+                        reason=f"{svc.id}: {type(exc).__name__}: {exc}"[:300],
+                        impact=f"The {p.name} check did not run on {svc.id}.",
+                        hosts=[svc.host],
+                        remedy=f"Fix the cause, then `extscan probe <run> --only {p.name}`.",
+                    ))
                     continue
                 all_findings += findings
                 all_leads += leads
 
-    # Single-threaded writes: the store is not concurrency-safe by design.
     added_f = store.add_findings(all_findings)
     added_l = store.add_leads(all_leads, max_total=policy.max_leads_per_run)
     for p, svc in jobs:
-        store.mark_probed(svc.id, p.name)
+        if (p.name, svc.id) not in failed:
+            store.mark_probed(svc.id, p.name)
 
     store.mark_stage("probe", findings=added_f, leads=added_l, probes_run=len(jobs))
     print(f"  {added_f} new finding(s), {added_l} new lead(s)")
@@ -332,10 +345,6 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
 def _run_one_probe(ctx: ProbeContext, p: probes_mod.Probe, svc):
     return p.run(ctx, svc)
 
-
-# ---------------------------------------------------------------------------
-# Chasing leads
-# ---------------------------------------------------------------------------
 
 def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 lead_ids: list[str] | None = None, kinds: list[str] | None = None,
@@ -368,8 +377,6 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
 
         print(f"→ chase round {round_no}: {len(open_leads)} lead(s)")
         for lead in open_leads:
-            # Permanently-failing leads are given up on rather than retried on
-            # every resume until someone notices the run never finishes.
             if lead.attempts >= policy.max_lead_attempts:
                 store.update_lead(
                     lead.id, status="abandoned",
@@ -396,8 +403,6 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
                         f"waiting {delay:.1f}s"),
                 )
             except CircuitOpen as exc:
-                # A dependency (typically the model endpoint) is down. Leave the
-                # lead open so a resume picks it up, and stop hammering it.
                 store.update_lead(lead.id, attempts=attempt_no, last_error=str(exc)[:300])
                 store.add_degradation(Degradation(
                     stage="chase", component="llm",
@@ -411,7 +416,7 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
                            "`extscan chase <run> --resume`, or work the open leads by hand.",
                 ))
                 print(f"  [{lead.kind}] deferred: {str(exc)[:110]}")
-                break           # abandon this round; the circuit needs time
+                break
             except RunAborted:
                 raise
             except Exception as exc:
@@ -440,7 +445,7 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
             print(f"  [{lead.kind}] {lead.host}:{lead.port or '-'} -> {result.note[:140]}")
 
         if lead_ids:
-            break          # explicit single-lead request: do not cascade
+            break
 
     store.mark_stage("chase", leads_handled=handled, findings=total_f,
                      new_leads=total_l, abandoned=abandoned)
@@ -448,12 +453,85 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
             "abandoned": abandoned}
 
 
-# ---------------------------------------------------------------------------
-# Report
-# ---------------------------------------------------------------------------
+SHOTS_UNAVAILABLE = "screenshot browser unavailable"
+SHOTS_FAILED = "screenshots failed for some web services"
+
+
+def screenshot(store: Store, scope: Scope, policy: Policy, force: bool = False,
+               shooter_factory=None, dry_run: bool = False) -> dict:
+    """Capture each web service's root page, plus pages behind findings.
+
+    `shooter_factory` is a context manager yielding a Shooter; tests pass a
+    fake. A missing browser is a coverage gap, never a failure.
+    """
+    scope.assert_window()
+    sp = policy.screenshots
+    if not sp.enabled:
+        print("  screenshots disabled by policy")
+        store.mark_stage("screenshot", disabled=True)
+        return {"captured": 0, "disabled": True}
+
+    planned = shots_mod.plan(store.services(), store.findings(), sp.max_pages)
+    previous = {s.url: s for s in shots_mod.load(store.path)}
+    todo = [s for s in planned
+            if force or previous.get(s.url) is None or previous[s.url].status != "captured"]
+    if not planned:
+        print("  no web services to screenshot")
+        store.mark_stage("screenshot", captured=0)
+        return {"captured": 0}
+    print(f"→ screenshots: {len(todo)} page(s) to capture, "
+          f"{len(planned) - len(todo)} already done")
+    if dry_run:
+        for s in todo:
+            print(f"  [dry-run] would capture {s.url}")
+        return {"captured": 0, "planned": len(todo), "dry_run": True}
+
+    if shooter_factory is None:
+        def shooter_factory():
+            return shots_mod.browser_shooter(scope, sp, policy.http.user_agent)
+
+    if todo:
+        try:
+            with shooter_factory() as shooter:
+                store.remove_degradations("screenshot", SHOTS_UNAVAILABLE)
+                shots_mod.capture(store.path, todo, shooter)
+        except shots_mod.BrowserUnavailable as exc:
+            _coverage_lost(store, Degradation(
+                stage="screenshot", component="chromium", reason=SHOTS_UNAVAILABLE,
+                impact=f"No screenshots of {len(todo)} web page(s): {exc}. The report "
+                       "describes these services in text only.",
+                hosts=sorted({s.service.split("/")[0] for s in todo}),
+                remedy="`uv sync --extra screenshots && uv run playwright install "
+                       "chromium`, then `extscan screenshot <run>`.",
+            ))
+            return {"captured": 0, "unavailable": str(exc)}
+
+    done = {s.url: s for s in todo}
+    merged = [done.get(s.url) or previous.get(s.url) or s for s in planned]
+    shots_mod.save(store.path, merged)
+
+    failed_roots = [s for s in merged if s.kind == "service" and s.status != "captured"]
+    store.remove_degradations("screenshot", SHOTS_FAILED)
+    if failed_roots:
+        _coverage_lost(store, Degradation(
+            stage="screenshot", component="chromium", reason=SHOTS_FAILED,
+            impact=f"{len(failed_roots)} web service(s) have no screenshot, so the report "
+                   "cannot show what they serve: "
+                   + ", ".join(s.url for s in failed_roots[:10]),
+            hosts=sorted({s.service.split("/")[0] for s in failed_roots}),
+            remedy="Open them by hand, or `extscan screenshot <run>` to retry.",
+        ))
+    captured = sum(1 for s in merged if s.status == "captured")
+    store.mark_stage("screenshot", captured=captured, failed=len(merged) - captured)
+    print(f"  {captured} of {len(merged)} page(s) captured")
+    return {"captured": captured, "failed": len(merged) - captured}
+
 
 def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dict:
-    findings = store.findings()
+    leads = store.leads()
+    communities = redact.secret_communities(store.findings(), leads)
+    findings = [redact.scrub_finding(f, communities) for f in store.findings()]
+    leads = [redact.scrub_lead(ld, communities) for ld in leads]
     services = store.services()
     hosts = store.hosts()
     triaged = triage(findings, services)
@@ -469,14 +547,13 @@ def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dic
 
     paths = report_mod.write_reports(store.path, scope, triaged, hosts, services,
                                      meta, store.commands(), store.degradations())
+    paths["vault"] = vault.write_vault(store.path, scope, triaged, hosts, services, meta,
+                                       store.commands(), store.degradations(), leads,
+                                       shots_mod.load(store.path))
     store.mark_stage("report", **{k: str(v) for k, v in paths.items()})
     return {"paths": {k: str(v) for k, v in paths.items()}, "stats": triaged.stats,
             "review_items": len(triaged.review_queue)}
 
-
-# ---------------------------------------------------------------------------
-# Whole run
-# ---------------------------------------------------------------------------
 
 def run_all(store: Store, scope: Scope, policy: Policy, runner: Runner,
             rounds: int = 2, llm=None) -> dict:
@@ -486,5 +563,6 @@ def run_all(store: Store, scope: Scope, policy: Policy, runner: Runner,
     out["discover"] = discover(store, scope, policy, runner)
     out["probe"] = probe(store, scope, policy, runner)
     out["chase"] = chase_leads(store, scope, policy, runner, rounds=rounds, llm=llm)
+    out["screenshot"] = screenshot(store, scope, policy, dry_run=runner.dry_run)
     out["report"] = make_report(store, scope, runner)
     return out

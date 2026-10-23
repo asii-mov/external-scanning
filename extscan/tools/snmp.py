@@ -21,10 +21,6 @@ from dataclasses import dataclass
 from extscan.models import Finding, Lead
 from extscan.policy import Policy
 
-# ---------------------------------------------------------------------------
-# Minimal BER
-# ---------------------------------------------------------------------------
-
 TAG_INT = 0x02
 TAG_OCTET = 0x04
 TAG_NULL = 0x05
@@ -34,7 +30,6 @@ TAG_GET = 0xA0
 TAG_GETNEXT = 0xA1
 TAG_RESPONSE = 0xA2
 
-# SNMP application types we may see in a reply.
 _APP_TYPES = {
     0x40: "IpAddress", 0x41: "Counter32", 0x42: "Gauge32",
     0x43: "TimeTicks", 0x44: "Opaque", 0x46: "Counter64",
@@ -56,10 +51,8 @@ OIDS = {
     "ifNumber": "1.3.6.1.2.1.2.1.0",
 }
 
-# Communities that are indefensible on an internet-facing device.
 WELL_KNOWN = {"public", "private", "community", "manager", "admin", "default",
               "read", "write", "snmp", "monitor", "cisco", "secret"}
-# Conventionally the read-write string on many vendors' defaults.
 LIKELY_WRITE = {"private", "write", "manager", "admin", "secret"}
 
 
@@ -220,7 +213,6 @@ def snmp_get(host: str, community: str, oid: str, *, version: int = 2,
                 reply = _parse_reply(data)
                 if reply is None:
                     break
-                # Ignore stale datagrams from an earlier attempt.
                 if reply.request_id == request_id:
                     return reply
         except TimeoutError:
@@ -244,17 +236,13 @@ def snmp_walk(host: str, community: str, root: str, *, version: int = 2,
         if reply is None or not reply.ok or not reply.oid:
             break
         if not reply.oid.startswith(root.rstrip(".")):
-            break                                  # walked off the subtree
+            break
         if reply.oid == oid:
-            break                                  # no forward progress
+            break
         out.append((reply.oid, reply.value))
         oid = reply.oid
     return out
 
-
-# ---------------------------------------------------------------------------
-# Probe
-# ---------------------------------------------------------------------------
 
 def check_community_strings(host: str, policy: Policy, port: int = 161
                             ) -> tuple[list[Finding], list[Lead], list[str]]:
@@ -272,8 +260,6 @@ def check_community_strings(host: str, policy: Policy, port: int = 161
             if reply is None:
                 continue
             if not reply.ok:
-                # The agent answered but refused this community: the service is
-                # alive, which is itself worth knowing.
                 continue
             hits.append(community)
             info = {"sysDescr": reply.value, "version": f"v{'1' if version == 1 else '2c'}"}
@@ -284,7 +270,7 @@ def check_community_strings(host: str, policy: Policy, port: int = 161
                     if r is not None and r.ok and r.value:
                         info[label] = r.value
             details[community] = info
-            break          # found a working version for this community; move on
+            break
 
     if not hits:
         return findings, leads, hits

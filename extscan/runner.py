@@ -13,10 +13,14 @@ Every external command the pipeline runs goes through here so that:
 
 from __future__ import annotations
 
+import shlex
 import shutil
+import signal
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 from .models import CommandRecord
 from .store import Store
@@ -39,12 +43,26 @@ class Result:
     stderr: str
     duration: float
     timed_out: bool = False
-    skipped: bool = False          # true when dry-run
+    skipped: bool = False
     stdout_path: str = ""
 
     @property
     def ok(self) -> bool:
         return self.returncode == 0 and not self.timed_out
+
+    @property
+    def failure(self) -> str:
+        """Why the run did not succeed, or "" when it did (or was a dry run)."""
+        if self.ok or self.skipped:
+            return ""
+        if self.timed_out:
+            return "timed out"
+        if self.returncode is not None and self.returncode < 0:
+            try:
+                return f"killed by {signal.Signals(-self.returncode).name}"
+            except ValueError:
+                return f"killed by signal {-self.returncode}"
+        return f"exited {self.returncode}"
 
 
 def have(tool: str) -> bool:
@@ -113,8 +131,6 @@ class Runner:
 
         duration = time.time() - started
 
-        # Persist output. Large tool dumps belong on disk, not in memory or in
-        # an agent's context window.
         out_path = err_path = ""
         if stdout_name:
             base = stdout_name
@@ -152,8 +168,6 @@ class Runner:
         return text.splitlines()[0][:200] if text else "unknown"
 
 
-# Install hints shown by `extscan doctor`. Kept here so the runner is the one
-# place that knows about external binaries.
 TOOL_HINTS: dict[str, dict[str, str]] = {
     "nmap": {
         "purpose": "TCP/UDP port and service discovery (required)",
@@ -165,10 +179,10 @@ TOOL_HINTS: dict[str, dict[str, str]] = {
         "debian": "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest",
         "macos": "brew install nuclei",
     },
-    "httpx": {
-        "purpose": "fast HTTP fingerprinting before nuclei (optional)",
-        "debian": "go install github.com/projectdiscovery/httpx/cmd/httpx@latest",
-        "macos": "brew install httpx",
+    "sslscan": {
+        "purpose": "cipher-level TLS audit (optional; a coverage gap on TLS services without it)",
+        "debian": "sudo apt install sslscan",
+        "macos": "brew install sslscan",
     },
     "testssl.sh": {
         "purpose": "detailed TLS configuration audit (optional)",
@@ -182,6 +196,17 @@ TOOL_HINTS: dict[str, dict[str, str]] = {
         "macos": "brew install net-snmp",
     },
 }
+
+
+def udp_rerun_command(run_id: str) -> str:
+    """The command that adds UDP to a run, as root.
+
+    sudo resets PATH, so a bare `extscan` usually isn't found. Name the entry
+    point next to this interpreter (the venv's) by absolute path when it exists.
+    """
+    exe = Path(sys.executable).with_name("extscan")
+    prog = shlex.quote(str(exe)) if exe.is_file() else "extscan"
+    return f"sudo {prog} discover {run_id} --udp-only"
 
 
 def doctor() -> dict:
@@ -198,9 +223,9 @@ def doctor() -> dict:
         }
     rows["_notes"] = {
         "nmap_privileges": (
-            "UDP scans (-sU), SYN scans (-sS) and OS detection need root. Either "
-            "run extscan with sudo, or grant nmap CAP_NET_RAW: "
-            "sudo setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip $(which nmap)"
+            "UDP scans (-sU), SYN scans (-sS) and OS detection need root. "
+            "Unprivileged runs are TCP only; add UDP with "
+            f"`{udp_rerun_command('<run>')}`."
         ),
     }
     return rows

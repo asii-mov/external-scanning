@@ -13,7 +13,7 @@ correlation jumps above everything in tier 1.
 
 ## Tier 1 — highest value for the effort
 
-### 1. Screenshotting every web service
+### 1. Screenshotting every web service (done: `extscan screenshot`)
 **Why:** the single biggest time saver in the manual phase. An auditor
 triaging forty web services currently opens forty browser tabs. A contact
 sheet answers "which of these are default installs, which are real apps,

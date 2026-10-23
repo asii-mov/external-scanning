@@ -1,0 +1,233 @@
+[
+  {
+    "host": "127.0.0.2",
+    "port": 2222,
+    "proto": "tcp",
+    "state": "open",
+    "name": "ssh",
+    "product": "OpenSSH",
+    "version": "7.4",
+    "extrainfo": "protocol 2.0",
+    "tunnel": "",
+    "cpe": [
+      "cpe:/a:openbsd:openssh:7.4"
+    ],
+    "scripts": {
+      "banner": "SSH-2.0-OpenSSH_7.4",
+      "unusual-port": "ssh unexpected on port tcp/2222"
+    },
+    "probed_by": [
+      "ssh"
+    ]
+  },
+  {
+    "host": "127.0.0.2",
+    "port": 2375,
+    "proto": "tcp",
+    "state": "open",
+    "name": "docker",
+    "product": "Docker remote API",
+    "version": "",
+    "extrainfo": "",
+    "tunnel": "",
+    "cpe": [],
+    "scripts": {},
+    "probed_by": [
+      "nuclei",
+      "http_fingerprint",
+      "exposure"
+    ]
+  },
+  {
+    "host": "127.0.0.2",
+    "port": 3306,
+    "proto": "tcp",
+    "state": "open",
+    "name": "mysql",
+    "product": "MySQL",
+    "version": "5.7.33-log",
+    "extrainfo": "",
+    "tunnel": "",
+    "cpe": [
+      "cpe:/a:mysql:mysql:5.7.33-log"
+    ],
+    "scripts": {
+      "banner": "N\\x00\\x00\\x00\\x0A5.7.33-log\\x00*\\x00\\x00\\x00abcdefgh\\x00\\xFF...",
+      "mysql-info": "Protocol: 10\n  Version: 5.7.33-log\n  Thread ID: 42\n  Capabilities flags: 63487\n  Some Capabilities: Speaks41ProtocolNew, LongColumnFlag, SupportsLoadDataLocal, Speaks41ProtocolOld, LongPassword, DontAllowDatabaseTableColumn, ConnectWithDatabase, SupportsTransactions, IgnoreSigpipes, ODBCClient, SupportsCompression, InteractiveClient, Support41Auth, IgnoreSpaceBeforeParenthesis, FoundRows, SupportsMultipleStatments, SupportsMultipleResults, SupportsAuthPlugins\n  Status: Autocommit\n  Salt: abcdefghijklmnopqrst\n  Auth Plugin Name: mysql_native_password"
+    },
+    "probed_by": [
+      "exposure"
+    ]
+  },
+  {
+    "host": "127.0.0.2",
+    "port": 6379,
+    "proto": "tcp",
+    "state": "open",
+    "name": "redis",
+    "product": "Redis key-value store",
+    "version": "5.0.7",
+    "extrainfo": "",
+    "tunnel": "",
+    "cpe": [
+      "cpe:/a:redislabs:redis:5.0.7",
+      "cpe:/a:redis:redis:5.0.7"
+    ],
+    "scripts": {
+      "redis-info": "Version: 5.0.7\n  Operating System: Linux"
+    },
+    "probed_by": [
+      "exposure"
+    ]
+  },
+  {
+    "host": "127.0.0.2",
+    "port": 8080,
+    "proto": "tcp",
+    "state": "open",
+    "name": "http",
+    "product": "nginx",
+    "version": "1.18.0",
+    "extrainfo": "",
+    "tunnel": "",
+    "cpe": [
+      "cpe:/a:igor_sysoev:nginx:1.18.0"
+    ],
+    "scripts": {
+      "http-useragent-tester": "Status for browser useragent: 200\n  Allowed User Agents: \n    Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\n    libwww\n    lwp-trivial\n    libcurl-agent/1.0\n    PHP/\n    Python-urllib/2.5\n    GT::WWW\n    Snoopy\n    MFC_Tear_Sample\n    HTTP::Lite\n    PHPCrawl\n    URI::Fetch\n    Zend_Http_Client\n    http client\n    PECL::HTTP\n    Wget/1.13.4 (linux-gnu)\n    WWW-Mechanize/1.34",
+      "http-fetch": "Please enter the complete path of the directory to save data in.",
+      "http-mobileversion-checker": "No mobile version detected.",
+      "http-security-headers": "",
+      "http-robots.txt": "2 disallowed entries \n/admin /internal",
+      "http-referer-checker": "Couldn't find any cross-domain scripts.",
+      "http-vuln-cve2017-1001000": "ERROR: Script execution failed (use -d to debug)",
+      "http-headers": "Server: nginx/1.18.0\n  Date: Fri, 23 Oct 2026 09:09:18 GMT\n  Content-Type: text/html; charset=utf-8\n  Content-Length: 273\n  X-Powered-By: Express\n  \n  (Request type: GET)",
+      "http-title": "ACME Billing &mdash; API Console",
+      "http-date": "Fri, 23 Oct 2026 09:09:15 GMT; -1s from local time.",
+      "http-malware-host": "false",
+      "http-comments-displayer": "Couldn't find any comments."
+    },
+    "probed_by": [
+      "nuclei",
+      "http_fingerprint"
+    ]
+  },
+  {
+    "host": "127.0.0.2",
+    "port": 8081,
+    "proto": "tcp",
+    "state": "open",
+    "name": "http",
+    "product": "Microsoft IIS httpd",
+    "version": "8.5",
+    "extrainfo": "",
+    "tunnel": "",
+    "cpe": [
+      "cpe:/a:microsoft:internet_information_services:8.5",
+      "cpe:/o:microsoft:windows"
+    ],
+    "scripts": {
+      "http-useragent-tester": "Status for browser useragent: 200\n  Allowed User Agents: \n    Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\n    libwww\n    lwp-trivial\n    libcurl-agent/1.0\n    PHP/\n    Python-urllib/2.5\n    GT::WWW\n    Snoopy\n    MFC_Tear_Sample\n    HTTP::Lite\n    PHPCrawl\n    URI::Fetch\n    Zend_Http_Client\n    http client\n    PECL::HTTP\n    Wget/1.13.4 (linux-gnu)\n    WWW-Mechanize/1.34",
+      "http-headers": "Server: Microsoft-IIS/8.5\n  Date: Fri, 23 Oct 2026 09:09:19 GMT\n  Content-Type: text/html\n  Content-Length: 36\n  X-AspNet-Version: 4.0.30319\n  X-AspNetMvc-Version: 5.2\n  X-Powered-By: ASP.NET\n  \n  (Request type: GET)",
+      "http-date": "Fri, 23 Oct 2026 09:09:18 GMT; 0s from local time.",
+      "unusual-port": "http unexpected on port tcp/8081",
+      "http-security-headers": "",
+      "http-comments-displayer": "Couldn't find any comments.",
+      "http-title": "Intranet",
+      "http-webdav-scan": "Allowed Methods: OPTIONS, GET, HEAD, POST, COPY, PROPFIND, DELETE, MOVE, PROPPATCH, MKCOL, LOCK, UNLOCK, PUT\n  WebDAV type: Unknown\n  Server Type: Microsoft-IIS/8.5\n  Server Date: Fri, 23 Oct 2026 09:09:18 GMT",
+      "http-mobileversion-checker": "No mobile version detected.",
+      "http-methods": "Potentially risky methods: COPY PROPFIND DELETE MOVE PROPPATCH MKCOL LOCK UNLOCK PUT",
+      "http-referer-checker": "Couldn't find any cross-domain scripts.",
+      "http-fetch": "Please enter the complete path of the directory to save data in."
+    },
+    "probed_by": [
+      "nuclei",
+      "http_fingerprint",
+      "iis"
+    ]
+  },
+  {
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "state": "open",
+    "name": "http",
+    "product": "nginx",
+    "version": "1.18.0",
+    "extrainfo": "",
+    "tunnel": "ssl",
+    "cpe": [
+      "cpe:/a:igor_sysoev:nginx:1.18.0"
+    ],
+    "scripts": {
+      "http-malware-host": "false",
+      "ssl-cert": "Subject: commonName=billing.lab.invalid/organizationName=extscan lab\nSubject Alternative Name: IP Address:127.0.0.2, DNS:billing.lab.invalid\nNot valid before: 2026-10-23T09:08:18\nNot valid after:  2026-11-22T09:08:18",
+      "http-date": "Fri, 23 Oct 2026 09:09:15 GMT; -2s from local time.",
+      "ssl-date": "TLS randomness does not represent time",
+      "http-title": "ACME Billing &mdash; API Console",
+      "http-referer-checker": "Couldn't find any cross-domain scripts.",
+      "http-vuln-cve2017-1001000": "ERROR: Script execution failed (use -d to debug)",
+      "http-headers": "Server: nginx/1.18.0\n  Date: Fri, 23 Oct 2026 09:09:20 GMT\n  Content-Type: text/html; charset=utf-8\n  Content-Length: 273\n  X-Powered-By: Express\n  \n  (Request type: GET)",
+      "http-mobileversion-checker": "No mobile version detected.",
+      "http-robots.txt": "2 disallowed entries \n/admin /internal",
+      "http-security-headers": "Strict_Transport_Security: \n    HSTS not configured in HTTPS Server",
+      "http-useragent-tester": "Status for browser useragent: 200\n  Allowed User Agents: \n    Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\n    libwww\n    lwp-trivial\n    libcurl-agent/1.0\n    PHP/\n    Python-urllib/2.5\n    GT::WWW\n    Snoopy\n    MFC_Tear_Sample\n    HTTP::Lite\n    PHPCrawl\n    URI::Fetch\n    Zend_Http_Client\n    http client\n    PECL::HTTP\n    Wget/1.13.4 (linux-gnu)\n    WWW-Mechanize/1.34",
+      "http-comments-displayer": "Couldn't find any comments.",
+      "http-fetch": "Please enter the complete path of the directory to save data in."
+    },
+    "probed_by": [
+      "nuclei",
+      "http_fingerprint",
+      "tls",
+      "sslscan"
+    ]
+  },
+  {
+    "host": "127.0.0.2",
+    "port": 9200,
+    "proto": "tcp",
+    "state": "open",
+    "name": "http",
+    "product": "Elasticsearch REST API",
+    "version": "6.8.0",
+    "extrainfo": "name: es-node-1; cluster: billing-logs; Lucene 7.7.0",
+    "tunnel": "",
+    "cpe": [
+      "cpe:/a:elasticsearch:elasticsearch:6.8.0"
+    ],
+    "scripts": {
+      "http-useragent-tester": "Status for browser useragent: 200\n  Allowed User Agents: \n    Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\n    libwww\n    lwp-trivial\n    libcurl-agent/1.0\n    PHP/\n    Python-urllib/2.5\n    GT::WWW\n    Snoopy\n    MFC_Tear_Sample\n    HTTP::Lite\n    PHPCrawl\n    URI::Fetch\n    Zend_Http_Client\n    http client\n    PECL::HTTP\n    Wget/1.13.4 (linux-gnu)\n    WWW-Mechanize/1.34",
+      "http-mobileversion-checker": "No mobile version detected.",
+      "http-title": "Site doesn't have a title (application/json; charset=UTF-8).",
+      "http-headers": "content-type: application/json; charset=UTF-8\n  Content-Length: 247\n  \n  (Request type: GET)",
+      "http-comments-displayer": "Couldn't find any comments.",
+      "http-referer-checker": "Couldn't find any cross-domain scripts.",
+      "unusual-port": "http unexpected on port tcp/9200",
+      "http-security-headers": "",
+      "http-fetch": "Please enter the complete path of the directory to save data in."
+    },
+    "probed_by": [
+      "nuclei",
+      "http_fingerprint",
+      "exposure"
+    ]
+  },
+  {
+    "host": "127.0.0.2",
+    "port": 10161,
+    "proto": "udp",
+    "state": "open",
+    "name": "snmpdtls",
+    "product": "",
+    "version": "",
+    "extrainfo": "",
+    "tunnel": "",
+    "cpe": [],
+    "scripts": {
+      "fingerprint-strings": "SNMPv1public: \n    public\n    0301\n    %Linux lab-router 4.19.0 #1 SMP x86_64"
+    },
+    "probed_by": [
+      "snmp"
+    ]
+  }
+]

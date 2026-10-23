@@ -9,13 +9,13 @@ frozen into the tool.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
-from pathlib import Path
 
 from . import __version__, pipeline
 from .models import Finding, severity_rank
-from .policy import Policy
+from .policy import Policy, tcp_port_spec
 from .probes import REGISTRY
 from .resilience import Degradation
 from .runner import Runner, doctor
@@ -57,17 +57,8 @@ def _policy_for(store: Store, args) -> Policy:
     profile = meta.get("profile", "standard")
     policy = Policy.for_profile(profile)
     if saved:
-        # Rebuild from the saved dict so a resumed run keeps its settings.
-        import tempfile
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
-            json.dump(saved, fh)
-            tmp = fh.name
-        try:
-            policy = Policy.load(tmp, profile=profile)
-        except (ValueError, KeyError):
-            pass
-        finally:
-            Path(tmp).unlink(missing_ok=True)
+        with contextlib.suppress(ValueError, KeyError):
+            policy = Policy.from_dict(saved, profile=profile)
     return policy
 
 
@@ -103,10 +94,6 @@ def _runner(store: Store, args) -> Runner:
                   verbose=getattr(args, "verbose", False))
 
 
-# ---------------------------------------------------------------------------
-# Commands
-# ---------------------------------------------------------------------------
-
 def cmd_doctor(args) -> int:
     rows = doctor()
 
@@ -132,6 +119,8 @@ def cmd_doctor(args) -> int:
 def cmd_init(args) -> int:
     scope = Scope.load(args.scope)
     policy = Policy.load(args.policy, profile=args.profile)
+    if args.tcp_ports:
+        policy.nmap.tcp_ports = args.tcp_ports
     store = pipeline.init_run(args.runs_dir, scope, policy, run_id=args.id)
     data = {"run_id": store.run_id, "path": str(store.path), "scope": scope.summary()}
 
@@ -228,10 +217,21 @@ def cmd_report(args) -> int:
 
     def human(d):
         print(f"Report written:\n  {d['paths']['markdown']}\n  {d['paths']['json']}")
+        print(f"  {d['paths']['vault']}  (open the folder as an Obsidian vault)")
         print(f"\n{d['review_items']} item(s) in the manual review queue.")
         print(json.dumps(d["stats"], indent=2))
 
     _emit(result, args.json, human)
+    return 0
+
+
+def cmd_screenshot(args) -> int:
+    store = _open(args)
+    scope = _scope_for(store, args)
+    policy = _policy_for(store, args)
+    result = pipeline.screenshot(store, scope, policy, force=args.force,
+                                 dry_run=args.dry_run)
+    _emit({"screenshot": result}, args.json, lambda d: None)
     return 0
 
 
@@ -405,6 +405,7 @@ def cmd_resume(args) -> int:
     out["chase"] = pipeline.chase_leads(store, scope, policy, runner,
                                         rounds=args.rounds,
                                         llm=_llm_for(store, policy, args))
+    out["screenshot"] = pipeline.screenshot(store, scope, policy, dry_run=runner.dry_run)
     out["report"] = pipeline.make_report(store, scope, runner)
 
     def human(d):
@@ -420,6 +421,8 @@ def cmd_resume(args) -> int:
 def cmd_run(args) -> int:
     scope = Scope.load(args.scope)
     policy = Policy.load(args.policy, profile=args.profile)
+    if args.tcp_ports:
+        policy.nmap.tcp_ports = args.tcp_ports
     store = pipeline.init_run(args.runs_dir, scope, policy, run_id=args.id)
     print(f"Run {store.run_id}\n")
     runner = _runner(store, args)
@@ -474,9 +477,17 @@ def cmd_probes(args) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------
-# Parser
-# ---------------------------------------------------------------------------
+TCP_PORTS_HELP = ("TCP ports to scan: all (1-65535), top (1-1024 plus common service "
+                  "ports), quick (25 common ports), or an nmap list like 22,80,8000-8100. "
+                  "Default: the profile's list")
+
+
+def _tcp_ports(value: str) -> str:
+    try:
+        return tcp_port_spec(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
@@ -518,6 +529,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scope", required=True, help="path to the scope/authorisation file")
     p.add_argument("--policy", help="optional policy JSON overlay")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])
+    p.add_argument("--tcp-ports", type=_tcp_ports, metavar="all|top|quick|LIST",
+                   help=TCP_PORTS_HELP)
     p.add_argument("--id", help="explicit run id")
     p.set_defaults(func=cmd_init)
 
@@ -557,7 +570,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="how many times to re-queue newly raised leads")
     p.set_defaults(func=cmd_chase)
 
-    p = sub.add_parser("report", help="triage and render the report")
+    p = sub.add_parser("screenshot", help="screenshot web services for the report vault")
+    add_run_arg(p)
+    p.add_argument("--force", action="store_true", help="recapture pages already captured")
+    p.set_defaults(func=cmd_screenshot)
+
+    p = sub.add_parser("report", help="triage and render the report and Obsidian vault")
     add_run_arg(p)
     p.set_defaults(func=cmd_report)
 
@@ -620,10 +638,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--note", default="")
     p.set_defaults(func=cmd_resolve)
 
-    p = sub.add_parser("run", help="init + discover + probe + chase + report")
+    p = sub.add_parser("run", help="init + discover + probe + chase + screenshot + report")
     p.add_argument("--scope", required=True)
     p.add_argument("--policy")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])
+    p.add_argument("--tcp-ports", type=_tcp_ports, metavar="all|top|quick|LIST",
+                   help=TCP_PORTS_HELP)
     p.add_argument("--id")
     p.add_argument("--rounds", type=int, default=2)
     p.set_defaults(func=cmd_run)

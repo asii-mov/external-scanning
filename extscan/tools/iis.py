@@ -28,7 +28,6 @@ from extscan.policy import HttpPolicy
 from extscan.scope import Scope
 from extscan.tools import net
 
-# Diagnostic handlers, in rough order of how bad an exposure they are.
 HANDLERS: list[tuple[str, str, str]] = [
     ("/trace.axd", "high",
      "ASP.NET trace viewer. Serves the most recent requests to the application "
@@ -45,7 +44,6 @@ HANDLERS: list[tuple[str, str, str]] = [
     ("/ELMAH.axd", "high", "ELMAH error log viewer (case variant)."),
 ]
 
-# Files that identify a default or unhardened install.
 DEFAULT_FILES: list[tuple[str, str]] = [
     ("/iisstart.htm", "The default IIS landing page is present, which usually means "
                       "a site was provisioned and never configured."),
@@ -57,7 +55,6 @@ DEFAULT_FILES: list[tuple[str, str]] = [
 WEBDAV_VERBS = {"PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK",
                 "UNLOCK", "SEARCH", "PUT", "DELETE"}
 
-# Markers of a verbose ASP.NET error page.
 _STACK_MARKERS = [
     "server error in", "[httpexception", "[sqlexception", "stack trace:",
     "microsoft .net framework version", "aspxerrorpath", "system.web.",
@@ -260,9 +257,6 @@ def probe_iis(svc: Service, scope: Scope, policy: HttpPolicy,
     if version_finding:
         findings.append(version_finding)
 
-    # Diagnostic handlers: the highest-value checks here. IIS is
-    # case-insensitive, so /elmah.axd and /ELMAH.axd are usually the same
-    # handler -- report it once rather than inflating the count.
     seen_handlers: set[str] = set()
     for path, severity, why in HANDLERS:
         url = base.rstrip("/") + path
@@ -281,7 +275,6 @@ def probe_iis(svc: Service, scope: Scope, policy: HttpPolicy,
         if not resp.ok or not resp.body:
             continue
         body = resp.text[:8000].lower()
-        # Confirm it is the real handler, not the app's catch-all page.
         if path.lower().endswith("trace.axd") and not any(
                 marker in body for marker in ("application trace", "trace information",
                                               "requests to this application")):
@@ -331,7 +324,7 @@ def probe_iis(svc: Service, scope: Scope, policy: HttpPolicy,
                               "forgotten site. Establish who owns it.",
                 tags=["iis", "default-content"],
             ))
-            break          # one is enough to make the point
+            break
 
     for check in (_check_webdav, _check_shortnames, _check_verbose_errors):
         finding = check(base, scope, policy, svc.host, svc.port)
