@@ -1,0 +1,9 @@
+[
+  {
+    "ip": "127.0.0.2",
+    "hostnames": [],
+    "state": "up",
+    "os_guess": "Linux 5.0 - 5.7 (100%)",
+    "discovered_by": "nmap-tcp"
+  }
+]

@@ -1,0 +1,47 @@
+Run 20261023-090822-extscan-local-lab
+
+→ nmap TCP discovery
+  [1/1] 1 host(s)
+  1 host(s), 8 open TCP port(s)
+→ nmap UDP discovery
+  [1/1] 1 host(s)
+  1 open/responding UDP port(s)
+→ nuclei against 5 web service(s)
+  119 result(s), 9 lead(s)
+→ 14 per-service probe(s) across 9 service(s)
+  84 new finding(s), 24 new lead(s)
+→ chase round 1: 24 lead(s)
+  [secret_file] 127.0.0.2:8080 -> 4 secret-like keys
+  [secret_file] 127.0.0.2:8443 -> 4 secret-like keys
+  [secret_file] 127.0.0.2:8443 -> 4 secret-like keys
+  [secret_file] 127.0.0.2:8080 -> 4 secret-like keys
+  [graphql] 127.0.0.2:8080 -> introspection enabled, 3 types
+  [graphql] 127.0.0.2:8443 -> introspection enabled, 3 types
+  [secret_file] 127.0.0.2:8080 -> 4 secret-like keys
+  [secret_file] 127.0.0.2:8443 -> 4 secret-like keys
+  [web_paths] 127.0.0.2:9200 -> 200, 247 bytes, 0 links
+  [web_paths] 127.0.0.2:8081 -> 200, 212 bytes, 0 links
+  [web_paths] 127.0.0.2:8081 -> 200, 52 bytes, 0 links
+  [snmp_walk] 127.0.0.2:10161 -> walk returned nothing
+  [openapi] 127.0.0.2:8080 -> parsed http://127.0.0.2:8080/swagger.json: 9 operations, 5 without declared auth (2 writes)
+  [web_paths] 127.0.0.2:8080 -> 200, 51 bytes, 0 links
+  [secret_file] 127.0.0.2:8080 -> 4 secret-like keys
+  [openapi] 127.0.0.2:8080 -> parsed http://127.0.0.2:8080/swagger.json: 9 operations, 5 without declared auth (2 writes)
+  [graphql] 127.0.0.2:8080 -> introspection enabled, 3 types
+  [web_paths] 127.0.0.2:8080 -> 200, 143 bytes, 0 links
+  [openapi] 127.0.0.2:8443 -> parsed https://127.0.0.2:8443/swagger.json: 9 operations, 5 without declared auth (2 writes)
+  [web_paths] 127.0.0.2:8443 -> 200, 51 bytes, 0 links
+  [secret_file] 127.0.0.2:8443 -> 4 secret-like keys
+  [openapi] 127.0.0.2:8443 -> parsed https://127.0.0.2:8443/swagger.json: 9 operations, 5 without declared auth (2 writes)
+  [graphql] 127.0.0.2:8443 -> introspection enabled, 3 types
+  [web_paths] 127.0.0.2:8443 -> 200, 143 bytes, 0 links
+→ chase round 2: 6 lead(s)
+  [api_endpoint] 127.0.0.2:8080 -> 200: open, 31 bytes
+  [api_endpoint] 127.0.0.2:8080 -> 200: open, 110 bytes
+  [api_endpoint] 127.0.0.2:8080 -> 403: auth enforced
+  [api_endpoint] 127.0.0.2:8443 -> 200: open, 31 bytes
+  [api_endpoint] 127.0.0.2:8443 -> 200: open, 110 bytes
+  [api_endpoint] 127.0.0.2:8443 -> 403: auth enforced
+
+Report: runs/20261023-090822-extscan-local-lab/report.md
+42 item(s) need manual review.

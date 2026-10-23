@@ -28,9 +28,10 @@ A full lab scan takes about 8 minutes with nuclei, or 70 seconds with
 ## Data in the repo
 
 - `tests/fixtures/` holds captured scanner output for the parser tests.
-- `tests/fixtures/lab-run/` is a complete lab run with real nmap and nuclei:
-  state files, `report.md`, raw tool output. Use it to work on reporting
-  without running scanners. Its README says how it was made.
+- `tests/fixtures/lab-run/` is a complete lab run (real nmap TCP and UDP,
+  nuclei, sslscan, run as root): state files, `report.md`, raw tool output.
+  Use it to work on reporting without running scanners. Regenerate it with
+  `bash scripts/capture-lab-run.sh`, which needs Docker.
 - `tests/fuzz_corpus.json` holds minimized fuzzer counterexamples, replayed
   on every fuzz run. When the fuzzer finds a new failure, pin it there and
   as a unit test in `tests/test_coverage_gaps.py`.

@@ -1,0 +1,8 @@
+{
+  "discover:tcp": [
+    "chunk-0001"
+  ],
+  "discover:udp": [
+    "chunk-0001"
+  ]
+}
