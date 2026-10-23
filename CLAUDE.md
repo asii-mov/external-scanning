@@ -15,11 +15,13 @@ bash scripts/cloud-setup.sh   # nmap, sslscan, uv, pinned nuclei + templates, uv
 ```
 
 Idempotent. On a machine that already has the tools, `uv sync` is enough.
+Screenshots need `uv sync --extra screenshots && uv run playwright install
+chromium`; without them the browser scope test skips.
 
 ## Commands
 
 ```bash
-uv run python -m unittest discover -s tests -t .    # ~390 tests, ~6s, no network
+uv run python -m unittest discover -s tests -t .    # ~415 tests, ~10s, no network
 uv run ruff check .
 uv run python -m unittest tests.fuzz_failures -v    # fuzzer, several minutes
 FUZZ_EXAMPLES=1 uv run python -m unittest tests.fuzz_failures   # corpus replay only, ~1 min

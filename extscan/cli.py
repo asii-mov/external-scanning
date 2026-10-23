@@ -215,10 +215,21 @@ def cmd_report(args) -> int:
 
     def human(d):
         print(f"Report written:\n  {d['paths']['markdown']}\n  {d['paths']['json']}")
+        print(f"  {d['paths']['vault']}  (open the folder as an Obsidian vault)")
         print(f"\n{d['review_items']} item(s) in the manual review queue.")
         print(json.dumps(d["stats"], indent=2))
 
     _emit(result, args.json, human)
+    return 0
+
+
+def cmd_screenshot(args) -> int:
+    store = _open(args)
+    scope = _scope_for(store, args)
+    policy = _policy_for(store, args)
+    result = pipeline.screenshot(store, scope, policy, force=args.force,
+                                 dry_run=args.dry_run)
+    _emit({"screenshot": result}, args.json, lambda d: None)
     return 0
 
 
@@ -392,6 +403,7 @@ def cmd_resume(args) -> int:
     out["chase"] = pipeline.chase_leads(store, scope, policy, runner,
                                         rounds=args.rounds,
                                         llm=_llm_for(store, policy, args))
+    out["screenshot"] = pipeline.screenshot(store, scope, policy, dry_run=runner.dry_run)
     out["report"] = pipeline.make_report(store, scope, runner)
 
     def human(d):
@@ -540,7 +552,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="how many times to re-queue newly raised leads")
     p.set_defaults(func=cmd_chase)
 
-    p = sub.add_parser("report", help="triage and render the report")
+    p = sub.add_parser("screenshot", help="screenshot web services for the report vault")
+    add_run_arg(p)
+    p.add_argument("--force", action="store_true", help="recapture pages already captured")
+    p.set_defaults(func=cmd_screenshot)
+
+    p = sub.add_parser("report", help="triage and render the report and Obsidian vault")
     add_run_arg(p)
     p.set_defaults(func=cmd_report)
 
@@ -603,7 +620,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--note", default="")
     p.set_defaults(func=cmd_resolve)
 
-    p = sub.add_parser("run", help="init + discover + probe + chase + report")
+    p = sub.add_parser("run", help="init + discover + probe + chase + screenshot + report")
     p.add_argument("--scope", required=True)
     p.add_argument("--policy")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])

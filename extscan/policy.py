@@ -112,6 +112,21 @@ class SnmpPolicy:
 
 
 @dataclass
+class ScreenshotPolicy:
+    """Browser captures of web services for the report vault.
+
+    Needs the optional `screenshots` extra (Playwright and its Chromium). A
+    missing browser is a coverage gap, never a failed run.
+    """
+
+    enabled: bool = True
+    timeout_sec: int = 20
+    max_pages: int = 60
+    width: int = 1280
+    height: int = 800
+
+
+@dataclass
 class ReconPolicy:
     """Subdomain enumeration settings."""
 
@@ -163,6 +178,7 @@ class Policy:
     http: HttpPolicy = field(default_factory=HttpPolicy)
     snmp: SnmpPolicy = field(default_factory=SnmpPolicy)
     recon: ReconPolicy = field(default_factory=ReconPolicy)
+    screenshots: ScreenshotPolicy = field(default_factory=ScreenshotPolicy)
     llm: LLMPolicy = field(default_factory=LLMPolicy)
     max_lead_depth: int = 3
     max_leads_per_run: int = 500
@@ -208,7 +224,8 @@ class Policy:
             p = cls.for_profile(str(data["profile"]))
         for section, cls_ in (("nmap", NmapPolicy), ("nuclei", NucleiPolicy),
                               ("http", HttpPolicy), ("snmp", SnmpPolicy),
-                              ("recon", ReconPolicy), ("llm", LLMPolicy)):
+                              ("recon", ReconPolicy), ("screenshots", ScreenshotPolicy),
+                              ("llm", LLMPolicy)):
             if section in data:
                 current = asdict(getattr(p, section))
                 unknown = set(data[section]) - set(current)

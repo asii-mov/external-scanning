@@ -7,7 +7,7 @@ A map of this repo and its working notes, for any agent picking up the work.
 
 | What | Where |
 |---|---|
-| Near-term tasks (narrative Obsidian reports, screenshots) | `todo.md` |
+| Near-term tasks | `todo.md` |
 | Longer-term feature ideas, prioritised, with the catch for each | `docs/ROADMAP.md` |
 | Known unfixed gaps (UDP sudo command, doctor blind spots, sslscan timeout) | Claude's local notes, see below |
 
@@ -46,7 +46,10 @@ list, ask the user, or check whether it has been copied into `todo.md`.
 | Scope loading and per-request scope checks | `extscan/scope.py` |
 | Run directory state (`runs/<run-id>/`) | `extscan/store.py` |
 | Retries, circuit breaker, coverage gaps (`Degradation`) | `extscan/resilience.py` |
-| Report rendering | `extscan/report.py` |
+| Report rendering (`report.md`, `report.json`) | `extscan/report.py` |
+| Obsidian vault: the pentest narrative, host and finding notes | `extscan/vault.py` |
+| Web screenshots (optional Playwright), per-request scope guard | `extscan/screenshots.py` |
+| Redaction applied to every rendered report | `extscan/redact.py` |
 | Optional model-assisted analysis | `extscan/llm/` |
 
 ## Tests and test data
@@ -55,7 +58,8 @@ list, ask the user, or check whether it has been copied into `todo.md`.
 |---|---|
 | Unit and integration tests | `tests/test_*.py` |
 | Failed and missing tools must be gaps, never clean passes | `tests/test_coverage_gaps.py` |
-| Safety properties (no DoS, no credential testing) | `tests/test_safety_invariants.py` |
+| Safety properties (no DoS, no credential testing, screenshots in scope) | `tests/test_safety_invariants.py` |
+| Vault links, ordering, redaction, hostile text, screenshot stage | `tests/test_vault.py` |
 | Failure-state fuzzer (opt-in, several minutes) | `tests/fuzz_failures.py` |
 | Minimized fuzzer counterexamples, replayed every fuzz run | `tests/fuzz_corpus.json` |
 | Captured scanner output for parser tests | `tests/fixtures/*.xml`, `tests/fixtures/*.jsonl` |

@@ -61,6 +61,8 @@ DEBUG=false
 INDEX = """<!doctype html>
 <html><head><title>ACME Billing &mdash; API Console</title></head>
 <body>
+<h1>ACME Billing API Console</h1>
+<p>Internal use only. API reference: <a href="/swagger.json">/swagger.json</a></p>
 <div id="swagger-ui"></div>
 <script src="/static/swagger-ui-bundle.js"></script>
 <script>

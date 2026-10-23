@@ -243,6 +243,92 @@ class TestScopeEnforcementIsPresentOnNetworkPaths(unittest.TestCase):
         self.assertIn("return None", source)
 
 
+def _have_chromium() -> bool:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+    try:
+        with sync_playwright() as pw:
+            pw.chromium.launch().close()
+    except Exception:
+        return False
+    return True
+
+
+@unittest.skipUnless(_have_chromium(), "needs the screenshots extra and its Chromium")
+class TestScreenshotsStayInScope(unittest.TestCase):
+    """The browser must not send one request outside scope, redirects included.
+
+    Playwright follows a fulfilled 3xx without routing the next hop, so this
+    is the property most likely to regress silently.
+    """
+
+    def test_no_request_reaches_an_off_scope_server(self):
+        import tempfile
+
+        from extscan.policy import ScreenshotPolicy
+        from extscan.screenshots import browser_shooter
+
+        hits: list[str] = []
+
+        class Off(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                hits.append(self.path)
+                self.send_response(200)
+                self.end_headers()
+
+        off = ThreadingHTTPServer(("127.0.0.1", 0), Off)
+        off_url = f"http://127.0.0.1:{off.server_address[1]}"
+
+        class In(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                redirects = {"/away": f"{off_url}/stolen", "/hop": "/away",
+                             "/img": f"{off_url}/via-img.png"}
+                if self.path in redirects:
+                    self.send_response(302)
+                    self.send_header("Location", redirects[self.path])
+                    self.end_headers()
+                    return
+                body = (f'<title>in</title><img src="{off_url}/pixel.png">'
+                        f'<img src="/img"><iframe src="{off_url}/frame"></iframe>'
+                        f'<script>fetch("{off_url}/xhr")</script>').encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(body)
+
+        inside = ThreadingHTTPServer(("127.0.0.2", 0), In)
+        for server in (off, inside):
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            self.addCleanup(server.server_close)
+            self.addCleanup(server.shutdown)
+
+        scope = Scope(engagement="screenshot test", client="self-test",
+                      authorization=Authorization(reference="LOCAL-TEST",
+                                                  authorized_by="test harness"),
+                      targets=["127.0.0.2/32"], allow_private=True)
+        base = f"http://127.0.0.2:{inside.server_address[1]}"
+        with tempfile.TemporaryDirectory() as tmp, \
+                browser_shooter(scope, ScreenshotPolicy(timeout_sec=10)) as shoot:
+            page = shoot(f"{base}/page", Path(tmp) / "page.png")
+            hop = shoot(f"{base}/hop", Path(tmp) / "hop.png")
+            self.assertTrue((Path(tmp) / "hop.png").is_file())
+
+        self.assertEqual(hits, [])
+        self.assertEqual(page["title"], "in")
+        self.assertIn(f"{off_url}/pixel.png", page["blocked"])
+        self.assertIn(f"{off_url}/via-img.png", page["blocked"])
+        self.assertEqual(hop["blocked"], [f"{off_url}/stolen"])
+        self.assertTrue(hop["final_url"].startswith(base))
+
+
 class TestRedactionIsAppliedToSensitiveEvidence(unittest.TestCase):
     def test_secret_bearing_handlers_redact(self):
         source = (SOURCE_DIR / "chase.py").read_text()

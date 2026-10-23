@@ -59,6 +59,15 @@ uv pip install 'extscan[bedrock]'   # AWS Bedrock
 uv run extscan providers            # check what is reachable
 ```
 
+Screenshots of web services for the report need headless Chromium:
+
+```bash
+uv sync --extra screenshots && uv run playwright install chromium
+```
+
+Without it the screenshot stage records a coverage gap and the report
+describes web services in text only.
+
 External tools: **nmap** (required), **nuclei** (required for web checks),
 `sslscan`, `httpx`, `testssl.sh`, `subfinder`/`amass` (all optional —
 each degrades to a recorded coverage gap rather than a failure).
@@ -117,7 +126,8 @@ extscan services latest              # what is open
 extscan probe latest                 # nuclei + per-service probes
 extscan leads latest                 # what is worth a closer look
 extscan chase latest --rounds 2      # resolve the follow-ups
-extscan report latest                # report.md + report.json
+extscan screenshot latest            # headless Chromium, every request scope-checked
+extscan report latest                # report.md, report.json, report/ (Obsidian vault)
 extscan gaps latest                  # what did NOT get checked
 ```
 
@@ -242,7 +252,14 @@ Deliberate, tested, and not configurable away:
   target.
 - **Secrets redacted.** Evidence proves an `.env` is readable and names the
   keys; it does not copy the values into the report, the ticket and three
-  mailboxes.
+  mailboxes. Every rendered report (`report.md`, `report.json`, the vault)
+  also drops session ids, cookie values, credentials in URLs and SNMP
+  community strings that are not well-known defaults. Pages whose evidence
+  holds secrets are never screenshotted, because an image cannot be redacted.
+  The run state keeps raw values, so findings can be re-checked.
+- **Screenshots stay in scope.** The browser's every request, subresources and
+  each redirect hop included, is scope-checked before it is sent. Off-scope
+  requests are blocked and listed in the caption.
 - **Full audit trail.** Every command, exit code and timing in
   `commands.jsonl`, summarised in the report so a client can reproduce any
   finding.
@@ -261,6 +278,26 @@ Deliberate, tested, and not configurable away:
 6. **Service inventory**
 7. **Methodology and limitations** — stages run, coverage gaps, tool versions,
    command log
+
+`report/` is the same run as an Obsidian vault, written as a pentest
+narrative. Open the folder in Obsidian and start at `00 Summary.md`:
+
+- **00 Summary** tells the story in the order the work happened: scope and
+  authorisation, discovery (with the nmap commands as run), each service
+  family with screenshots and a fenced proof block per finding, the
+  follow-ups, and what was not covered. The manual review queue and coverage
+  gaps are flagged before the story starts.
+- **hosts/** has one note per host: services, the checks run on each,
+  screenshots, findings.
+- **findings/** has one note per finding: evidence, proof, a command to
+  reproduce it, remediation.
+- **Manual review queue**, **Coverage gaps** and **Methodology** (with the
+  full command log) are notes of their own.
+
+Notes have YAML frontmatter (severity, host, port, tags) for Dataview, and
+link with `[[wikilinks]]`. Scanner text is escaped, so a hostile page title
+cannot embed notes or make Obsidian fetch a URL. Re-rendering replaces the
+notes extscan wrote and leaves your own notes and `.obsidian/` alone.
 
 Findings are marked `tentative` when derived from a version banner or a
 specification rather than observed behaviour. Keep that distinction when
@@ -283,7 +320,7 @@ the loop — the branching logic is not frozen into the tool.
 ## Tests
 
 ```bash
-uv run python -m unittest discover -s tests -t .   # 373 tests, ~6s, no network
+uv run python -m unittest discover -s tests -t .   # ~415 tests, ~10s, no network
 ```
 
 Fixture-driven, so no scanners are needed: captured nmap/sslscan XML and
@@ -322,8 +359,8 @@ optional `anthropic` extra installed.
 ## Further work
 
 `docs/ROADMAP.md` has a prioritised list of what else is worth adding, with
-the catch for each. The top of it: web-service screenshotting, virtual-host
-enumeration, and run-to-run diffing.
+the catch for each. The top of it: virtual-host enumeration and run-to-run
+diffing.
 
 ## Legal
 

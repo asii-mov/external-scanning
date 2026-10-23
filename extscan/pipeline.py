@@ -11,10 +11,11 @@ from __future__ import annotations
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import __version__
+from . import __version__, redact, vault
 from . import chase as chase_mod
 from . import probes as probes_mod
 from . import report as report_mod
+from . import screenshots as shots_mod
 from .models import Finding, Lead
 from .policy import Policy
 from .probes import ProbeContext
@@ -452,8 +453,85 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
             "abandoned": abandoned}
 
 
+SHOTS_UNAVAILABLE = "screenshot browser unavailable"
+SHOTS_FAILED = "screenshots failed for some web services"
+
+
+def screenshot(store: Store, scope: Scope, policy: Policy, force: bool = False,
+               shooter_factory=None, dry_run: bool = False) -> dict:
+    """Capture each web service's root page, plus pages behind findings.
+
+    `shooter_factory` is a context manager yielding a Shooter; tests pass a
+    fake. A missing browser is a coverage gap, never a failure.
+    """
+    scope.assert_window()
+    sp = policy.screenshots
+    if not sp.enabled:
+        print("  screenshots disabled by policy")
+        store.mark_stage("screenshot", disabled=True)
+        return {"captured": 0, "disabled": True}
+
+    planned = shots_mod.plan(store.services(), store.findings(), sp.max_pages)
+    previous = {s.url: s for s in shots_mod.load(store.path)}
+    todo = [s for s in planned
+            if force or previous.get(s.url) is None or previous[s.url].status != "captured"]
+    if not planned:
+        print("  no web services to screenshot")
+        store.mark_stage("screenshot", captured=0)
+        return {"captured": 0}
+    print(f"→ screenshots: {len(todo)} page(s) to capture, "
+          f"{len(planned) - len(todo)} already done")
+    if dry_run:
+        for s in todo:
+            print(f"  [dry-run] would capture {s.url}")
+        return {"captured": 0, "planned": len(todo), "dry_run": True}
+
+    if shooter_factory is None:
+        def shooter_factory():
+            return shots_mod.browser_shooter(scope, sp, policy.http.user_agent)
+
+    if todo:
+        try:
+            with shooter_factory() as shooter:
+                store.remove_degradations("screenshot", SHOTS_UNAVAILABLE)
+                shots_mod.capture(store.path, todo, shooter)
+        except shots_mod.BrowserUnavailable as exc:
+            _coverage_lost(store, Degradation(
+                stage="screenshot", component="chromium", reason=SHOTS_UNAVAILABLE,
+                impact=f"No screenshots of {len(todo)} web page(s): {exc}. The report "
+                       "describes these services in text only.",
+                hosts=sorted({s.service.split("/")[0] for s in todo}),
+                remedy="`uv sync --extra screenshots && uv run playwright install "
+                       "chromium`, then `extscan screenshot <run>`.",
+            ))
+            return {"captured": 0, "unavailable": str(exc)}
+
+    done = {s.url: s for s in todo}
+    merged = [done.get(s.url) or previous.get(s.url) or s for s in planned]
+    shots_mod.save(store.path, merged)
+
+    failed_roots = [s for s in merged if s.kind == "service" and s.status != "captured"]
+    store.remove_degradations("screenshot", SHOTS_FAILED)
+    if failed_roots:
+        _coverage_lost(store, Degradation(
+            stage="screenshot", component="chromium", reason=SHOTS_FAILED,
+            impact=f"{len(failed_roots)} web service(s) have no screenshot, so the report "
+                   "cannot show what they serve: "
+                   + ", ".join(s.url for s in failed_roots[:10]),
+            hosts=sorted({s.service.split("/")[0] for s in failed_roots}),
+            remedy="Open them by hand, or `extscan screenshot <run>` to retry.",
+        ))
+    captured = sum(1 for s in merged if s.status == "captured")
+    store.mark_stage("screenshot", captured=captured, failed=len(merged) - captured)
+    print(f"  {captured} of {len(merged)} page(s) captured")
+    return {"captured": captured, "failed": len(merged) - captured}
+
+
 def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dict:
-    findings = store.findings()
+    leads = store.leads()
+    communities = redact.secret_communities(store.findings(), leads)
+    findings = [redact.scrub_finding(f, communities) for f in store.findings()]
+    leads = [redact.scrub_lead(ld, communities) for ld in leads]
     services = store.services()
     hosts = store.hosts()
     triaged = triage(findings, services)
@@ -469,6 +547,9 @@ def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dic
 
     paths = report_mod.write_reports(store.path, scope, triaged, hosts, services,
                                      meta, store.commands(), store.degradations())
+    paths["vault"] = vault.write_vault(store.path, scope, triaged, hosts, services, meta,
+                                       store.commands(), store.degradations(), leads,
+                                       shots_mod.load(store.path))
     store.mark_stage("report", **{k: str(v) for k, v in paths.items()})
     return {"paths": {k: str(v) for k, v in paths.items()}, "stats": triaged.stats,
             "review_items": len(triaged.review_queue)}
@@ -482,5 +563,6 @@ def run_all(store: Store, scope: Scope, policy: Policy, runner: Runner,
     out["discover"] = discover(store, scope, policy, runner)
     out["probe"] = probe(store, scope, policy, runner)
     out["chase"] = chase_leads(store, scope, policy, runner, rounds=rounds, llm=llm)
+    out["screenshot"] = screenshot(store, scope, policy, dry_run=runner.dry_run)
     out["report"] = make_report(store, scope, runner)
     return out

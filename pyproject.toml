@@ -15,7 +15,8 @@ dependencies = []
 [project.optional-dependencies]
 llm = ["anthropic>=0.69"]
 bedrock = ["anthropic[bedrock]>=0.69"]
-all = ["anthropic[bedrock]>=0.69"]
+screenshots = ["playwright>=1.49"]
+all = ["anthropic[bedrock]>=0.69", "playwright>=1.49"]
 
 [project.scripts]
 extscan = "extscan.cli:main"
