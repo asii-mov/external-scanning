@@ -59,3 +59,12 @@ The notes below are kept as the spec it was built to.
 - [x] **Tests.** Render a vault from the lab (`tests/lab.py`) run fixtures,
       check that every wikilink resolves to a note, and check that every
       finding and gap appears.
+
+## Open
+
+- [ ] **Test the unprivileged-then-sudo UDP flow on a real host.** Only a
+      dry-run unit test covers the UDP pass clearing the gap. The full root
+      scan has run only in a container. Run a TCP-only scan as yourself,
+      then the printed `sudo .../.venv/bin/extscan discover <run> --udp-only`.
+      Check whether the sudo step leaves root-owned files in the run folder
+      that later unprivileged stages can't overwrite.

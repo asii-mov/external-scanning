@@ -69,7 +69,7 @@ Without it the screenshot stage records a coverage gap and the report
 describes web services in text only.
 
 External tools: **nmap** (required), **nuclei** (required for web checks),
-`sslscan`, `httpx`, `testssl.sh`, `subfinder`/`amass` (all optional —
+`sslscan`, `testssl.sh`, `subfinder`/`amass` (all optional —
 each degrades to a recorded coverage gap rather than a failure).
 `extscan doctor` prints install commands for what is missing.
 
@@ -82,7 +82,7 @@ gap, because "no SNMP findings" and "SNMP was never checked" must never look
 the same in a report:
 
 ```bash
-sudo extscan discover <run> --udp-only   # clears the gap once UDP has run
+sudo .venv/bin/extscan discover <run> --udp-only   # clears the gap once UDP has run
 ```
 
 ## Authorisation is mandatory

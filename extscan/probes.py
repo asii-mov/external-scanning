@@ -550,7 +550,8 @@ def sslscan_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[
     Python's ssl module only offers what the local OpenSSL build supports, so
     it cannot prove a server accepts RC4. sslscan links its own crypto and can.
     """
-    res, findings = sslscan.run(ctx.runner, ctx.scope, svc.host, svc.port)
+    res, findings = sslscan.run(ctx.runner, ctx.scope, svc.host, svc.port,
+                                timeout=ctx.policy.sslscan.timeout_sec)
     if res.failure:
         raise RuntimeError(f"sslscan {res.failure}")
     return findings, []

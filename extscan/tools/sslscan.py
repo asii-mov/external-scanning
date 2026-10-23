@@ -274,7 +274,7 @@ def _certificate_findings(cert: ET.Element, host: str, port: int | None,
 
 
 def run(runner: Runner, scope: Scope, host: str, port: int,
-        timeout: int = 300) -> tuple[Result, list[Finding]]:
+        timeout: int) -> tuple[Result, list[Finding]]:
     """Run sslscan against one endpoint."""
     scope.assert_host(host, context=f"sslscan {host}:{port}")
     if not runner.dry_run:

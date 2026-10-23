@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from extscan import pipeline, probes
+from extscan import pipeline, probes, runner
 from extscan.models import Service
 from extscan.policy import Policy
 from extscan.runner import Runner
@@ -146,11 +146,26 @@ class TestProbeFailure(_Stage):
         self.assertEqual(self.gaps(), [("probe:sslscan", "sslscan", ["127.0.0.1"])])
         self.assertNotIn("sslscan", after.probed_by)
 
+    def test_sslscan_timeout_comes_from_the_policy(self):
+        self.policy = Policy.from_dict({"sslscan": {"timeout_sec": 1}})
+        self.fake_tool("sslscan", f"exec {shutil.which('sleep')} 5")
+        svc = Service(host="127.0.0.1", port=8443, proto="tcp", name="https")
+        with self.only_fake_tools_on_path():
+            after = self.probe(svc, only=["sslscan"])
+        self.assertEqual(self.gaps(), [("probe:sslscan", "sslscan", ["127.0.0.1"])])
+        self.assertNotIn("sslscan", after.probed_by)
+        record = json.loads((self.store.path / "commands.jsonl").read_text().splitlines()[-1])
+        self.assertEqual(record["error"], "timed out after 1s")
+
 
 class TestUnprivilegedUdp(_Stage):
     def test_tcp_only_notice_comes_before_the_scan(self):
         out = io.StringIO()
+        venv_bin = self.tmp / "venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        (venv_bin / "extscan").write_text("")
         with mock.patch.object(nmap, "udp_requires_root", return_value=True), \
+                mock.patch.object(runner.sys, "executable", str(venv_bin / "python")), \
                 contextlib.redirect_stdout(out):
             pipeline.discover(self.store, self.scope, self.policy,
                               Runner(self.store, dry_run=True))
@@ -158,7 +173,8 @@ class TestUnprivilegedUdp(_Stage):
         notice = "Not running as root: this run is TCP only."
         self.assertIn(notice, lines)
         self.assertLess(lines.index(notice), lines.index("→ nmap TCP discovery"))
-        self.assertIn("  Re-run as root to add UDP: sudo extscan discover r --udp-only", lines)
+        self.assertIn(f"  Re-run as root to add UDP: sudo {venv_bin}/extscan discover r --udp-only",
+                      lines)
         self.assertEqual(self.gaps(), [("discover:udp", "nmap", [])])
 
     def test_root_rerun_clears_the_udp_gap(self):
@@ -170,6 +186,29 @@ class TestUnprivilegedUdp(_Stage):
                 pipeline.discover(self.store, self.scope, self.policy, dry,
                                   tcp=False, udp=True)
         self.assertEqual(self.gaps(), [])
+
+
+class TestUdpRerunCommand(unittest.TestCase):
+    def test_falls_back_to_bare_name_outside_a_venv(self):
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(runner.sys, "executable", f"{d}/python"):
+            self.assertEqual(runner.udp_rerun_command("r"),
+                             "sudo extscan discover r --udp-only")
+
+    def test_quotes_a_venv_path_with_spaces(self):
+        with tempfile.TemporaryDirectory() as d:
+            bin_dir = Path(d) / "my repo" / "bin"
+            bin_dir.mkdir(parents=True)
+            (bin_dir / "extscan").write_text("")
+            with mock.patch.object(runner.sys, "executable", str(bin_dir / "python")):
+                self.assertEqual(runner.udp_rerun_command("r"),
+                                 f"sudo '{bin_dir}/extscan' discover r --udp-only")
+
+
+class TestDoctorTools(unittest.TestCase):
+    def test_lists_sslscan_and_not_the_unused_httpx(self):
+        tools = [t for t in runner.doctor() if not t.startswith("_")]
+        self.assertEqual(tools, ["nmap", "nuclei", "sslscan", "testssl.sh", "snmpwalk"])
 
 
 class TestNseScriptSelection(unittest.TestCase):

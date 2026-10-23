@@ -28,7 +28,7 @@ from .resilience import (
     classify,
     retry,
 )
-from .runner import Runner, ToolMissing, doctor
+from .runner import Runner, ToolMissing, doctor, udp_rerun_command
 from .scope import Scope
 from .store import Store
 from .tools import nmap, nuclei, subdomains
@@ -176,7 +176,7 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
     do_udp = policy.nmap.do_udp if udp is None else udp
     udp_blocked = do_udp and nmap.udp_requires_root()
     summary: dict = {"tcp": None, "udp": None}
-    rerun = f"sudo extscan discover {store.path.name} --udp-only"
+    rerun = udp_rerun_command(store.path.name)
 
     if udp_blocked:
         print("Not running as root: this run is TCP only.")

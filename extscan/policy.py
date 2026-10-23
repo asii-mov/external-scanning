@@ -112,6 +112,11 @@ class SnmpPolicy:
 
 
 @dataclass
+class SslscanPolicy:
+    timeout_sec: int = 300
+
+
+@dataclass
 class ScreenshotPolicy:
     """Browser captures of web services for the report vault.
 
@@ -177,6 +182,7 @@ class Policy:
     nuclei: NucleiPolicy = field(default_factory=NucleiPolicy)
     http: HttpPolicy = field(default_factory=HttpPolicy)
     snmp: SnmpPolicy = field(default_factory=SnmpPolicy)
+    sslscan: SslscanPolicy = field(default_factory=SslscanPolicy)
     recon: ReconPolicy = field(default_factory=ReconPolicy)
     screenshots: ScreenshotPolicy = field(default_factory=ScreenshotPolicy)
     llm: LLMPolicy = field(default_factory=LLMPolicy)
@@ -224,6 +230,7 @@ class Policy:
             p = cls.for_profile(str(data["profile"]))
         for section, cls_ in (("nmap", NmapPolicy), ("nuclei", NucleiPolicy),
                               ("http", HttpPolicy), ("snmp", SnmpPolicy),
+                              ("sslscan", SslscanPolicy),
                               ("recon", ReconPolicy), ("screenshots", ScreenshotPolicy),
                               ("llm", LLMPolicy)):
             if section in data:

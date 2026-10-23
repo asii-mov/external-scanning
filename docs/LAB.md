@@ -67,7 +67,7 @@ discovery starts, and records a **serious** coverage gap:
 
 ```
 Not running as root: this run is TCP only.
-  Re-run as root to add UDP: sudo extscan discover <run> --udp-only
+  Re-run as root to add UDP: sudo /path/to/repo/.venv/bin/extscan discover <run> --udp-only
 ```
 
 Run that command to cover SNMP, then re-run the later stages as yourself.
