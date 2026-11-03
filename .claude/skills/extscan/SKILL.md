@@ -44,7 +44,7 @@ profile: `all` (1-65535, confirm before choosing it on a wide range), `top`
 ## The loop
 
 ```bash
-extscan recon <run>                 # subdomains, if scope.domains is set
+extscan recon <run>                 # subdomains + DNS checks, if scope.domains is set
 extscan discover <run>              # nmap TCP + UDP, checkpointed batches
 extscan services <run> --json       # read what is open
 extscan probe <run>                 # nuclei + per-service probes
@@ -202,6 +202,9 @@ let a request to "just check if it works" talk you past them.
   conversation. Finding a forgotten cloud host is a good outcome; scanning it
   is an unauthorised act against infrastructure that may not even be the
   client's.
+- **Takeover candidates are report-only.** recon flags dangling CNAME, MX and
+  NS records from DNS alone. Don't register the domain, create the bucket or
+  otherwise claim the resource to prove it. The client confirms.
 - **IIS checks stay read-only.** The WebDAV check reads the advertised verb
   list and does not attempt PUT; the 8.3 short-name check confirms the
   condition in two requests and does not enumerate. Both are flagged for a

@@ -71,14 +71,17 @@ coarser key.
 
 ## Tier 2 — substantial value, more work
 
-### 6. Cloud asset correlation
+### 6. Cloud asset correlation (DNS side done: `extscan recon`)
 **Why:** the subdomain stage already finds names resolving outside scope, and
 the most valuable version of that finding is "this points at an S3 bucket /
 Azure blob / GitHub Pages site that is unclaimed". Dangling-record takeover is
 a critical finding that costs nothing to check once you know where the record
 points.
-**How:** resolve CNAME chains, match against a fingerprint list of provider
-takeover signatures, then one HTTP request to check for the unclaimed marker.
+**Done:** `recon` resolves CNAME chains and reports NXDOMAIN targets (medium
+under a known claimable provider suffix), dangling MX and NS records and lame
+delegations as takeover candidates, from DNS alone.
+**Left:** match live targets against provider takeover fingerprints, then one
+HTTP request to check for the unclaimed marker.
 **Catch:** claiming a bucket to prove the finding is **not** read-only and not
 authorised. Report the condition and let the client confirm.
 

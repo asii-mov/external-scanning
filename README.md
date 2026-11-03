@@ -120,7 +120,7 @@ See `examples/scope.example.json`.
 
 ```bash
 extscan init --scope scope.json --profile standard
-extscan recon latest                 # subdomain enumeration (needs scope.domains)
+extscan recon latest                 # subdomains and DNS checks (needs scope.domains)
 extscan discover latest              # nmap TCP + UDP, in checkpointed batches
 extscan services latest              # what is open
 extscan probe latest                 # nuclei + per-service probes
@@ -160,6 +160,7 @@ fragile infrastructure.
 | `probe` → `iis` | IIS/ASP.NET: `trace.axd`/`elmah.axd`, WebDAV verbs, 8.3 short-name oracle, verbose error pages, version headers, default content |
 | `probe` → `sslscan` | cipher-level TLS audit — RC4/3DES/export suites, CRIME, insecure renegotiation (needs `sslscan`) |
 | `recon` → subdomains | certificate transparency + `subfinder`/`amass`, resolved and split into in-scope (scannable) and out-of-scope (reported, never touched) |
+| `recon` → dns | per scope domain, built-in DNS client: zone transfer (AXFR) against each nameserver, NSEC zone walking (NSEC3 recognised, not cracked), and takeover candidates from dangling CNAME, MX and NS records and lame delegations. Report only. Tune or skip checks with the policy's `dns` section (`resolvers`, `skip`, bounds) |
 | `chase` → `openapi` | finds the spec, enumerates operations, flags those declaring no authentication (writes especially), notes out-of-scope servers |
 | `chase` → `graphql` | introspection, schema size, whether mutations are exposed |
 | `chase` → `api_endpoint` | confirms one documented-as-open **GET** really is open |
@@ -260,6 +261,12 @@ Deliberate, tested, and not configurable away:
   the reviewer can tell a live credential from an expired one or a
   placeholder. Reports are working documents: review and sanitise them
   before they go to the client or anywhere else.
+- **DNS queries stay on the scope's domains.** `Scope.assert_dns_name` in
+  `extscan/scope.py` gates every DNS query: the name must be a `domains` entry
+  or sit under one. Zone transfers and NSEC walks go only to the zone's own
+  nameservers. A CNAME, MX or NS target outside the zone is only checked for
+  existence, with an A query through the resolver. extscan never contacts it,
+  never sends it HTTP and never tries to claim it. Only opcode QUERY is sent.
 - **Screenshots stay in scope.** The browser's every request, subresources and
   each redirect hop included, is scope-checked before it is sent. Off-scope
   requests are blocked and listed in the caption.
