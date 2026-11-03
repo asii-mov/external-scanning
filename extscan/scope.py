@@ -210,6 +210,25 @@ class Scope:
                 "finding to report, not a target to follow."
             )
 
+    def assert_dns_name(self, name: str, context: str = "") -> str:
+        """Gate a DNS query name. Returns the name normalised, or raises.
+
+        A name passes when it is a `domains` entry or sits under one at a
+        label boundary, so `evilexample.com` is not under `example.com`.
+        This is consent to enumerate names only. It never makes the
+        addresses those names resolve to scannable.
+        """
+        normal = (name or "").strip().lower()
+        if normal.endswith("."):
+            normal = normal[:-1]
+        if normal and any(normal == d or normal.endswith("." + d) for d in self.domains):
+            return normal
+        where = f" ({context})" if context else ""
+        raise ScopeError(
+            f"refusing DNS query for {name!r}{where}: not under any scope domain. "
+            "A name found in a DNS answer is a finding to report, not a zone to query."
+        )
+
     def assert_url(self, url: str, context: str = "") -> str:
         """Scope-check a URL before fetching it. Returns the host on success."""
         parts = urlsplit(url)

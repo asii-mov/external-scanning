@@ -158,6 +158,22 @@ class ReconPolicy:
 
 
 @dataclass
+class DnsPolicy:
+    """DNS checks (zone transfer, NSEC walking, dangling records) run inside
+    recon for every scope.domains entry."""
+
+    resolvers: list[str] = field(default_factory=list)  # "ip" or "ip:port"; [] = resolv.conf
+    port: int = 53                      # authoritative servers' port
+    timeout_sec: float = 3.0
+    retries: int = 1
+    query_interval_sec: float = 0.02
+    skip: list[str] = field(default_factory=list)   # check names from tools/dns.py CHECKS
+    max_names: int = 2000
+    max_walk_steps: int = 5000
+    max_axfr_records: int = 200_000
+
+
+@dataclass
 class LLMPolicy:
     """Model-assisted analysis settings.
 
@@ -201,6 +217,7 @@ class Policy:
     sslscan: SslscanPolicy = field(default_factory=SslscanPolicy)
     recon: ReconPolicy = field(default_factory=ReconPolicy)
     screenshots: ScreenshotPolicy = field(default_factory=ScreenshotPolicy)
+    dns: DnsPolicy = field(default_factory=DnsPolicy)
     llm: LLMPolicy = field(default_factory=LLMPolicy)
     max_lead_depth: int = 3
     max_leads_per_run: int = 500
