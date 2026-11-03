@@ -89,12 +89,12 @@ authorised. Report the condition and let the client confirm.
 **Why:** routinely in scope for an external review, entirely passive, and the
 findings are unambiguous: no DMARC, `~all` instead of `-all`, missing MTA-STS.
 Clients act on these because the fix is a DNS record.
-**How:** DNS TXT lookups per domain, plus parsing. No new dependency if we
-keep to `getaddrinfo`-adjacent stdlib resolution — though TXT records need a
-real resolver, so this probably means a minimal DNS client or `dnspython` as
-an optional extra.
-**Catch:** the stdlib cannot query TXT records. That dependency decision is
-the whole cost of this item.
+**How:** DNS TXT lookups per domain, plus parsing. `extscan/tools/dns.py`
+already has a stdlib client that can ask for TXT, so this is a new row in its
+`CHECKS` table rather than a new dependency.
+**Catch:** parsing SPF includes and DMARC policies correctly is most of the
+work. Counting SPF's 10-lookup limit means following includes, each of
+which must pass the DNS scope gate or be reported without being queried.
 
 ### 8. Authenticated scanning support
 **Why:** the biggest category we currently refuse. Plenty of external

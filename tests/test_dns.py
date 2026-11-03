@@ -267,11 +267,12 @@ class FakeDns:
         return None
 
 
-def lab_scope(*domains: str) -> Scope:
+def lab_scope(*domains: str, allow_private: bool = True) -> Scope:
     return Scope(engagement="dns test", client="self-test",
                  authorization=Authorization(reference="LOCAL-TEST",
                                              authorized_by="test harness"),
-                 targets=["192.0.2.0/24"], domains=list(domains or [APEX]))
+                 targets=["192.0.2.0/24"], domains=list(domains or [APEX]),
+                 allow_private=allow_private)
 
 
 class TestScopeGate(unittest.TestCase):
@@ -428,6 +429,14 @@ class TestZoneTransfer(unittest.TestCase):
         self.assertIn("ns1.lab.test", name)
         self.assertIn("www.lab.test. 300 IN A 192.0.2.80", dump)
         self.assertEqual([q.proto for q in ns.queries if q.qtype == "AXFR"], ["tcp"])
+
+    def test_nameserver_on_an_internal_address_is_never_queried(self):
+        with FakeDns(axfr=True) as ns:
+            axfr = audit(ns, scope=lab_scope(allow_private=False))["axfr"]
+        self.assertFalse(axfr.covered)
+        self.assertEqual(axfr.findings, ())
+        self.assertIn("internal address 127.0.0.1", axfr.gap().reason)
+        self.assertNotIn("AXFR", [q.qtype for q in ns.queries])
 
     def test_refused_transfer_is_covered_with_no_finding(self):
         with FakeDns(axfr=False) as ns:

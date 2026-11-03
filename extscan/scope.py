@@ -52,6 +52,13 @@ def _is_internal(net: ipaddress._BaseNetwork) -> bool:
     )
 
 
+def is_internal_address(address: str) -> bool:
+    try:
+        return _is_internal(ipaddress.ip_network(address))
+    except ValueError:
+        return False
+
+
 @dataclass
 class Authorization:
     reference: str

@@ -37,7 +37,7 @@ from typing import Literal
 from extscan.models import Finding
 from extscan.policy import DnsPolicy
 from extscan.resilience import Degradation
-from extscan.scope import Scope, ScopeError
+from extscan.scope import Scope, ScopeError, is_internal_address
 
 SOURCE = "extscan:dns"
 STAGE = "recon"
@@ -469,7 +469,12 @@ class _Client:
                 gaps.append(f"address of nameserver {host} unknown: "
                             f"{address.detail or address.status}")
             elif address.of("A"):
-                found.append(_Authority(zone, host, address.of("A")[0]))
+                ip = address.of("A")[0]
+                if is_internal_address(ip) and not self.scope.allow_private:
+                    gaps.append(f"nameserver {host} resolves to internal address {ip}; "
+                                "not queried because scope.allow_private is false")
+                else:
+                    found.append(_Authority(zone, host, ip))
         return found, tuple(gaps)
 
     def _cached(self, lane: str, name: str, rtype: str) -> _Answer:
