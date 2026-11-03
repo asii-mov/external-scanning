@@ -422,6 +422,7 @@ class TestScopeSplitting(unittest.TestCase):
         hits = [f for f in findings if "do not resolve" in f.title]
         self.assertEqual(len(hits), 1)
         self.assertIn("takeover-candidate", hits[0].tags)
+        self.assertIn("internal DNS, behind a VPN", hits[0].description)
 
     def test_summary_finding_counts_correctly(self):
         findings, _ = subdomains.to_findings(self.results(), "example.com")

@@ -260,17 +260,21 @@ def to_findings(results: list[Enumerated], domain: str) -> tuple[list[Finding], 
 
     if unresolved:
         findings.append(Finding(
-            title=f"{len(unresolved)} enumerated name(s) of {domain} do not resolve",
+            title=f"{len(unresolved)} enumerated name(s) of {domain} do not resolve publicly",
             severity="info", host="", source="extscan:subdomains",
             description="Names appearing in certificate transparency or other sources "
-                        "that currently have no DNS record. These are often "
-                        "decommissioned services; a name with a CNAME to an "
-                        "unclaimed provider resource is a takeover candidate.",
+                        "that have no public DNS record. Some are decommissioned "
+                        "services; a name with a CNAME to an unclaimed provider "
+                        "resource is a takeover candidate. Others exist only on the "
+                        "client's internal DNS, behind a VPN or split-horizon "
+                        "resolver, and were never meant to be reachable from the "
+                        "internet.",
             evidence="\n".join(f"{r.name}  ({r.resolve_error or 'no address'})"
                                for r in unresolved[:60]),
             review_required=True,
-            review_reason="Check whether any of these are dangling CNAMEs pointing at "
-                          "claimable third-party resources.",
+            review_reason="Ask the client which of these are internal-only (VPN or "
+                          "split-horizon DNS) and which are retired. Only retired "
+                          "names with a dangling CNAME are a takeover risk.",
             tags=["recon", "subdomains", "takeover-candidate"],
         ))
 
