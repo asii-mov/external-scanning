@@ -29,6 +29,7 @@
     "nmap": [{"fixture": "nmap-tcp.xml", "flips": [[0, 0]]}],
     "nuclei": [{"hex": "80"}, {"fixture": "nuclei.jsonl", "truncate": 100}],
     "sslscan": [{"hex": "00"}, {"hex": "0000"}],
-    "snmp": [{"hex": "30"}, {"hex": "3003020100"}]
+    "snmp": [{"hex": "30"}, {"hex": "3003020100"}],
+    "dns": []
   }
 }

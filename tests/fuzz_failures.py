@@ -42,7 +42,8 @@ from extscan.resilience import RunAborted
 from extscan.runner import Runner
 from extscan.scope import Scope
 from extscan.store import Store
-from extscan.tools import nmap, nuclei, snmp, sslscan
+from extscan.tools import dns, nmap, nuclei, snmp, sslscan
+from tests.test_dns import Query, response
 
 FIXTURES = Path(__file__).parent / "fixtures"
 EXAMPLES = int(os.environ.get("FUZZ_EXAMPLES", "60"))
@@ -267,6 +268,19 @@ class FuzzProbe(unittest.TestCase):
             h.close()
 
 
+DNS_REPLY = response(0x1234, Query("www.lab.test", "A", "udp", 0, True, False), answer=[
+    ("www.lab.test", "CNAME", "web.lab.test"), ("web.lab.test", "A", "192.0.2.80"),
+    ("lab.test", "NSEC", "www.lab.test A NS SOA MX NSEC"),
+    ("lab.test", "SOA", "ns1.lab.test hostmaster.lab.test 1 3600 600 86400 300")])
+
+
+def _flip_dns_reply(flips: list[tuple[int, int]]) -> bytes:
+    data = bytearray(DNS_REPLY)
+    for offset, value in flips:
+        data[offset] = value
+    return bytes(data)
+
+
 class FuzzParsers(unittest.TestCase):
     """Target-controlled bytes reach these parsers.
 
@@ -302,6 +316,15 @@ class FuzzParsers(unittest.TestCase):
     @given(st.binary(max_size=512))
     def test_snmp_reply(self, data: bytes):
         snmp._parse_reply(data)
+
+    @FUZZ
+    @replay("parsers", parser="dns")
+    @given(st.one_of(st.binary(max_size=512), st.lists(
+        st.tuples(st.integers(0, len(DNS_REPLY) - 1), st.integers(0, 255)),
+        min_size=1, max_size=8).map(_flip_dns_reply)))
+    def test_dns_reply(self, data: bytes):
+        qid = int.from_bytes(data[:2], "big") if len(data) >= 2 else 0
+        self.assertIsInstance(dns._decode(data, qid).status, str)
 
 
 if __name__ == "__main__":
