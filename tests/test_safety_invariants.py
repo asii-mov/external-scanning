@@ -13,7 +13,8 @@ from pathlib import Path
 
 from extscan.policy import Policy
 from extscan.scope import Authorization, Scope
-from extscan.tools import net, nuclei
+from extscan.tools import dns, net, nuclei
+from tests.test_dns import NSEC_ZONE, TAKEOVER_NAMES, TAKEOVER_ZONE, FakeDns, lab_scope
 
 SOURCE_DIR = Path(__file__).resolve().parent.parent / "extscan"
 SOURCE_FILES = sorted(SOURCE_DIR.rglob("*.py"))
@@ -241,6 +242,55 @@ class TestScopeEnforcementIsPresentOnNetworkPaths(unittest.TestCase):
         source = (SOURCE_DIR / "tools" / "net.py").read_text()
         self.assertIn("_NoRedirect", source)
         self.assertIn("return None", source)
+
+
+class TestDnsChecksAreReadOnlyAndScoped(unittest.TestCase):
+    source = (SOURCE_DIR / "tools" / "dns.py").read_text()
+
+    def test_every_packet_passes_the_dns_scope_gate(self):
+        funcs = [n for n in ast.walk(ast.parse(self.source)) if isinstance(n, ast.FunctionDef)]
+
+        def callers(name: str) -> set[str]:
+            return {f.name for f in funcs for c in ast.walk(f)
+                    if isinstance(c, ast.Call) and call_name(c) == name}
+
+        send = next(f for f in funcs if f.name == "_send")
+        self.assertIn("scope.assert_dns_name", ast.get_source_segment(self.source, send))
+        openers = callers("socket") | callers("create_connection")
+        self.assertEqual(openers, {"_udp", "_tcp_query", "_axfr"})
+        for opener in openers:
+            self.assertEqual(callers(opener), {"_exchange"}, opener)
+        self.assertEqual(callers("_exchange"), {"_send"})
+
+    def test_only_query_opcode_is_ever_sent(self):
+        """UPDATE (5) would change the client's zone; NOTIFY (4) prods its secondaries."""
+        names = {n.id for n in ast.walk(ast.parse(self.source)) if isinstance(n, ast.Name)}
+        self.assertFalse({n for n in names if "UPDATE" in n.upper() or "NOTIFY" in n.upper()})
+        records = [*NSEC_ZONE, *[r for r in TAKEOVER_ZONE if r not in NSEC_ZONE]]
+        with FakeDns(records, axfr=True, refuse={("lame.lab.test", "SOA")}) as ns:
+            dns.audit_zone(lab_scope(), "lab.test", TAKEOVER_NAMES, ns.policy())
+        self.assertGreater(len(ns.queries), 20)
+        self.assertEqual({q.opcode for q in ns.queries}, {0})
+
+    def test_dns_module_makes_no_http_requests(self):
+        imported = set()
+        for node in ast.walk(ast.parse(self.source)):
+            if isinstance(node, ast.Import):
+                imported |= {a.name for a in node.names}
+            elif isinstance(node, ast.ImportFrom):
+                imported.add(node.module or "")
+                imported |= {f"{node.module}.{a.name}" for a in node.names}
+        banned = ("urllib", "http", "requests", "httpx", "ssl", "extscan.tools.net")
+        self.assertEqual(sorted(m for m in imported if m.startswith(banned)), [])
+
+    def test_unknown_skip_check_is_rejected_before_any_packet(self):
+        with FakeDns() as ns:
+            policy = Policy.from_dict({"dns": {**ns.policy().__dict__,
+                                               "skip": ["zone-bruteforce"]}}).dns
+            for dry_run in (False, True):
+                with self.assertRaises(ValueError):
+                    dns.audit_zone(lab_scope(), "lab.test", [], policy, dry_run=dry_run)
+        self.assertEqual(ns.queries, [])
 
 
 def _have_chromium() -> bool:
