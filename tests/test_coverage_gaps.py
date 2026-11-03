@@ -21,7 +21,8 @@ from extscan.policy import Policy
 from extscan.runner import Runner
 from extscan.scope import Scope
 from extscan.store import Store
-from extscan.tools import nmap
+from extscan.tools import nmap, subdomains
+from tests.test_dns import ZONE, FakeDns
 
 
 class _Stage(unittest.TestCase):
@@ -227,6 +228,67 @@ class TestGapsClearWhenRetrySucceeds(_Stage):
             pipeline.discover(self.store, self.scope, self.policy, self.runner,
                               udp=False, resume=True)
         self.assertEqual(self.gaps(), [])
+
+
+class TestDnsGaps(_Stage):
+    """DNS gaps live in recon, keyed per check and zone, and clear like the rest."""
+
+    def setUp(self):
+        super().setUp()
+        self.scope.domains = ["lab.test"]
+
+    def recon(self, ns: FakeDns, names=(), source_errors=()):
+        self.policy.dns = ns.policy(timeout_sec=0.2)
+        found = [subdomains.Enumerated(name=n) for n in names]
+        with mock.patch.object(subdomains, "enumerate_domain",
+                               return_value=(found, list(source_errors))), \
+                contextlib.redirect_stdout(io.StringIO()):
+            pipeline.recon(self.store, self.scope, self.policy, self.runner)
+
+    def dns_gaps(self):
+        return [(d.component, d.reason) for d in self.store.degradations()
+                if d.component.startswith("dns:")]
+
+    def test_failure_then_success_clears_the_gaps(self):
+        with FakeDns(silent=True) as ns:
+            self.recon(ns)
+        self.assertEqual([c for c, _ in self.dns_gaps()],
+                         ["dns:axfr:lab.test", "dns:nsec-walk:lab.test",
+                          "dns:takeover:lab.test"])
+        with FakeDns(axfr=True) as ns:
+            self.recon(ns)
+        self.assertEqual(self.dns_gaps(), [])
+        self.assertIn("Zone transfer (AXFR) of lab.test allowed by ns1.lab.test",
+                      [f.title for f in self.store.findings()])
+        self.assertTrue(self.store.raw_path("dns-axfr-lab.test-ns1.lab.test.txt").is_file())
+
+    def test_changed_reason_replaces_the_gap(self):
+        with FakeDns(silent=True) as ns:
+            self.recon(ns)
+        with FakeDns(axfr="silent") as ns:
+            self.recon(ns)
+        [(component, reason)] = self.dns_gaps()
+        self.assertEqual(component, "dns:axfr:lab.test")
+        self.assertIn("AXFR from ns1.lab.test", reason)
+
+    def test_dry_run_leaves_an_existing_gap_and_sends_nothing(self):
+        with FakeDns(silent=True) as ns:
+            self.recon(ns)
+        before = self.dns_gaps()
+        self.runner = Runner(self.store, dry_run=True)
+        with FakeDns(axfr=True) as ns:
+            self.recon(ns)
+            self.assertEqual(ns.queries, [])
+        self.assertEqual(self.dns_gaps(), before)
+
+    def test_checks_run_on_enumerated_names_even_when_a_source_failed(self):
+        records = [*ZONE, ("assets.lab.test", "CNAME", "lab-assets.s3.amazonaws.com")]
+        with FakeDns(records) as ns:
+            self.recon(ns, names=["assets.lab.test"], source_errors=["crt.sh: timed out"])
+        titles = [f.title for f in self.store.findings()]
+        self.assertIn("Dangling CNAME assets.lab.test -> lab-assets.s3.amazonaws.com",
+                      titles)
+        self.assertEqual(self.dns_gaps(), [])
 
 
 class TestUnprivilegedUdp(_Stage):

@@ -265,7 +265,7 @@ class Policy:
                               ("http", HttpPolicy), ("snmp", SnmpPolicy),
                               ("sslscan", SslscanPolicy),
                               ("recon", ReconPolicy), ("screenshots", ScreenshotPolicy),
-                              ("llm", LLMPolicy)):
+                              ("dns", DnsPolicy), ("llm", LLMPolicy)):
             if section in data:
                 current = asdict(getattr(p, section))
                 unknown = set(data[section]) - set(current)

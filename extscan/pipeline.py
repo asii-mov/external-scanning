@@ -31,7 +31,7 @@ from .resilience import (
 from .runner import Runner, ToolMissing, doctor, udp_rerun_command
 from .scope import Scope
 from .store import Store
-from .tools import nmap, nuclei, subdomains
+from .tools import dns, nmap, nuclei, subdomains
 from .triage import triage
 
 
@@ -214,7 +214,8 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
 
 
 def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
-    """Enumerate subdomains of the scope's domains, then split them by scope.
+    """Enumerate subdomains of the scope's domains, split them by scope, then
+    audit each domain's DNS (zone transfer, NSEC walk, dangling records).
 
     Runs before discovery when used, because in-scope names it finds add hosts
     worth scanning. Out-of-scope names are reported and never touched.
@@ -226,7 +227,7 @@ def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
         return {"domains": 0}
 
     totals = {"domains": len(scope.domains), "names": 0,
-              "in_scope": 0, "out_of_scope": 0, "sources_failed": 0}
+              "in_scope": 0, "out_of_scope": 0, "sources_failed": 0, "dns_findings": 0}
 
     for domain in scope.domains:
         print(f"→ enumerating {domain} via {', '.join(policy.recon.sources)}")
@@ -262,8 +263,33 @@ def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
             ))
             print(f"  ! {error[:160]}")
 
+        totals["dns_findings"] += _audit_dns(store, scope, policy, runner, domain,
+                                             [r.name for r in results])
+
     store.mark_stage("recon", **totals)
     return totals
+
+
+def _audit_dns(store: Store, scope: Scope, policy: Policy, runner: Runner,
+               domain: str, names: list[str]) -> int:
+    """Run the DNS checks for one domain. Returns the number of findings."""
+    found = 0
+    for result in dns.audit_zone(scope, domain, names, policy.dns, dry_run=runner.dry_run):
+        if result.planned:
+            print(f"  [dry-run] dns {result.check} for {domain}")
+            continue
+        store.add_findings(result.findings)
+        for name, text in result.artifacts:
+            store.write_raw(name, text)
+        found += len(result.findings)
+        print(f"  dns {result.check}: {len(result.findings)} finding(s)")
+        gap = result.gap()
+        if gap:
+            _coverage_lost(store, gap)
+        # Added before the old ones go, so a crash in between never drops a gap.
+        store.remove_degradations(lambda d, c=result.component, g=gap: (
+            d.stage == dns.STAGE and d.component == c and (g is None or d.reason != g.reason)))
+    return found
 
 
 def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,

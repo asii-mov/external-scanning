@@ -790,10 +790,10 @@ def _dangling_ns(z: _Zone, name: str) -> tuple[list[Finding], bool]:
     if statuses and all(s in _LAME for s in statuses.values()):
         findings.append(_candidate(
             z, f"Lame delegation of {name}", "medium",
-            description=f"{name} is delegated to {', '.join(sorted(statuses))}, and none "
-                        "of them answers for it. A deleted hosted zone looks like this "
-                        "(for example on Route 53 or Azure DNS); at some providers anyone "
-                        f"can create the zone again and take over {name}.",
+            description=f"{name} is delegated to {', '.join(sorted(statuses))}, and no "
+                        "nameserver in that set answers for it. A deleted hosted zone "
+                        "looks like this (for example on Route 53 or Azure DNS); at some "
+                        f"providers anyone can create the zone again and take over {name}.",
             evidence="\n".join(f"SOA {name} @ {h}: {s.upper()}"
                                for h, s in sorted(statuses.items()))))
     return findings, answered
