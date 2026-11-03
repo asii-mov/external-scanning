@@ -2,26 +2,6 @@
   {
     "kind": "secret_file",
     "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "url": "http://127.0.0.2:8080/.env",
-    "params": {
-      "template": "codeigniter-env",
-      "extracted": []
-    },
-    "reason": "An environment file may be exposed; it commonly contains credentials.",
-    "origin": "nuclei:codeigniter-env",
-    "depth": 1,
-    "status": "done",
-    "note": "4 secret-like keys",
-    "attempts": 1,
-    "last_error": "",
-    "created": 1792747120.6472592,
-    "id": "dc8ac26e9175"
-  },
-  {
-    "kind": "secret_file",
-    "host": "127.0.0.2",
     "port": 8443,
     "proto": "tcp",
     "url": "https://127.0.0.2:8443/.env",
@@ -36,8 +16,28 @@
     "note": "4 secret-like keys",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6473753,
+    "created": 1793747273.9078689,
     "id": "8621e6158975"
+  },
+  {
+    "kind": "secret_file",
+    "host": "127.0.0.2",
+    "port": 8080,
+    "proto": "tcp",
+    "url": "http://127.0.0.2:8080/.env",
+    "params": {
+      "template": "codeigniter-env",
+      "extracted": []
+    },
+    "reason": "An environment file may be exposed; it commonly contains credentials.",
+    "origin": "nuclei:codeigniter-env",
+    "depth": 1,
+    "status": "done",
+    "note": "4 secret-like keys",
+    "attempts": 1,
+    "last_error": "",
+    "created": 1793747273.907979,
+    "id": "dc8ac26e9175"
   },
   {
     "kind": "secret_file",
@@ -56,7 +56,7 @@
     "note": "4 secret-like keys",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.647475,
+    "created": 1793747273.908048,
     "id": "5f6a33285973"
   },
   {
@@ -76,7 +76,7 @@
     "note": "4 secret-like keys",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6475797,
+    "created": 1793747273.9081073,
     "id": "931e9c1078a5"
   },
   {
@@ -96,7 +96,7 @@
     "note": "introspection enabled, 3 types",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6479099,
+    "created": 1793747273.9083686,
     "id": "6b581d3bfcaf"
   },
   {
@@ -116,7 +116,7 @@
     "note": "introspection enabled, 3 types",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6479952,
+    "created": 1793747273.908452,
     "id": "8d1a706e0df2"
   },
   {
@@ -136,7 +136,7 @@
     "note": "4 secret-like keys",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.648153,
+    "created": 1793747273.9086227,
     "id": "aa1ada23f987"
   },
   {
@@ -156,7 +156,7 @@
     "note": "4 secret-like keys",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6482363,
+    "created": 1793747273.9087076,
     "id": "54757bd938f3"
   },
   {
@@ -178,7 +178,7 @@
     "note": "200, 247 bytes, 0 links",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6551862,
+    "created": 1793747273.9108937,
     "id": "1e5d5cd1f1f8"
   },
   {
@@ -195,7 +195,7 @@
     "note": "200, 212 bytes, 0 links",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.679707,
+    "created": 1793747273.940538,
     "id": "c277d895c664"
   },
   {
@@ -212,7 +212,7 @@
     "note": "200, 52 bytes, 0 links",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6857662,
+    "created": 1793747273.9443147,
     "id": "1f0e8b0cc574"
   },
   {
@@ -232,7 +232,7 @@
     "note": "walk returned nothing",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.7688422,
+    "created": 1793747274.084446,
     "id": "a73e6c808da3"
   },
   {
@@ -249,7 +249,7 @@
     "note": "parsed http://127.0.0.2:8080/swagger.json: 9 operations, 5 without declared auth (2 writes)",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6742098,
+    "created": 1793747273.9383516,
     "id": "721de74f41cd"
   },
   {
@@ -266,7 +266,7 @@
     "note": "200, 51 bytes, 0 links",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.677827,
+    "created": 1793747273.9451053,
     "id": "f56b431d3c42"
   },
   {
@@ -283,7 +283,7 @@
     "note": "4 secret-like keys",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.686611,
+    "created": 1793747273.9874616,
     "id": "0de94fd1d1ca"
   },
   {
@@ -300,7 +300,7 @@
     "note": "parsed http://127.0.0.2:8080/swagger.json: 9 operations, 5 without declared auth (2 writes)",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6902635,
+    "created": 1793747274.010092,
     "id": "f76766a5b073"
   },
   {
@@ -317,7 +317,7 @@
     "note": "introspection enabled, 3 types",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.7272763,
+    "created": 1793747274.0494246,
     "id": "e3027b750142"
   },
   {
@@ -334,7 +334,7 @@
     "note": "200, 143 bytes, 0 links",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.7560253,
+    "created": 1793747274.0776415,
     "id": "35f3327e9f25"
   },
   {
@@ -351,7 +351,7 @@
     "note": "parsed https://127.0.0.2:8443/swagger.json: 9 operations, 5 without declared auth (2 writes)",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6816986,
+    "created": 1793747273.943892,
     "id": "a78457d12934"
   },
   {
@@ -368,7 +368,7 @@
     "note": "200, 51 bytes, 0 links",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.6903496,
+    "created": 1793747273.955699,
     "id": "941dba16b6cf"
   },
   {
@@ -385,7 +385,7 @@
     "note": "4 secret-like keys",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.7230282,
+    "created": 1793747274.019219,
     "id": "eea07c3e043b"
   },
   {
@@ -402,7 +402,7 @@
     "note": "parsed https://127.0.0.2:8443/swagger.json: 9 operations, 5 without declared auth (2 writes)",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.7379754,
+    "created": 1793747274.033502,
     "id": "ab72e600c481"
   },
   {
@@ -419,7 +419,7 @@
     "note": "introspection enabled, 3 types",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.7803946,
+    "created": 1793747274.0937653,
     "id": "22169bfc0609"
   },
   {
@@ -436,7 +436,7 @@
     "note": "200, 143 bytes, 0 links",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.7978535,
+    "created": 1793747274.1166623,
     "id": "073d38dec6bc"
   },
   {
@@ -457,7 +457,7 @@
     "note": "200: open, 31 bytes",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.9283595,
+    "created": 1793747274.2607903,
     "id": "23c0fc40f700"
   },
   {
@@ -478,7 +478,7 @@
     "note": "200: open, 110 bytes",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.928374,
+    "created": 1793747274.260812,
     "id": "848807959c80"
   },
   {
@@ -499,7 +499,7 @@
     "note": "403: auth enforced",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.9283826,
+    "created": 1793747274.2608254,
     "id": "50be17a41fd3"
   },
   {
@@ -520,7 +520,7 @@
     "note": "200: open, 31 bytes",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.9694495,
+    "created": 1793747274.3238168,
     "id": "1763b704ad53"
   },
   {
@@ -541,7 +541,7 @@
     "note": "200: open, 110 bytes",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.969462,
+    "created": 1793747274.3238301,
     "id": "de8b7fd79396"
   },
   {
@@ -562,7 +562,7 @@
     "note": "403: auth enforced",
     "attempts": 1,
     "last_error": "",
-    "created": 1792747120.9694698,
+    "created": 1793747274.3238382,
     "id": "959cc7692090"
   }
 ]

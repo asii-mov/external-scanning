@@ -1,7 +1,7 @@
 {
-  "run_id": "20261023-090822-extscan-local-lab",
+  "run_id": "20261103-225729-extscan-local-lab",
   "extscan_version": "0.1.0",
-  "created": 1792746502.6929598,
+  "created": 1793746649.3335214,
   "profile": "quick",
   "scope": {
     "engagement": "extscan local lab",
@@ -130,6 +130,9 @@
       ],
       "walk_on_hit": true
     },
+    "sslscan": {
+      "timeout_sec": 300
+    },
     "recon": {
       "sources": [
         "crt.sh",
@@ -138,6 +141,13 @@
       "resolve_timeout": 5.0,
       "max_names": 2000,
       "allow_bruteforce": false
+    },
+    "screenshots": {
+      "enabled": true,
+      "timeout_sec": 20,
+      "max_pages": 60,
+      "width": 1280,
+      "height": 800
     },
     "llm": {
       "enabled": false,
@@ -167,7 +177,7 @@
   },
   "stages": {
     "discover": {
-      "completed": 1792746720.0513287,
+      "completed": 1793746867.2290688,
       "tcp": {
         "hosts": 1,
         "services": 8,
@@ -188,22 +198,23 @@
       }
     },
     "probe": {
-      "completed": 1792747120.852416,
+      "completed": 1793747274.1568866,
       "findings": 84,
       "leads": 24,
       "probes_run": 14
     },
     "chase": {
-      "completed": 1792747121.0476592,
+      "completed": 1793747274.4216535,
       "leads_handled": 30,
       "findings": 25,
       "new_leads": 6,
       "abandoned": 0
     },
     "report": {
-      "completed": 1792747121.1504803,
-      "markdown": "runs/20261023-090822-extscan-local-lab/report.md",
-      "json": "runs/20261023-090822-extscan-local-lab/report.json"
+      "completed": 1793747274.580359,
+      "markdown": "runs/20261103-225729-extscan-local-lab/report.md",
+      "json": "runs/20261103-225729-extscan-local-lab/report.json",
+      "vault": "runs/20261103-225729-extscan-local-lab/report/00 Summary.md"
     }
   },
   "warnings": [],

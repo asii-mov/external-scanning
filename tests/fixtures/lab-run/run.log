@@ -1,4 +1,4 @@
-Run 20261023-090822-extscan-local-lab
+Run 20261103-225729-extscan-local-lab
 
 → nmap TCP discovery
   [1/1] 1 host(s)
@@ -11,8 +11,8 @@ Run 20261023-090822-extscan-local-lab
 → 14 per-service probe(s) across 9 service(s)
   84 new finding(s), 24 new lead(s)
 → chase round 1: 24 lead(s)
-  [secret_file] 127.0.0.2:8080 -> 4 secret-like keys
   [secret_file] 127.0.0.2:8443 -> 4 secret-like keys
+  [secret_file] 127.0.0.2:8080 -> 4 secret-like keys
   [secret_file] 127.0.0.2:8443 -> 4 secret-like keys
   [secret_file] 127.0.0.2:8080 -> 4 secret-like keys
   [graphql] 127.0.0.2:8080 -> introspection enabled, 3 types
@@ -42,6 +42,9 @@ Run 20261023-090822-extscan-local-lab
   [api_endpoint] 127.0.0.2:8443 -> 200: open, 31 bytes
   [api_endpoint] 127.0.0.2:8443 -> 200: open, 110 bytes
   [api_endpoint] 127.0.0.2:8443 -> 403: auth enforced
+→ screenshots: 19 page(s) to capture, 0 already done
+  ! screenshot browser unavailable
+    No screenshots of 19 web page(s): playwright is not installed (install the `screenshots` extra). The report describes these services in text only.
 
-Report: runs/20261023-090822-extscan-local-lab/report.md
+Report: runs/20261103-225729-extscan-local-lab/report.md
 42 item(s) need manual review.

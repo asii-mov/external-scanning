@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "stage": "screenshot",
+    "component": "chromium",
+    "reason": "screenshot browser unavailable",
+    "impact": "No screenshots of 19 web page(s): playwright is not installed (install the `screenshots` extra). The report describes these services in text only.",
+    "severity": "warning",
+    "hosts": [
+      "127.0.0.2"
+    ],
+    "recoverable": true,
+    "remedy": "`uv sync --extra screenshots && uv run playwright install chromium`, then `extscan screenshot <run>`.",
+    "at": 1793747274.4241588
+  }
+]

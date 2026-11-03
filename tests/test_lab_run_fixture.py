@@ -32,7 +32,8 @@ class TestLabRunFixture(unittest.TestCase):
         ports = {(s.port, s.proto) for s in self.store.services()}
         self.assertIn((8080, "tcp"), ports)
         self.assertIn((10161, "udp"), ports)
-        self.assertEqual(self.store.degradations(), [])
+        # The capture container has no Playwright, so only screenshots are a gap.
+        self.assertEqual({d.stage for d in self.store.degradations()}, {"screenshot"})
 
     def test_report_rerenders_with_snmp_and_nuclei_findings(self):
         scope = Scope.load(ROOT / "examples" / "lab" / "scope.json")

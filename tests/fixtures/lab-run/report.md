@@ -1,8 +1,8 @@
 # External attack surface assessment: extscan local lab
 
 **Client:** Local workstation (operator-owned)  
-**Report generated:** 2026-10-23 09:18:41 UTC  
-**Run id:** `20261023-090822-extscan-local-lab`  
+**Report generated:** 2026-11-03 23:07:54 UTC  
+**Run id:** `20261103-225729-extscan-local-lab`  
 **Tooling:** extscan 0.1.0, profile `quick`
 
 ## Authorisation
@@ -31,13 +31,15 @@
 
 42 item(s) require manual review before this report is issued; 97 distinct issue(s) were identified, of which 0 appear across three or more hosts.
 
+> ⚠️ **This assessment has 1 coverage gap(s).** Parts of the intended testing did not complete, so some absences in this report reflect checks that did not run rather than exposure that is not there. See [Coverage gaps](#coverage-gaps) before drawing conclusions.
+
 ## Manual review queue
 
 Automated checks establish that something is exposed; they cannot decide whether it is acceptable for this client. Each item below names the specific question an auditor needs to answer. Work top to bottom.
 
 | # | Severity | Item | Target | An auditor must decide |
 |---|---|---|---|---|
-| 1 | Critical | Credential-bearing file readable at http://127.0.0.2:8080/.env _(+1 related, listed below)_ | `127.0.0.2:8080/tcp` | Confirm these are live production credentials and drive the rotation. This is usually the highest-priority item in a report. |
+| 1 | Critical | Credential-bearing file readable at https://127.0.0.2:8443/.env _(+1 related, listed below)_ | `127.0.0.2:8443/tcp` | Confirm these are live production credentials and drive the rotation. This is usually the highest-priority item in a report. |
 | 2 | Critical | Docker API (plaintext) reachable from the internet on 127.0.0.2:2375/tcp | `127.0.0.2:2375/tcp` | Confirm whether Docker API (plaintext) on this host is intentional and, if so, whether authentication and patch level are adequate. Do not test credentials without explicit written approval. |
 | 3 | Critical | Elasticsearch reachable from the internet on 127.0.0.2:9200/tcp | `127.0.0.2:9200/tcp` | Confirm whether Elasticsearch on this host is intentional and, if so, whether authentication and patch level are adequate. Do not test credentials without explicit written approval. |
 | 4 | Critical | Redis reachable from the internet on 127.0.0.2:6379/tcp | `127.0.0.2:6379/tcp` | Confirm whether Redis on this host is intentional and, if so, whether authentication and patch level are adequate. Do not test credentials without explicit written approval. |
@@ -62,7 +64,7 @@ Automated checks establish that something is exposed; they cannot decide whether
 | 23 | Informational | Default IIS content at /iisstart.htm on 127.0.0.2:8081 | `127.0.0.2:8081/tcp` | A default install page often means an unmaintained or forgotten site. Establish who owns it. |
 | 24 | Informational | HTTP service: ACME Billing — API Console on 127.0.0.2:8080 _(+1 related, listed below)_ | `127.0.0.2:8080/tcp` | An auditor should confirm whether this application is intended to be internet-facing, and who owns it. |
 | 25 | Informational | HTTP service: Intranet on 127.0.0.2:8081 | `127.0.0.2:8081/tcp` | An auditor should confirm whether this application is intended to be internet-facing, and who owns it. |
-| 26 | Informational | HTTP service: untitled on 127.0.0.2:9200 _(+1 related, listed below)_ | `127.0.0.2:9200/tcp` | An auditor should confirm whether this application is intended to be internet-facing, and who owns it. |
+| 26 | Informational | HTTP service: untitled on 127.0.0.2:2375 _(+1 related, listed below)_ | `127.0.0.2:2375/tcp` | An auditor should confirm whether this application is intended to be internet-facing, and who owns it. |
 | 27 | Informational | SSH service on 127.0.0.2:2222 | `127.0.0.2:2222/tcp` | Confirm key-only authentication and whether exposure to the whole internet is required. Banner-based version checks are indicative only; distributions backport fixes without changing the banner. |
 | 28 | Informational | http-comments-displayer on 127.0.0.2:8080/tcp _(+3 related, listed below)_ | `127.0.0.2:8080/tcp` | Script output is informational; an auditor should judge whether what it exposes matters for this client. |
 | 29 | Informational | http-date on 127.0.0.2:8080/tcp _(+2 related, listed below)_ | `127.0.0.2:8080/tcp` | Script output is informational; an auditor should judge whether what it exposes matters for this client. |
@@ -222,7 +224,7 @@ Restrict this port to known management sources at the perimeter, or move access 
 - **Finding id:** `7aeab74d6f71`
 - **Tags:** `secrets`, `information-disclosure`
 
-The file is served to unauthenticated clients and contains 4 key(s) whose names indicate secrets. Values are redacted here deliberately: the finding is that they are reachable, and the report should not become another copy of the client's credentials.
+The file is served to unauthenticated clients and contains 4 key(s) whose names indicate secrets. The values are shown in the evidence so a reviewer can judge whether they are live, expired or placeholders.
 
 > **Requires manual review.** Confirm these are live production credentials and drive the rotation. This is usually the highest-priority item in a report.
 
@@ -233,11 +235,11 @@ GET http://127.0.0.2:8080/.env -> 200  length: 305
 secret-like keys present: AWS_ACCESS_KEY_ID, JWT_SIGNING_SECRET, SMTP_PASSWORD, STRIPE_SECRET_KEY
 
 APP_ENV=production
-DATABASE_URL=<redacted, 80 chars>
-STRIPE_SECRET_KEY=<redacted, 32 chars>
-JWT_SIGNING_SECRET=<redacted, 32 chars>
-AWS_ACCESS_KEY_ID=<redacted, 25 chars>
-SMTP_PASSWORD=<redacted, 18 chars>
+DATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing
+STRIPE_SECRET_KEY=fake-stripe-value-for-tests-only
+JWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests
+AWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests
+SMTP_PASSWORD=fake-smtp-password
 DEBUG=false
 ```
 
@@ -253,7 +255,7 @@ Remove the file from the web root, block the path, and rotate every credential i
 - **Finding id:** `0440b29a93bf`
 - **Tags:** `secrets`, `information-disclosure`
 
-The file is served to unauthenticated clients and contains 4 key(s) whose names indicate secrets. Values are redacted here deliberately: the finding is that they are reachable, and the report should not become another copy of the client's credentials.
+The file is served to unauthenticated clients and contains 4 key(s) whose names indicate secrets. The values are shown in the evidence so a reviewer can judge whether they are live, expired or placeholders.
 
 > **Requires manual review.** Confirm these are live production credentials and drive the rotation. This is usually the highest-priority item in a report.
 
@@ -264,11 +266,11 @@ GET https://127.0.0.2:8443/.env -> 200  length: 305
 secret-like keys present: AWS_ACCESS_KEY_ID, JWT_SIGNING_SECRET, SMTP_PASSWORD, STRIPE_SECRET_KEY
 
 APP_ENV=production
-DATABASE_URL=<redacted, 80 chars>
-STRIPE_SECRET_KEY=<redacted, 32 chars>
-JWT_SIGNING_SECRET=<redacted, 32 chars>
-AWS_ACCESS_KEY_ID=<redacted, 25 chars>
-SMTP_PASSWORD=<redacted, 18 chars>
+DATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing
+STRIPE_SECRET_KEY=fake-stripe-value-for-tests-only
+JWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests
+AWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests
+SMTP_PASSWORD=fake-smtp-password
 DEBUG=false
 ```
 
@@ -373,11 +375,11 @@ content-type: text/plain
 length: 305
 
 APP_ENV=production
-DATABASE_URL=<redacted, 80 chars>
-STRIPE_SECRET_KEY=<redacted, 32 chars>
-JWT_SIGNING_SECRET=<redacted, 32 chars>
-AWS_ACCESS_KEY_ID=<redacted, 25 chars>
-SMTP_PASSWORD=<redacted, 18 chars>
+DATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing
+STRIPE_SECRET_KEY=fake-stripe-value-for-tests-only
+JWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests
+AWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests
+SMTP_PASSWORD=fake-smtp-password
 DEBUG=false
 ```
 
@@ -537,11 +539,11 @@ content-type: text/plain
 length: 305
 
 APP_ENV=production
-DATABASE_URL=<redacted, 80 chars>
-STRIPE_SECRET_KEY=<redacted, 32 chars>
-JWT_SIGNING_SECRET=<redacted, 32 chars>
-AWS_ACCESS_KEY_ID=<redacted, 25 chars>
-SMTP_PASSWORD=<redacted, 18 chars>
+DATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing
+STRIPE_SECRET_KEY=fake-stripe-value-for-tests-only
+JWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests
+AWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests
+SMTP_PASSWORD=fake-smtp-password
 DEBUG=false
 ```
 
@@ -638,7 +640,7 @@ matched-at: http://127.0.0.2:8080/.env
 --- request ---
 GET /.env HTTP/1.1
 Host: 127.0.0.2:8080
-User-Agent: Mozilla/5.0 (Debian; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Mac OS X 13_2) AppleWebKit/537.36 (KHTML, like Gecko) Edge/116.0 Safari/537.36
 Accept: */*
 Accept-Language: en
 Accept-Encoding: gzip
@@ -648,7 +650,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 305
 Content-Type: text/plain
-Date: Fri, 23 Oct 2026 09:13:23 GMT
+Date: Tue, 03 Nov 2026 23:02:31 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -678,7 +680,7 @@ matched-at: http://127.0.0.2:8080/.env
 --- request ---
 GET /.env HTTP/1.1
 Host: 127.0.0.2:8080
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.1 Safari/605.1.15
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.18362
 Accept: */*
 Accept-Language: en
 Accept-Encoding: gzip
@@ -688,7 +690,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 305
 Content-Type: text/plain
-Date: Fri, 23 Oct 2026 09:14:47 GMT
+Date: Tue, 03 Nov 2026 23:04:00 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -718,7 +720,7 @@ matched-at: http://127.0.0.2:8080/.env
 --- request ---
 GET /.env HTTP/1.1
 Host: 127.0.0.2:8080
-User-Agent: Mozilla/5.0 (Knoppix; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0
+User-Agent: Mozilla/5.0 (Ubuntu; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36
 Accept: */*
 Accept-Language: en
 Accept-Encoding: gzip
@@ -728,7 +730,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 305
 Content-Type: text/plain
-Date: Fri, 23 Oct 2026 09:13:26 GMT
+Date: Tue, 03 Nov 2026 23:02:34 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -763,7 +765,7 @@ matched-at: https://127.0.0.2:8443/.env
 --- request ---
 GET /.env HTTP/1.1
 Host: 127.0.0.2:8443
-User-Agent: Mozilla/5.0 (Debian; Linux i686; rv:123.0) Gecko/20100101 Firefox/123.0
+User-Agent: Mozilla/5.0 (Fedora; Linux i686; rv:120.0) Gecko/20100101 Firefox/120.0
 Accept: */*
 Accept-Language: en
 Accept-Encoding: gzip
@@ -773,7 +775,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 305
 Content-Type: text/plain
-Date: Fri, 23 Oct 2026 09:13:23 GMT
+Date: Tue, 03 Nov 2026 23:02:31 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -803,7 +805,7 @@ matched-at: https://127.0.0.2:8443/.env
 --- request ---
 GET /.env HTTP/1.1
 Host: 127.0.0.2:8443
-User-Agent: Mozilla/5.0 (Mac OS X 13_2) AppleWebKit/537.36 (KHTML, like Gecko) Edge/119.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.0.2 Safari/605.1.15
 Accept: */*
 Accept-Language: en
 Accept-Encoding: gzip
@@ -813,7 +815,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 305
 Content-Type: text/plain
-Date: Fri, 23 Oct 2026 09:14:47 GMT
+Date: Tue, 03 Nov 2026 23:04:00 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -843,7 +845,7 @@ matched-at: https://127.0.0.2:8443/.env
 --- request ---
 GET /.env HTTP/1.1
 Host: 127.0.0.2:8443
-User-Agent: Mozilla/5.0 (Mac OS X 13_2) AppleWebKit/537.36 (KHTML, like Gecko) Safari/111.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15
 Accept: */*
 Accept-Language: en
 Accept-Encoding: gzip
@@ -853,7 +855,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 305
 Content-Type: text/plain
-Date: Fri, 23 Oct 2026 09:13:26 GMT
+Date: Tue, 03 Nov 2026 23:02:33 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -1460,7 +1462,7 @@ extracted: 6.8.0
 --- request ---
 GET /?pretty HTTP/1.1
 Host: 127.0.0.2:9200
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Macintosh: Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -1628,7 +1630,7 @@ matched-at: http://127.0.0.2:8080/graphql
 --- request ---
 POST /graphql HTTP/1.1
 Host: 127.0.0.2:8080
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1 Safari/605.1.15
+User-Agent: Mozilla/5.0 (Kubuntu; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36
 Content-Length: 67
 Accept: */*
 Accept-Language: en
@@ -1640,7 +1642,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 445
 Content-Type: application/json
-Date: Fri, 23 Oct 2026 09:14:07 GMT
+Date: Tue, 03 Nov 2026 23:03:15 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -1701,7 +1703,7 @@ nmap script `http-date` output.
 **Evidence**
 
 ```text
-Fri, 23 Oct 2026 09:09:15 GMT; -1s from local time.
+Tue, 03 Nov 2026 22:58:26 GMT; 0s from local time.
 ```
 
 #### 57. http-fetch on 127.0.0.2:8080/tcp
@@ -1738,9 +1740,9 @@ nmap script `http-headers` output.
 
 ```text
 Server: nginx/1.18.0
-  Date: Fri, 23 Oct 2026 09:09:18 GMT
+  Date: Tue, 03 Nov 2026 22:58:27 GMT
   Content-Type: text/html; charset=utf-8
-  Content-Length: 273
+  Content-Length: 390
   X-Powered-By: Express
   
   (Request type: GET)
@@ -2007,7 +2009,7 @@ nmap script `http-date` output.
 **Evidence**
 
 ```text
-Fri, 23 Oct 2026 09:09:18 GMT; 0s from local time.
+Tue, 03 Nov 2026 22:58:24 GMT; 0s from local time.
 ```
 
 #### 72. http-fetch on 127.0.0.2:8081/tcp
@@ -2044,7 +2046,7 @@ nmap script `http-headers` output.
 
 ```text
 Server: Microsoft-IIS/8.5
-  Date: Fri, 23 Oct 2026 09:09:19 GMT
+  Date: Tue, 03 Nov 2026 22:58:27 GMT
   Content-Type: text/html
   Content-Length: 36
   X-AspNet-Version: 4.0.30319
@@ -2178,9 +2180,9 @@ nmap script `http-webdav-scan` output.
 
 ```text
 Allowed Methods: OPTIONS, GET, HEAD, POST, COPY, PROPFIND, DELETE, MOVE, PROPPATCH, MKCOL, LOCK, UNLOCK, PUT
-  WebDAV type: Unknown
   Server Type: Microsoft-IIS/8.5
-  Server Date: Fri, 23 Oct 2026 09:09:18 GMT
+  Server Date: Tue, 03 Nov 2026 22:58:24 GMT
+  WebDAV type: Unknown
 ```
 
 #### 80. API exposes 4 operation(s) on sensitive-looking resources
@@ -2287,7 +2289,7 @@ matched-at: https://127.0.0.2:8443/graphql
 --- request ---
 POST /graphql HTTP/1.1
 Host: 127.0.0.2:8443
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.6 Safari/605.1.15
+User-Agent: Mozilla/5.0 (Debian; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36
 Content-Length: 67
 Accept: */*
 Accept-Language: en
@@ -2299,7 +2301,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 445
 Content-Type: application/json
-Date: Fri, 23 Oct 2026 09:14:07 GMT
+Date: Tue, 03 Nov 2026 23:03:15 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -2360,7 +2362,7 @@ nmap script `http-date` output.
 **Evidence**
 
 ```text
-Fri, 23 Oct 2026 09:09:15 GMT; -2s from local time.
+Tue, 03 Nov 2026 22:58:24 GMT; -2s from local time.
 ```
 
 #### 88. http-fetch on 127.0.0.2:8443/tcp
@@ -2397,9 +2399,9 @@ nmap script `http-headers` output.
 
 ```text
 Server: nginx/1.18.0
-  Date: Fri, 23 Oct 2026 09:09:20 GMT
+  Date: Tue, 03 Nov 2026 22:58:28 GMT
   Content-Type: text/html; charset=utf-8
-  Content-Length: 273
+  Content-Length: 390
   X-Powered-By: Express
   
   (Request type: GET)
@@ -2586,8 +2588,8 @@ TLS certificate details.
 ```text
 Subject: commonName=billing.lab.invalid/organizationName=extscan lab
 Subject Alternative Name: IP Address:127.0.0.2, DNS:billing.lab.invalid
-Not valid before: 2026-10-23T09:08:18
-Not valid after:  2026-11-22T09:08:18
+Not valid before: 2026-11-03T22:57:24
+Not valid after:  2026-12-03T22:57:24
 ```
 
 #### 99. Content review: http://127.0.0.2:9200/?pretty
@@ -2851,7 +2853,7 @@ Host-level nmap script `clock-skew` returned output.
 **Evidence**
 
 ```text
-mean: -1s, deviation: 1s, median: -1s
+mean: 0s, deviation: 1s, median: 0s
 ```
 
 #### 111. nmap host script: fcrdns
@@ -2966,14 +2968,14 @@ Host-level nmap script `qscan` returned output.
 
 ```text
 PORT  FAMILY  MEAN (us)  STDDEV  LOSS (%)
-2222  0       55.80      6.55    0.0%
-2375  0       54.90      4.53    0.0%
-3306  0       55.50      2.27    0.0%
-6379  0       56.60      3.37    0.0%
-8080  0       57.30      3.50    0.0%
-8081  0       56.30      4.27    0.0%
-8443  0       57.00      1.63    0.0%
-9200  0       57.60      2.67    0.0%
+2222  0       52.10      10.07   0.0%
+2375  0       51.20      8.78    0.0%
+3306  0       56.00      11.45   0.0%
+6379  0       55.90      11.48   0.0%
+8080  0       49.90      5.51    0.0%
+8081  0       49.60      8.68    0.0%
+8443  0       54.80      10.33   0.0%
+9200  0       54.40      7.40    0.0%
 ```
 
 #### 118. nmap host script: unusual-port
@@ -3042,7 +3044,7 @@ matcher: composer.lock
 --- request ---
 GET /composer.json HTTP/1.1
 Host: 127.0.0.2:2375
-User-Agent: Mozilla/5.0 (Windows; U; Windows NT 6.1; sv-SE) AppleWebKit/533.19.4 (KHTML, like Gecko) Version/5.0.3 Safari/533.19.4
+User-Agent: Mozilla/5.0 (SS; Linux i686; rv:126.0) Gecko/20100101 Firefox/126.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3054,7 +3056,7 @@ HTTP/1.0 404 Not Found
 Connection: close
 Content-Length: 29
 Content-Type: application/json
-Date: Fri, 23 Oct 2026 09:16:37 GMT
+Date: Tue, 03 Nov 2026 23:07:32 GMT
 
 {"message":"page not found"}
 ```
@@ -3077,11 +3079,11 @@ This template searches for missing HTTP security headers. The impact of these mi
 
 ```text
 matched-at: http://127.0.0.2:2375
-matcher: x-content-type-options
+matcher: clear-site-data
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:2375
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:134.0) Gecko/20100101 Firefox/134.0
+User-Agent: Mozilla/5.0 (Debian; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3093,7 +3095,7 @@ HTTP/1.0 404 Not Found
 Connection: close
 Content-Length: 29
 Content-Type: application/json
-Date: Fri, 23 Oct 2026 09:17:02 GMT
+Date: Tue, 03 Nov 2026 23:07:02 GMT
 
 {"message":"page not found"}
 ```
@@ -3218,7 +3220,7 @@ Protocol: 10
   Version: 5.7.33-log
   Thread ID: 42
   Capabilities flags: 63487
-  Some Capabilities: Speaks41ProtocolNew, LongColumnFlag, SupportsLoadDataLocal, Speaks41ProtocolOld, LongPassword, DontAllowDatabaseTableColumn, ConnectWithDatabase, SupportsTransactions, IgnoreSigpipes, ODBCClient, SupportsCompression, InteractiveClient, Support41Auth, IgnoreSpaceBeforeParenthesis, FoundRows, SupportsMultipleStatments, SupportsMultipleResults, SupportsAuthPlugins
+  Some Capabilities: LongColumnFlag, LongPassword, ODBCClient, Support41Auth, Speaks41ProtocolOld, FoundRows, DontAllowDatabaseTableColumn, Speaks41ProtocolNew, SupportsTransactions, IgnoreSigpipes, SupportsLoadDataLocal, SupportsCompression, InteractiveClient, IgnoreSpaceBeforeParenthesis, ConnectWithDatabase, SupportsMultipleResults, SupportsAuthPlugins, SupportsMultipleStatments
   Status: Autocommit
   Salt: abcdefghijklmnopqrst
   Auth Plugin Name: mysql_native_password
@@ -3326,7 +3328,7 @@ matcher: strict-transport-security
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8080
-User-Agent: Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/17.17134
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3335,15 +3337,17 @@ Accept-Encoding: gzip
 
 --- response ---
 HTTP/1.1 200 OK
-Content-Length: 273
+Content-Length: 390
 Content-Type: text/html; charset=utf-8
-Date: Fri, 23 Oct 2026 09:17:02 GMT
+Date: Tue, 03 Nov 2026 23:07:02 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
 <!doctype html>
 <html><head><title>ACME Billing &mdash; API Console</title></head>
 <body>
+<h1>ACME Billing API Console</h1>
+<p>Internal use only. API reference: <a href="/swagger.json">/swagger.json</a></p>
 <div id="swagger-ui"></div>
 <script src="/static/swagger-ui-bundle.js"></script>
 <script>
@@ -3370,7 +3374,7 @@ extracted: nginx/1.18.0
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8080
-User-Agent: Mozilla/5.0 (ZZ; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0
+User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/116.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3379,15 +3383,17 @@ Accept-Encoding: gzip
 
 --- response ---
 HTTP/1.1 200 OK
-Content-Length: 273
+Content-Length: 390
 Content-Type: text/html; charset=utf-8
-Date: Fri, 23 Oct 2026 09:17:59 GMT
+Date: Tue, 03 Nov 2026 23:05:36 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
 <!doctype html>
 <html><head><title>ACME Billing &mdash; API Console</title></head>
 <body>
+<h1>ACME Billing API Console</h1>
+<p>Internal use only. API reference: <a href="/swagger.json">/swagger.json</a></p>
 <div id="swagger-ui"></div>
 <script src="/static/swagger-ui-bundle.js"></script>
 <script>
@@ -3414,7 +3420,7 @@ matcher: nginxgeneric
 --- request ---
 POST / HTTP/1.1
 Host: 127.0.0.2:8080
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (CentOS; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
 Connection: close
 Content-Length: 27
 Content-Type: application/x-www-form-urlencoded
@@ -3425,7 +3431,7 @@ _=<script>alert(1)</script>
 HTTP/1.1 405 Method Not Allowed
 Content-Length: 30
 Content-Type: application/json
-Date: Fri, 23 Oct 2026 09:14:21 GMT
+Date: Tue, 03 Nov 2026 23:03:29 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -3454,7 +3460,7 @@ matcher: express
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8080
-User-Agent: Mozilla/5.0 (Knoppix; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (SS; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3463,15 +3469,17 @@ Accept-Encoding: gzip
 
 --- response ---
 HTTP/1.1 200 OK
-Content-Length: 273
+Content-Length: 390
 Content-Type: text/html; charset=utf-8
-Date: Fri, 23 Oct 2026 09:18:32 GMT
+Date: Tue, 03 Nov 2026 23:05:34 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
 <!doctype html>
 <html><head><title>ACME Billing &mdash; API Console</title></head>
 <body>
+<h1>ACME Billing API Console</h1>
+<p>Internal use only. API reference: <a href="/swagger.json">/swagger.json</a></p>
 <div id="swagger-ui"></div>
 <script src="/static/swagger-ui-bundle.js"></script>
 <script>
@@ -3497,7 +3505,7 @@ matched-at: http://127.0.0.2:8080/robots.txt
 --- request ---
 GET /robots.txt HTTP/1.1
 Host: 127.0.0.2:8080
-User-Agent: Mozilla/5.0 (Ubuntu; Linux i686; rv:132.0) Gecko/20100101 Firefox/132.0
+User-Agent: Mozilla/5.0 (Ubuntu; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3508,7 +3516,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 51
 Content-Type: text/plain
-Date: Fri, 23 Oct 2026 09:18:21 GMT
+Date: Tue, 03 Nov 2026 23:07:06 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -3534,7 +3542,7 @@ matched-at: http://127.0.0.2:8080/robots.txt
 --- request ---
 GET /robots.txt HTTP/1.1
 Host: 127.0.0.2:8080
-User-Agent: Mozilla/5.0 (SS; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0
+User-Agent: Mozilla/5.0 (Ubuntu; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3545,7 +3553,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 51
 Content-Type: text/plain
-Date: Fri, 23 Oct 2026 09:16:19 GMT
+Date: Tue, 03 Nov 2026 23:06:09 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -3572,7 +3580,7 @@ extracted: OPTIONS, GET, HEAD, POST, COPY, PROPFIND, DELETE, MOVE, PROPPATCH, MK
 --- request ---
 OPTIONS / HTTP/1.1
 Host: 127.0.0.2:8081
-User-Agent: Mozilla/5.0 (Knoppix; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Windows NT 11.0) AppleWebKit/537.36 (KHTML, like Gecko) Safari/121.0 Safari/537.36
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3583,7 +3591,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Allow: OPTIONS, GET, HEAD, POST, COPY, PROPFIND, DELETE, MOVE, PROPPATCH, MKCOL, LOCK, UNLOCK, PUT
 Content-Type: text/html
-Date: Fri, 23 Oct 2026 09:18:17 GMT
+Date: Tue, 03 Nov 2026 23:07:35 GMT
 Dav: 1, 2
 Server: Microsoft-IIS/8.5
 X-Aspnet-Version: 4.0.30319
@@ -3610,7 +3618,7 @@ extracted: 4.0.30319
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8081
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15
+User-Agent: Mozilla/5.0 (Knoppix; Linux i686; rv:124.0) Gecko/20100101 Firefox/124.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3621,7 +3629,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 36
 Content-Type: text/html
-Date: Fri, 23 Oct 2026 09:16:29 GMT
+Date: Tue, 03 Nov 2026 23:06:55 GMT
 Server: Microsoft-IIS/8.5
 X-Aspnet-Version: 4.0.30319
 X-Aspnetmvc-Version: 5.2
@@ -3648,7 +3656,7 @@ extracted: 5.2
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8081
-User-Agent: Mozilla/5.0 (Macintosh, Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15
+User-Agent: Mozilla/5.0 (Knoppix; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3659,7 +3667,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 36
 Content-Type: text/html
-Date: Fri, 23 Oct 2026 09:17:29 GMT
+Date: Tue, 03 Nov 2026 23:06:31 GMT
 Server: Microsoft-IIS/8.5
 X-Aspnet-Version: 4.0.30319
 X-Aspnetmvc-Version: 5.2
@@ -3682,11 +3690,11 @@ This template searches for missing HTTP security headers. The impact of these mi
 
 ```text
 matched-at: http://127.0.0.2:8081
-matcher: clear-site-data
+matcher: cross-origin-resource-policy
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8081
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15
+User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3697,7 +3705,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 36
 Content-Type: text/html
-Date: Fri, 23 Oct 2026 09:17:02 GMT
+Date: Tue, 03 Nov 2026 23:07:02 GMT
 Server: Microsoft-IIS/8.5
 X-Aspnet-Version: 4.0.30319
 X-Aspnetmvc-Version: 5.2
@@ -3723,7 +3731,7 @@ matched-at: http://127.0.0.2:8081/*~1*/a.aspx
 --- request ---
 GET /*~1*/a.aspx HTTP/1.1
 Host: 127.0.0.2:8081
-User-Agent: Mozilla/5.0 (SS; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36
 Connection: close
 Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8
 Origin: http://127.0.0.2:8081
@@ -3733,7 +3741,7 @@ Accept-Encoding: gzip
 --- response ---
 HTTP/1.1 404 Not Found
 Content-Type: text/html
-Date: Fri, 23 Oct 2026 09:13:38 GMT
+Date: Tue, 03 Nov 2026 23:02:46 GMT
 Server: Microsoft-IIS/8.5
 X-Aspnet-Version: 4.0.30319
 X-Aspnetmvc-Version: 5.2
@@ -3765,7 +3773,7 @@ extracted: Microsoft-IIS/8.5
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8081
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Safari/605.1.15
+User-Agent: Mozilla/5.0 (Ubuntu; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3776,7 +3784,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 36
 Content-Type: text/html
-Date: Fri, 23 Oct 2026 09:16:53 GMT
+Date: Tue, 03 Nov 2026 23:05:24 GMT
 Server: Microsoft-IIS/8.5
 X-Aspnet-Version: 4.0.30319
 X-Aspnetmvc-Version: 5.2
@@ -3803,7 +3811,7 @@ matcher: ms-iis
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8081
-User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0
+User-Agent: Mozilla/5.0 (ZZ; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3814,7 +3822,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 36
 Content-Type: text/html
-Date: Fri, 23 Oct 2026 09:18:32 GMT
+Date: Tue, 03 Nov 2026 23:05:34 GMT
 Server: Microsoft-IIS/8.5
 X-Aspnet-Version: 4.0.30319
 X-Aspnetmvc-Version: 5.2
@@ -3951,11 +3959,11 @@ This template searches for missing HTTP security headers. The impact of these mi
 
 ```text
 matched-at: https://127.0.0.2:8443
-matcher: strict-transport-security
+matcher: referrer-policy
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8443
-User-Agent: Mozilla/5.0 (ZZ; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0.1 Safari/605.1.15
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -3964,15 +3972,17 @@ Accept-Encoding: gzip
 
 --- response ---
 HTTP/1.1 200 OK
-Content-Length: 273
+Content-Length: 390
 Content-Type: text/html; charset=utf-8
-Date: Fri, 23 Oct 2026 09:17:02 GMT
+Date: Tue, 03 Nov 2026 23:07:02 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
 <!doctype html>
 <html><head><title>ACME Billing &mdash; API Console</title></head>
 <body>
+<h1>ACME Billing API Console</h1>
+<p>Internal use only. API reference: <a href="/swagger.json">/swagger.json</a></p>
 <div id="swagger-ui"></div>
 <script src="/static/swagger-ui-bundle.js"></script>
 <script>
@@ -4046,7 +4056,7 @@ extracted: nginx/1.18.0
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8443
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15
+User-Agent: Mozilla/5.0 (Debian; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -4055,15 +4065,17 @@ Accept-Encoding: gzip
 
 --- response ---
 HTTP/1.1 200 OK
-Content-Length: 273
+Content-Length: 390
 Content-Type: text/html; charset=utf-8
-Date: Fri, 23 Oct 2026 09:17:59 GMT
+Date: Tue, 03 Nov 2026 23:05:36 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
 <!doctype html>
 <html><head><title>ACME Billing &mdash; API Console</title></head>
 <body>
+<h1>ACME Billing API Console</h1>
+<p>Internal use only. API reference: <a href="/swagger.json">/swagger.json</a></p>
 <div id="swagger-ui"></div>
 <script src="/static/swagger-ui-bundle.js"></script>
 <script>
@@ -4169,7 +4181,7 @@ TLS configuration as observed.
 negotiated: TLSv1.3  cipher: TLS_AES_256_GCM_SHA384 (256 bit)
 subject: CN = billing.lab.invalid, O = extscan lab
 issuer: CN = billing.lab.invalid, O = extscan lab
-validity: Oct 23 09:08:18 2026 GMT .. Nov 22 09:08:18 2026 GMT
+validity: Nov  3 22:57:24 2026 GMT .. Dec  3 22:57:24 2026 GMT
 SANs: 127.0.0.2, billing.lab.invalid
 protocols: TLSv1.0=no, TLSv1.1=no, TLSv1.2=yes, TLSv1.3=yes
 ```
@@ -4192,7 +4204,7 @@ matcher: express
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:8443
-User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0
+User-Agent: Mozilla/5.0 (Debian; Linux i686; rv:122.0) Gecko/20100101 Firefox/122.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -4201,15 +4213,17 @@ Accept-Encoding: gzip
 
 --- response ---
 HTTP/1.1 200 OK
-Content-Length: 273
+Content-Length: 390
 Content-Type: text/html; charset=utf-8
-Date: Fri, 23 Oct 2026 09:18:32 GMT
+Date: Tue, 03 Nov 2026 23:05:34 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
 <!doctype html>
 <html><head><title>ACME Billing &mdash; API Console</title></head>
 <body>
+<h1>ACME Billing API Console</h1>
+<p>Internal use only. API reference: <a href="/swagger.json">/swagger.json</a></p>
 <div id="swagger-ui"></div>
 <script src="/static/swagger-ui-bundle.js"></script>
 <script>
@@ -4235,7 +4249,7 @@ matched-at: https://127.0.0.2:8443/robots.txt
 --- request ---
 GET /robots.txt HTTP/1.1
 Host: 127.0.0.2:8443
-User-Agent: Mozilla/5.0 (SS; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Ubuntu; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -4246,7 +4260,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 51
 Content-Type: text/plain
-Date: Fri, 23 Oct 2026 09:18:21 GMT
+Date: Tue, 03 Nov 2026 23:07:06 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -4272,7 +4286,7 @@ matched-at: https://127.0.0.2:8443/robots.txt
 --- request ---
 GET /robots.txt HTTP/1.1
 Host: 127.0.0.2:8443
-User-Agent: Mozilla/5.0 (ZZ; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Debian; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -4283,7 +4297,7 @@ Accept-Encoding: gzip
 HTTP/1.1 200 OK
 Content-Length: 51
 Content-Type: text/plain
-Date: Fri, 23 Oct 2026 09:16:19 GMT
+Date: Tue, 03 Nov 2026 23:06:09 GMT
 Server: nginx/1.18.0
 X-Powered-By: Express
 
@@ -4326,7 +4340,7 @@ matcher: composer.lock
 --- request ---
 GET /composer.json HTTP/1.1
 Host: 127.0.0.2:9200
-User-Agent: Mozilla/5.0 (ZZ; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (ZZ; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -4366,7 +4380,7 @@ matcher: elasticsearch
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:9200
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Debian; Linux i686; rv:123.0) Gecko/20100101 Firefox/123.0
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -4410,11 +4424,11 @@ This template searches for missing HTTP security headers. The impact of these mi
 
 ```text
 matched-at: http://127.0.0.2:9200
-matcher: strict-transport-security
+matcher: cross-origin-opener-policy
 --- request ---
 GET / HTTP/1.1
 Host: 127.0.0.2:9200
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.10 Safari/605.1.15
 Connection: close
 Accept: */*
 Accept-Language: en
@@ -4493,15 +4507,30 @@ SNMPv1public:
 
 | Host | Hostnames | OS guess |
 |---|---|---|
-| `127.0.0.2` | - | Linux 5.0 - 5.7 (100%) |
+| `127.0.0.2` | - | Linux 5.0 - 5.7 (99%) |
+
+## Coverage gaps
+
+1 part(s) of this assessment did not complete as intended. **Absence of findings in the areas below is not evidence that nothing is exposed there** -- the check did not run, or ran partially.
+
+| Severity | Stage | What was lost | Remedy |
+|---|---|---|---|
+| Warning | `screenshot` | No screenshots of 19 web page(s): playwright is not installed (install the `screenshots` extra). The report describes these services in text only. (1 host(s)) | `uv sync --extra screenshots && uv run playwright install chromium`, then `extscan screenshot <run>`. |
+
+<details><summary>Technical detail for each gap</summary>
+
+- **chromium** during `screenshot`: screenshot browser unavailable
+  - affected: `127.0.0.2`
+
+</details>
 
 ## Methodology and limitations
 
 Stages completed:
 
-- `discover` at 2026-10-23 09:12:00 UTC
-- `probe` at 2026-10-23 09:18:40 UTC
-- `chase` at 2026-10-23 09:18:41 UTC
+- `discover` at 2026-11-03 23:01:07 UTC
+- `probe` at 2026-11-03 23:07:54 UTC
+- `chase` at 2026-11-03 23:07:54 UTC
 - `report` — **not run**
 
 Limitations that apply to this report:
@@ -4522,9 +4551,9 @@ Limitations that apply to this report:
 4 command(s) were executed. Full argv, exit codes and timings are in `commands.jsonl` in the run directory.
 
 ```text
-[2026-10-23 09:08:22 UTC] rc=0 89.3s  nmap -sS -sV --version-intensity 5 --script (default or safe) and not (dos or external or http-slowloris-check) -p 2222,2375,3306,6379,8080,8081,8443,9200 -T4 --max-retries 2 --host-timeout 30m --open -oA runs/20261023-090822-extscan-local-lab/raw/nmap-tcp-0001 -Pn -O 127.0.0.2
-[2026-10-23 09:09:51 UTC] rc=0 128.1s  nmap -sU -sV --version-intensity 5 -p 10161 -T4 --max-retries 2 --host-timeout 30m --open -oA runs/20261023-090822-extscan-local-lab/raw/nmap-udp-0001 --script (default or safe) and not (dos or external or http-slowloris-check) -Pn 127.0.0.2
-[2026-10-23 09:12:00 UTC] rc=0 400.6s  nuclei -list runs/20261023-090822-extscan-local-lab/raw/nuclei-targets.txt -jsonl -output runs/20261023-090822-extscan-local-lab/raw/nuclei.jsonl -severity info,low,medium,high,critical -rate-limit 150 -c 15 -retries 1 -timeout 10 -silent -no-color -disable-update-check -exclude-tags dos,intrusive,fuzz,brute-force,default-login,default-logins,creds-stuffing -no-interactsh
-[2026-10-23 09:18:40 UTC] rc=0 0.2s  sslscan --no-colour --show-certificate --xml=runs/20261023-090822-extscan-local-lab/raw/sslscan-127.0.0.2-8443.xml 127.0.0.2:8443
+[2026-11-03 22:57:29 UTC] rc=0 89.8s  nmap -sS -sV --version-intensity 5 --script (default or safe) and not (dos or external or http-slowloris-check) -p 2222,2375,3306,6379,8080,8081,8443,9200 -T4 --max-retries 2 --host-timeout 30m --open -oA runs/20261103-225729-extscan-local-lab/raw/nmap-tcp-0001 -Pn -O 127.0.0.2
+[2026-11-03 22:58:59 UTC] rc=0 128.1s  nmap -sU -sV --version-intensity 5 -p 10161 -T4 --max-retries 2 --host-timeout 30m --open -oA runs/20261103-225729-extscan-local-lab/raw/nmap-udp-0001 --script (default or safe) and not (dos or external or http-slowloris-check) -Pn 127.0.0.2
+[2026-11-03 23:01:07 UTC] rc=0 406.7s  nuclei -list runs/20261103-225729-extscan-local-lab/raw/nuclei-targets.txt -jsonl -output runs/20261103-225729-extscan-local-lab/raw/nuclei.jsonl -severity info,low,medium,high,critical -rate-limit 150 -c 15 -retries 1 -timeout 10 -silent -no-color -disable-update-check -exclude-tags dos,intrusive,fuzz,brute-force,default-login,default-logins,creds-stuffing -no-interactsh
+[2026-11-03 23:07:53 UTC] rc=0 0.2s  sslscan --no-colour --show-certificate --xml=runs/20261103-225729-extscan-local-lab/raw/sslscan-127.0.0.2-8443.xml 127.0.0.2:8443
 ```
 

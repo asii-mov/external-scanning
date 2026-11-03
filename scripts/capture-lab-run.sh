@@ -37,7 +37,7 @@ else
   cp "$work/out/versions.txt" "$work/out/run.log" "$run/"
 fi
 
-rm -rf "$dest"
+find "$dest" -mindepth 1 -maxdepth 1 ! -name README.md -exec rm -rf {} +
 mkdir -p "$dest/raw"
 for f in run.json hosts.json services.json findings.json leads.json degradations.json \
          checkpoints.json commands.jsonl report.md report.json versions.txt run.log; do

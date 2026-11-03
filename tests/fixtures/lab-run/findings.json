@@ -1,47 +1,5 @@
 [
   {
-    "title": "nmap host script: ipidseq",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": null,
-    "proto": "tcp",
-    "source": "nmap-tcp:ipidseq",
-    "description": "Host-level nmap script `ipidseq` returned output.",
-    "evidence": "All zeros",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "ipidseq"
-    ],
-    "created": 1792746591.9663806,
-    "id": "5240e0203a5d"
-  },
-  {
-    "title": "nmap host script: qscan",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": null,
-    "proto": "tcp",
-    "source": "nmap-tcp:qscan",
-    "description": "Host-level nmap script `qscan` returned output.",
-    "evidence": "PORT  FAMILY  MEAN (us)  STDDEV  LOSS (%)\n2222  0       55.80      6.55    0.0%\n2375  0       54.90      4.53    0.0%\n3306  0       55.50      2.27    0.0%\n6379  0       56.60      3.37    0.0%\n8080  0       57.30      3.50    0.0%\n8081  0       56.30      4.27    0.0%\n8443  0       57.00      1.63    0.0%\n9200  0       57.60      2.67    0.0%",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "qscan"
-    ],
-    "created": 1792746591.9664147,
-    "id": "5144d825624c"
-  },
-  {
     "title": "nmap host script: fcrdns",
     "severity": "info",
     "host": "127.0.0.2",
@@ -59,18 +17,18 @@
       "nmap-script",
       "fcrdns"
     ],
-    "created": 1792746591.96643,
+    "created": 1793746739.1367984,
     "id": "d5e387256f55"
   },
   {
-    "title": "nmap host script: path-mtu",
+    "title": "nmap host script: clock-skew",
     "severity": "info",
     "host": "127.0.0.2",
     "port": null,
     "proto": "tcp",
-    "source": "nmap-tcp:path-mtu",
-    "description": "Host-level nmap script `path-mtu` returned output.",
-    "evidence": "ERROR: Script execution failed (use -d to debug)",
+    "source": "nmap-tcp:clock-skew",
+    "description": "Host-level nmap script `clock-skew` returned output.",
+    "evidence": "mean: 0s, deviation: 1s, median: 0s",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -78,10 +36,10 @@
     "confidence": "firm",
     "tags": [
       "nmap-script",
-      "path-mtu"
+      "clock-skew"
     ],
-    "created": 1792746591.966439,
-    "id": "d862223ce1a2"
+    "created": 1793746739.1368313,
+    "id": "e465740defee"
   },
   {
     "title": "nmap host script: port-states",
@@ -101,18 +59,18 @@
       "nmap-script",
       "port-states"
     ],
-    "created": 1792746591.9664464,
+    "created": 1793746739.136842,
     "id": "553eca54e8e7"
   },
   {
-    "title": "nmap host script: clock-skew",
+    "title": "nmap host script: qscan",
     "severity": "info",
     "host": "127.0.0.2",
     "port": null,
     "proto": "tcp",
-    "source": "nmap-tcp:clock-skew",
-    "description": "Host-level nmap script `clock-skew` returned output.",
-    "evidence": "mean: -1s, deviation: 1s, median: -1s",
+    "source": "nmap-tcp:qscan",
+    "description": "Host-level nmap script `qscan` returned output.",
+    "evidence": "PORT  FAMILY  MEAN (us)  STDDEV  LOSS (%)\n2222  0       52.10      10.07   0.0%\n2375  0       51.20      8.78    0.0%\n3306  0       56.00      11.45   0.0%\n6379  0       55.90      11.48   0.0%\n8080  0       49.90      5.51    0.0%\n8081  0       49.60      8.68    0.0%\n8443  0       54.80      10.33   0.0%\n9200  0       54.40      7.40    0.0%",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -120,10 +78,52 @@
     "confidence": "firm",
     "tags": [
       "nmap-script",
-      "clock-skew"
+      "qscan"
     ],
-    "created": 1792746591.9664588,
-    "id": "e465740defee"
+    "created": 1793746739.1368477,
+    "id": "5144d825624c"
+  },
+  {
+    "title": "nmap host script: ipidseq",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": null,
+    "proto": "tcp",
+    "source": "nmap-tcp:ipidseq",
+    "description": "Host-level nmap script `ipidseq` returned output.",
+    "evidence": "All zeros",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "ipidseq"
+    ],
+    "created": 1793746739.1368523,
+    "id": "5240e0203a5d"
+  },
+  {
+    "title": "nmap host script: path-mtu",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": null,
+    "proto": "tcp",
+    "source": "nmap-tcp:path-mtu",
+    "description": "Host-level nmap script `path-mtu` returned output.",
+    "evidence": "ERROR: Script execution failed (use -d to debug)",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "path-mtu"
+    ],
+    "created": 1793746739.1368563,
+    "id": "d862223ce1a2"
   },
   {
     "title": "banner on 127.0.0.2:2222/tcp",
@@ -143,7 +143,7 @@
       "nmap-script",
       "banner"
     ],
-    "created": 1792746591.9671516,
+    "created": 1793746739.1368954,
     "id": "3d4f8a161074"
   },
   {
@@ -164,8 +164,29 @@
       "nmap-script",
       "unusual-port"
     ],
-    "created": 1792746591.967173,
+    "created": 1793746739.136906,
     "id": "4e0d03176154"
+  },
+  {
+    "title": "mysql-info on 127.0.0.2:3306/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 3306,
+    "proto": "tcp",
+    "source": "nmap-tcp:mysql-info",
+    "description": "nmap script `mysql-info` output.",
+    "evidence": "Protocol: 10\n  Version: 5.7.33-log\n  Thread ID: 42\n  Capabilities flags: 63487\n  Some Capabilities: LongColumnFlag, LongPassword, ODBCClient, Support41Auth, Speaks41ProtocolOld, FoundRows, DontAllowDatabaseTableColumn, Speaks41ProtocolNew, SupportsTransactions, IgnoreSigpipes, SupportsLoadDataLocal, SupportsCompression, InteractiveClient, IgnoreSpaceBeforeParenthesis, ConnectWithDatabase, SupportsMultipleResults, SupportsAuthPlugins, SupportsMultipleStatments\n  Status: Autocommit\n  Salt: abcdefghijklmnopqrst\n  Auth Plugin Name: mysql_native_password",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "mysql-info"
+    ],
+    "created": 1793746739.1369305,
+    "id": "c42aca4c5469"
   },
   {
     "title": "banner on 127.0.0.2:3306/tcp",
@@ -185,29 +206,8 @@
       "nmap-script",
       "banner"
     ],
-    "created": 1792746591.9672146,
+    "created": 1793746739.136937,
     "id": "bef723b23fb4"
-  },
-  {
-    "title": "mysql-info on 127.0.0.2:3306/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 3306,
-    "proto": "tcp",
-    "source": "nmap-tcp:mysql-info",
-    "description": "nmap script `mysql-info` output.",
-    "evidence": "Protocol: 10\n  Version: 5.7.33-log\n  Thread ID: 42\n  Capabilities flags: 63487\n  Some Capabilities: Speaks41ProtocolNew, LongColumnFlag, SupportsLoadDataLocal, Speaks41ProtocolOld, LongPassword, DontAllowDatabaseTableColumn, ConnectWithDatabase, SupportsTransactions, IgnoreSigpipes, ODBCClient, SupportsCompression, InteractiveClient, Support41Auth, IgnoreSpaceBeforeParenthesis, FoundRows, SupportsMultipleStatments, SupportsMultipleResults, SupportsAuthPlugins\n  Status: Autocommit\n  Salt: abcdefghijklmnopqrst\n  Auth Plugin Name: mysql_native_password",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "mysql-info"
-    ],
-    "created": 1792746591.9672258,
-    "id": "c42aca4c5469"
   },
   {
     "title": "redis-info on 127.0.0.2:6379/tcp",
@@ -227,92 +227,8 @@
       "nmap-script",
       "redis-info"
     ],
-    "created": 1792746591.967253,
+    "created": 1793746739.1369486,
     "id": "afbd982af2ff"
-  },
-  {
-    "title": "http-useragent-tester on 127.0.0.2:8080/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-useragent-tester",
-    "description": "nmap script `http-useragent-tester` output.",
-    "evidence": "Status for browser useragent: 200\n  Allowed User Agents: \n    Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\n    libwww\n    lwp-trivial\n    libcurl-agent/1.0\n    PHP/\n    Python-urllib/2.5\n    GT::WWW\n    Snoopy\n    MFC_Tear_Sample\n    HTTP::Lite\n    PHPCrawl\n    URI::Fetch\n    Zend_Http_Client\n    http client\n    PECL::HTTP\n    Wget/1.13.4 (linux-gnu)\n    WWW-Mechanize/1.34",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-useragent-tester"
-    ],
-    "created": 1792746591.967317,
-    "id": "bb958a637980"
-  },
-  {
-    "title": "http-fetch on 127.0.0.2:8080/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-fetch",
-    "description": "nmap script `http-fetch` output.",
-    "evidence": "Please enter the complete path of the directory to save data in.",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-fetch"
-    ],
-    "created": 1792746591.9673295,
-    "id": "bf1c85a0e39e"
-  },
-  {
-    "title": "http-mobileversion-checker on 127.0.0.2:8080/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-mobileversion-checker",
-    "description": "nmap script `http-mobileversion-checker` output.",
-    "evidence": "No mobile version detected.",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-mobileversion-checker"
-    ],
-    "created": 1792746591.9673393,
-    "id": "456418dd5dc8"
-  },
-  {
-    "title": "http-robots.txt on 127.0.0.2:8080/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-robots.txt",
-    "description": "nmap script `http-robots.txt` output.",
-    "evidence": "2 disallowed entries \n/admin /internal",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-robots.txt"
-    ],
-    "created": 1792746591.9673486,
-    "id": "9d3ff990dda9"
   },
   {
     "title": "http-referer-checker on 127.0.0.2:8080/tcp",
@@ -332,50 +248,8 @@
       "nmap-script",
       "http-referer-checker"
     ],
-    "created": 1792746591.9673567,
+    "created": 1793746739.1369689,
     "id": "c3b649788351"
-  },
-  {
-    "title": "http-vuln-cve2017-1001000 on 127.0.0.2:8080/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-vuln-cve2017-1001000",
-    "description": "nmap script `http-vuln-cve2017-1001000` output.",
-    "evidence": "ERROR: Script execution failed (use -d to debug)",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-vuln-cve2017-1001000"
-    ],
-    "created": 1792746591.967365,
-    "id": "8fb68f0730ef"
-  },
-  {
-    "title": "http-headers on 127.0.0.2:8080/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-headers",
-    "description": "nmap script `http-headers` output.",
-    "evidence": "Server: nginx/1.18.0\n  Date: Fri, 23 Oct 2026 09:09:18 GMT\n  Content-Type: text/html; charset=utf-8\n  Content-Length: 273\n  X-Powered-By: Express\n  \n  (Request type: GET)",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-headers"
-    ],
-    "created": 1792746591.9673734,
-    "id": "3115070e5f30"
   },
   {
     "title": "http-title on 127.0.0.2:8080/tcp",
@@ -395,29 +269,8 @@
       "nmap-script",
       "http-title"
     ],
-    "created": 1792746591.9673815,
+    "created": 1793746739.1369753,
     "id": "6afbe40fbe14"
-  },
-  {
-    "title": "http-date on 127.0.0.2:8080/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-date",
-    "description": "nmap script `http-date` output.",
-    "evidence": "Fri, 23 Oct 2026 09:09:15 GMT; -1s from local time.",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-date"
-    ],
-    "created": 1792746591.9673893,
-    "id": "999aa5c69a62"
   },
   {
     "title": "http-malware-host on 127.0.0.2:8080/tcp",
@@ -437,8 +290,29 @@
       "nmap-script",
       "http-malware-host"
     ],
-    "created": 1792746591.9673977,
+    "created": 1793746739.136981,
     "id": "27001df5ce0b"
+  },
+  {
+    "title": "http-robots.txt on 127.0.0.2:8080/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8080,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-robots.txt",
+    "description": "nmap script `http-robots.txt` output.",
+    "evidence": "2 disallowed entries \n/admin /internal",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-robots.txt"
+    ],
+    "created": 1793746739.136986,
+    "id": "9d3ff990dda9"
   },
   {
     "title": "http-comments-displayer on 127.0.0.2:8080/tcp",
@@ -458,14 +332,77 @@
       "nmap-script",
       "http-comments-displayer"
     ],
-    "created": 1792746591.9674056,
+    "created": 1793746739.136991,
     "id": "7bd668b1f10d"
   },
   {
-    "title": "http-useragent-tester on 127.0.0.2:8081/tcp",
+    "title": "http-vuln-cve2017-1001000 on 127.0.0.2:8080/tcp",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 8081,
+    "port": 8080,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-vuln-cve2017-1001000",
+    "description": "nmap script `http-vuln-cve2017-1001000` output.",
+    "evidence": "ERROR: Script execution failed (use -d to debug)",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-vuln-cve2017-1001000"
+    ],
+    "created": 1793746739.1369958,
+    "id": "8fb68f0730ef"
+  },
+  {
+    "title": "http-headers on 127.0.0.2:8080/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8080,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-headers",
+    "description": "nmap script `http-headers` output.",
+    "evidence": "Server: nginx/1.18.0\n  Date: Tue, 03 Nov 2026 22:58:27 GMT\n  Content-Type: text/html; charset=utf-8\n  Content-Length: 390\n  X-Powered-By: Express\n  \n  (Request type: GET)",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-headers"
+    ],
+    "created": 1793746739.1370006,
+    "id": "3115070e5f30"
+  },
+  {
+    "title": "http-date on 127.0.0.2:8080/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8080,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-date",
+    "description": "nmap script `http-date` output.",
+    "evidence": "Tue, 03 Nov 2026 22:58:26 GMT; 0s from local time.",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-date"
+    ],
+    "created": 1793746739.137005,
+    "id": "999aa5c69a62"
+  },
+  {
+    "title": "http-useragent-tester on 127.0.0.2:8080/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8080,
     "proto": "tcp",
     "source": "nmap-tcp:http-useragent-tester",
     "description": "nmap script `http-useragent-tester` output.",
@@ -479,18 +416,18 @@
       "nmap-script",
       "http-useragent-tester"
     ],
-    "created": 1792746591.967442,
-    "id": "7cf161b04c82"
+    "created": 1793746739.1370096,
+    "id": "bb958a637980"
   },
   {
-    "title": "http-headers on 127.0.0.2:8081/tcp",
+    "title": "http-mobileversion-checker on 127.0.0.2:8080/tcp",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 8081,
+    "port": 8080,
     "proto": "tcp",
-    "source": "nmap-tcp:http-headers",
-    "description": "nmap script `http-headers` output.",
-    "evidence": "Server: Microsoft-IIS/8.5\n  Date: Fri, 23 Oct 2026 09:09:19 GMT\n  Content-Type: text/html\n  Content-Length: 36\n  X-AspNet-Version: 4.0.30319\n  X-AspNetMvc-Version: 5.2\n  X-Powered-By: ASP.NET\n  \n  (Request type: GET)",
+    "source": "nmap-tcp:http-mobileversion-checker",
+    "description": "nmap script `http-mobileversion-checker` output.",
+    "evidence": "No mobile version detected.",
     "recommendation": "",
     "references": [],
     "review_required": true,
@@ -498,20 +435,20 @@
     "confidence": "firm",
     "tags": [
       "nmap-script",
-      "http-headers"
+      "http-mobileversion-checker"
     ],
-    "created": 1792746591.9674513,
-    "id": "e2bf8c0cd7c4"
+    "created": 1793746739.1370144,
+    "id": "456418dd5dc8"
   },
   {
-    "title": "http-date on 127.0.0.2:8081/tcp",
+    "title": "http-fetch on 127.0.0.2:8080/tcp",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 8081,
+    "port": 8080,
     "proto": "tcp",
-    "source": "nmap-tcp:http-date",
-    "description": "nmap script `http-date` output.",
-    "evidence": "Fri, 23 Oct 2026 09:09:18 GMT; 0s from local time.",
+    "source": "nmap-tcp:http-fetch",
+    "description": "nmap script `http-fetch` output.",
+    "evidence": "Please enter the complete path of the directory to save data in.",
     "recommendation": "",
     "references": [],
     "review_required": true,
@@ -519,31 +456,10 @@
     "confidence": "firm",
     "tags": [
       "nmap-script",
-      "http-date"
+      "http-fetch"
     ],
-    "created": 1792746591.9674594,
-    "id": "b9b8b90a5523"
-  },
-  {
-    "title": "unusual-port on 127.0.0.2:8081/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8081,
-    "proto": "tcp",
-    "source": "nmap-tcp:unusual-port",
-    "description": "nmap script `unusual-port` output.",
-    "evidence": "http unexpected on port tcp/8081",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "unusual-port"
-    ],
-    "created": 1792746591.9674673,
-    "id": "e03b8d150e35"
+    "created": 1793746739.1370187,
+    "id": "bf1c85a0e39e"
   },
   {
     "title": "http-comments-displayer on 127.0.0.2:8081/tcp",
@@ -563,8 +479,71 @@
       "nmap-script",
       "http-comments-displayer"
     ],
-    "created": 1792746591.9674757,
+    "created": 1793746739.1370428,
     "id": "bd0179f4745d"
+  },
+  {
+    "title": "http-useragent-tester on 127.0.0.2:8081/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8081,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-useragent-tester",
+    "description": "nmap script `http-useragent-tester` output.",
+    "evidence": "Status for browser useragent: 200\n  Allowed User Agents: \n    Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\n    libwww\n    lwp-trivial\n    libcurl-agent/1.0\n    PHP/\n    Python-urllib/2.5\n    GT::WWW\n    Snoopy\n    MFC_Tear_Sample\n    HTTP::Lite\n    PHPCrawl\n    URI::Fetch\n    Zend_Http_Client\n    http client\n    PECL::HTTP\n    Wget/1.13.4 (linux-gnu)\n    WWW-Mechanize/1.34",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-useragent-tester"
+    ],
+    "created": 1793746739.137048,
+    "id": "7cf161b04c82"
+  },
+  {
+    "title": "unusual-port on 127.0.0.2:8081/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8081,
+    "proto": "tcp",
+    "source": "nmap-tcp:unusual-port",
+    "description": "nmap script `unusual-port` output.",
+    "evidence": "http unexpected on port tcp/8081",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "unusual-port"
+    ],
+    "created": 1793746739.137053,
+    "id": "e03b8d150e35"
+  },
+  {
+    "title": "http-date on 127.0.0.2:8081/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8081,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-date",
+    "description": "nmap script `http-date` output.",
+    "evidence": "Tue, 03 Nov 2026 22:58:24 GMT; 0s from local time.",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-date"
+    ],
+    "created": 1793746739.1370573,
+    "id": "b9b8b90a5523"
   },
   {
     "title": "http-title on 127.0.0.2:8081/tcp",
@@ -584,71 +563,8 @@
       "nmap-script",
       "http-title"
     ],
-    "created": 1792746591.9674933,
+    "created": 1793746739.1370618,
     "id": "440ddfdaae28"
-  },
-  {
-    "title": "http-webdav-scan on 127.0.0.2:8081/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8081,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-webdav-scan",
-    "description": "nmap script `http-webdav-scan` output.",
-    "evidence": "Allowed Methods: OPTIONS, GET, HEAD, POST, COPY, PROPFIND, DELETE, MOVE, PROPPATCH, MKCOL, LOCK, UNLOCK, PUT\n  WebDAV type: Unknown\n  Server Type: Microsoft-IIS/8.5\n  Server Date: Fri, 23 Oct 2026 09:09:18 GMT",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-webdav-scan"
-    ],
-    "created": 1792746591.9675276,
-    "id": "5a3568ccde5b"
-  },
-  {
-    "title": "http-mobileversion-checker on 127.0.0.2:8081/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8081,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-mobileversion-checker",
-    "description": "nmap script `http-mobileversion-checker` output.",
-    "evidence": "No mobile version detected.",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-mobileversion-checker"
-    ],
-    "created": 1792746591.9675364,
-    "id": "00dc6b7d98c1"
-  },
-  {
-    "title": "http-methods on 127.0.0.2:8081/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8081,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-methods",
-    "description": "nmap script `http-methods` output.",
-    "evidence": "Potentially risky methods: COPY PROPFIND DELETE MOVE PROPPATCH MKCOL LOCK UNLOCK PUT",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-methods"
-    ],
-    "created": 1792746591.9675446,
-    "id": "26a6d4379f3c"
   },
   {
     "title": "http-referer-checker on 127.0.0.2:8081/tcp",
@@ -668,8 +584,29 @@
       "nmap-script",
       "http-referer-checker"
     ],
-    "created": 1792746591.9675524,
+    "created": 1793746739.1370666,
     "id": "d84a77f639d2"
+  },
+  {
+    "title": "http-methods on 127.0.0.2:8081/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8081,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-methods",
+    "description": "nmap script `http-methods` output.",
+    "evidence": "Potentially risky methods: COPY PROPFIND DELETE MOVE PROPPATCH MKCOL LOCK UNLOCK PUT",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-methods"
+    ],
+    "created": 1793746739.1370752,
+    "id": "26a6d4379f3c"
   },
   {
     "title": "http-fetch on 127.0.0.2:8081/tcp",
@@ -689,18 +626,18 @@
       "nmap-script",
       "http-fetch"
     ],
-    "created": 1792746591.9675605,
+    "created": 1793746739.1370797,
     "id": "af8eb2e52f69"
   },
   {
-    "title": "http-malware-host on 127.0.0.2:8443/tcp",
+    "title": "http-headers on 127.0.0.2:8081/tcp",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 8443,
+    "port": 8081,
     "proto": "tcp",
-    "source": "nmap-tcp:http-malware-host",
-    "description": "nmap script `http-malware-host` output.",
-    "evidence": "false",
+    "source": "nmap-tcp:http-headers",
+    "description": "nmap script `http-headers` output.",
+    "evidence": "Server: Microsoft-IIS/8.5\n  Date: Tue, 03 Nov 2026 22:58:27 GMT\n  Content-Type: text/html\n  Content-Length: 36\n  X-AspNet-Version: 4.0.30319\n  X-AspNetMvc-Version: 5.2\n  X-Powered-By: ASP.NET\n  \n  (Request type: GET)",
     "recommendation": "",
     "references": [],
     "review_required": true,
@@ -708,20 +645,20 @@
     "confidence": "firm",
     "tags": [
       "nmap-script",
-      "http-malware-host"
+      "http-headers"
     ],
-    "created": 1792746591.9675863,
-    "id": "deb7d92516b8"
+    "created": 1793746739.1370842,
+    "id": "e2bf8c0cd7c4"
   },
   {
-    "title": "ssl-cert on 127.0.0.2:8443/tcp",
+    "title": "http-mobileversion-checker on 127.0.0.2:8081/tcp",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 8443,
+    "port": 8081,
     "proto": "tcp",
-    "source": "nmap-tcp:ssl-cert",
-    "description": "TLS certificate details.",
-    "evidence": "Subject: commonName=billing.lab.invalid/organizationName=extscan lab\nSubject Alternative Name: IP Address:127.0.0.2, DNS:billing.lab.invalid\nNot valid before: 2026-10-23T09:08:18\nNot valid after:  2026-11-22T09:08:18",
+    "source": "nmap-tcp:http-mobileversion-checker",
+    "description": "nmap script `http-mobileversion-checker` output.",
+    "evidence": "No mobile version detected.",
     "recommendation": "",
     "references": [],
     "review_required": true,
@@ -729,20 +666,20 @@
     "confidence": "firm",
     "tags": [
       "nmap-script",
-      "ssl-cert"
+      "http-mobileversion-checker"
     ],
-    "created": 1792746591.9675956,
-    "id": "8576848c7b06"
+    "created": 1793746739.1370885,
+    "id": "00dc6b7d98c1"
   },
   {
-    "title": "http-date on 127.0.0.2:8443/tcp",
+    "title": "http-webdav-scan on 127.0.0.2:8081/tcp",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 8443,
+    "port": 8081,
     "proto": "tcp",
-    "source": "nmap-tcp:http-date",
-    "description": "nmap script `http-date` output.",
-    "evidence": "Fri, 23 Oct 2026 09:09:15 GMT; -2s from local time.",
+    "source": "nmap-tcp:http-webdav-scan",
+    "description": "nmap script `http-webdav-scan` output.",
+    "evidence": "Allowed Methods: OPTIONS, GET, HEAD, POST, COPY, PROPFIND, DELETE, MOVE, PROPPATCH, MKCOL, LOCK, UNLOCK, PUT\n  Server Type: Microsoft-IIS/8.5\n  Server Date: Tue, 03 Nov 2026 22:58:24 GMT\n  WebDAV type: Unknown",
     "recommendation": "",
     "references": [],
     "review_required": true,
@@ -750,10 +687,52 @@
     "confidence": "firm",
     "tags": [
       "nmap-script",
-      "http-date"
+      "http-webdav-scan"
     ],
-    "created": 1792746591.9676096,
-    "id": "c5f0447aef62"
+    "created": 1793746739.137093,
+    "id": "5a3568ccde5b"
+  },
+  {
+    "title": "http-useragent-tester on 127.0.0.2:8443/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-useragent-tester",
+    "description": "nmap script `http-useragent-tester` output.",
+    "evidence": "Status for browser useragent: 200\n  Allowed User Agents: \n    Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\n    libwww\n    lwp-trivial\n    libcurl-agent/1.0\n    PHP/\n    Python-urllib/2.5\n    GT::WWW\n    Snoopy\n    MFC_Tear_Sample\n    HTTP::Lite\n    PHPCrawl\n    URI::Fetch\n    Zend_Http_Client\n    http client\n    PECL::HTTP\n    Wget/1.13.4 (linux-gnu)\n    WWW-Mechanize/1.34",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-useragent-tester"
+    ],
+    "created": 1793746739.137109,
+    "id": "b6345a25d856"
+  },
+  {
+    "title": "http-mobileversion-checker on 127.0.0.2:8443/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-mobileversion-checker",
+    "description": "nmap script `http-mobileversion-checker` output.",
+    "evidence": "No mobile version detected.",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-mobileversion-checker"
+    ],
+    "created": 1793746739.1371136,
+    "id": "61379b324c56"
   },
   {
     "title": "ssl-date on 127.0.0.2:8443/tcp",
@@ -773,18 +752,18 @@
       "nmap-script",
       "ssl-date"
     ],
-    "created": 1792746591.967618,
+    "created": 1793746739.1371188,
     "id": "0978c162a948"
   },
   {
-    "title": "http-title on 127.0.0.2:8443/tcp",
+    "title": "http-robots.txt on 127.0.0.2:8443/tcp",
     "severity": "info",
     "host": "127.0.0.2",
     "port": 8443,
     "proto": "tcp",
-    "source": "nmap-tcp:http-title",
-    "description": "HTTP page title.",
-    "evidence": "ACME Billing &mdash; API Console",
+    "source": "nmap-tcp:http-robots.txt",
+    "description": "nmap script `http-robots.txt` output.",
+    "evidence": "2 disallowed entries \n/admin /internal",
     "recommendation": "",
     "references": [],
     "review_required": true,
@@ -792,10 +771,73 @@
     "confidence": "firm",
     "tags": [
       "nmap-script",
-      "http-title"
+      "http-robots.txt"
     ],
-    "created": 1792746591.967627,
-    "id": "57ec10684b96"
+    "created": 1793746739.1371233,
+    "id": "a09f64d9f84f"
+  },
+  {
+    "title": "http-comments-displayer on 127.0.0.2:8443/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-comments-displayer",
+    "description": "nmap script `http-comments-displayer` output.",
+    "evidence": "Couldn't find any comments.",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-comments-displayer"
+    ],
+    "created": 1793746739.1371284,
+    "id": "f75eef45bb60"
+  },
+  {
+    "title": "http-headers on 127.0.0.2:8443/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-headers",
+    "description": "nmap script `http-headers` output.",
+    "evidence": "Server: nginx/1.18.0\n  Date: Tue, 03 Nov 2026 22:58:28 GMT\n  Content-Type: text/html; charset=utf-8\n  Content-Length: 390\n  X-Powered-By: Express\n  \n  (Request type: GET)",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-headers"
+    ],
+    "created": 1793746739.1371334,
+    "id": "6950621fa840"
+  },
+  {
+    "title": "ssl-cert on 127.0.0.2:8443/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nmap-tcp:ssl-cert",
+    "description": "TLS certificate details.",
+    "evidence": "Subject: commonName=billing.lab.invalid/organizationName=extscan lab\nSubject Alternative Name: IP Address:127.0.0.2, DNS:billing.lab.invalid\nNot valid before: 2026-11-03T22:57:24\nNot valid after:  2026-12-03T22:57:24",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "ssl-cert"
+    ],
+    "created": 1793746739.137138,
+    "id": "8576848c7b06"
   },
   {
     "title": "http-referer-checker on 127.0.0.2:8443/tcp",
@@ -815,7 +857,7 @@
       "nmap-script",
       "http-referer-checker"
     ],
-    "created": 1792746591.9676356,
+    "created": 1793746739.1371424,
     "id": "3e6786b86d44"
   },
   {
@@ -836,134 +878,8 @@
       "nmap-script",
       "http-vuln-cve2017-1001000"
     ],
-    "created": 1792746591.9676437,
+    "created": 1793746739.137147,
     "id": "9ae10dad9354"
-  },
-  {
-    "title": "http-headers on 127.0.0.2:8443/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8443,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-headers",
-    "description": "nmap script `http-headers` output.",
-    "evidence": "Server: nginx/1.18.0\n  Date: Fri, 23 Oct 2026 09:09:20 GMT\n  Content-Type: text/html; charset=utf-8\n  Content-Length: 273\n  X-Powered-By: Express\n  \n  (Request type: GET)",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-headers"
-    ],
-    "created": 1792746591.9676516,
-    "id": "6950621fa840"
-  },
-  {
-    "title": "http-mobileversion-checker on 127.0.0.2:8443/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8443,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-mobileversion-checker",
-    "description": "nmap script `http-mobileversion-checker` output.",
-    "evidence": "No mobile version detected.",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-mobileversion-checker"
-    ],
-    "created": 1792746591.9676592,
-    "id": "61379b324c56"
-  },
-  {
-    "title": "http-robots.txt on 127.0.0.2:8443/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8443,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-robots.txt",
-    "description": "nmap script `http-robots.txt` output.",
-    "evidence": "2 disallowed entries \n/admin /internal",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-robots.txt"
-    ],
-    "created": 1792746591.967667,
-    "id": "a09f64d9f84f"
-  },
-  {
-    "title": "http-security-headers on 127.0.0.2:8443/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8443,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-security-headers",
-    "description": "nmap script `http-security-headers` output.",
-    "evidence": "Strict_Transport_Security: \n    HSTS not configured in HTTPS Server",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-security-headers"
-    ],
-    "created": 1792746591.9676754,
-    "id": "af6425bcac3c"
-  },
-  {
-    "title": "http-useragent-tester on 127.0.0.2:8443/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8443,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-useragent-tester",
-    "description": "nmap script `http-useragent-tester` output.",
-    "evidence": "Status for browser useragent: 200\n  Allowed User Agents: \n    Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\n    libwww\n    lwp-trivial\n    libcurl-agent/1.0\n    PHP/\n    Python-urllib/2.5\n    GT::WWW\n    Snoopy\n    MFC_Tear_Sample\n    HTTP::Lite\n    PHPCrawl\n    URI::Fetch\n    Zend_Http_Client\n    http client\n    PECL::HTTP\n    Wget/1.13.4 (linux-gnu)\n    WWW-Mechanize/1.34",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-useragent-tester"
-    ],
-    "created": 1792746591.9676926,
-    "id": "b6345a25d856"
-  },
-  {
-    "title": "http-comments-displayer on 127.0.0.2:8443/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8443,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-comments-displayer",
-    "description": "nmap script `http-comments-displayer` output.",
-    "evidence": "Couldn't find any comments.",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-comments-displayer"
-    ],
-    "created": 1792746591.9677007,
-    "id": "f75eef45bb60"
   },
   {
     "title": "http-fetch on 127.0.0.2:8443/tcp",
@@ -983,18 +899,18 @@
       "nmap-script",
       "http-fetch"
     ],
-    "created": 1792746591.9677086,
+    "created": 1793746739.1371512,
     "id": "5e81b56c6f40"
   },
   {
-    "title": "http-useragent-tester on 127.0.0.2:9200/tcp",
+    "title": "http-malware-host on 127.0.0.2:8443/tcp",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 9200,
+    "port": 8443,
     "proto": "tcp",
-    "source": "nmap-tcp:http-useragent-tester",
-    "description": "nmap script `http-useragent-tester` output.",
-    "evidence": "Status for browser useragent: 200\n  Allowed User Agents: \n    Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\n    libwww\n    lwp-trivial\n    libcurl-agent/1.0\n    PHP/\n    Python-urllib/2.5\n    GT::WWW\n    Snoopy\n    MFC_Tear_Sample\n    HTTP::Lite\n    PHPCrawl\n    URI::Fetch\n    Zend_Http_Client\n    http client\n    PECL::HTTP\n    Wget/1.13.4 (linux-gnu)\n    WWW-Mechanize/1.34",
+    "source": "nmap-tcp:http-malware-host",
+    "description": "nmap script `http-malware-host` output.",
+    "evidence": "false",
     "recommendation": "",
     "references": [],
     "review_required": true,
@@ -1002,41 +918,20 @@
     "confidence": "firm",
     "tags": [
       "nmap-script",
-      "http-useragent-tester"
+      "http-malware-host"
     ],
-    "created": 1792746591.9677346,
-    "id": "c4d4d95e843f"
+    "created": 1793746739.1371558,
+    "id": "deb7d92516b8"
   },
   {
-    "title": "http-mobileversion-checker on 127.0.0.2:9200/tcp",
+    "title": "http-title on 127.0.0.2:8443/tcp",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 9200,
-    "proto": "tcp",
-    "source": "nmap-tcp:http-mobileversion-checker",
-    "description": "nmap script `http-mobileversion-checker` output.",
-    "evidence": "No mobile version detected.",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "http-mobileversion-checker"
-    ],
-    "created": 1792746591.9677432,
-    "id": "35b33b3d778b"
-  },
-  {
-    "title": "http-title on 127.0.0.2:9200/tcp",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 9200,
+    "port": 8443,
     "proto": "tcp",
     "source": "nmap-tcp:http-title",
     "description": "HTTP page title.",
-    "evidence": "Site doesn't have a title (application/json; charset=UTF-8).",
+    "evidence": "ACME Billing &mdash; API Console",
     "recommendation": "",
     "references": [],
     "review_required": true,
@@ -1046,8 +941,71 @@
       "nmap-script",
       "http-title"
     ],
-    "created": 1792746591.9677517,
-    "id": "1e79b0c99b89"
+    "created": 1793746739.1371605,
+    "id": "57ec10684b96"
+  },
+  {
+    "title": "http-date on 127.0.0.2:8443/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-date",
+    "description": "nmap script `http-date` output.",
+    "evidence": "Tue, 03 Nov 2026 22:58:24 GMT; -2s from local time.",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-date"
+    ],
+    "created": 1793746739.137172,
+    "id": "c5f0447aef62"
+  },
+  {
+    "title": "http-security-headers on 127.0.0.2:8443/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-security-headers",
+    "description": "nmap script `http-security-headers` output.",
+    "evidence": "Strict_Transport_Security: \n    HSTS not configured in HTTPS Server",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-security-headers"
+    ],
+    "created": 1793746739.1371765,
+    "id": "af6425bcac3c"
+  },
+  {
+    "title": "unusual-port on 127.0.0.2:9200/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 9200,
+    "proto": "tcp",
+    "source": "nmap-tcp:unusual-port",
+    "description": "nmap script `unusual-port` output.",
+    "evidence": "http unexpected on port tcp/9200",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "unusual-port"
+    ],
+    "created": 1793746739.137192,
+    "id": "486e9a8295fd"
   },
   {
     "title": "http-headers on 127.0.0.2:9200/tcp",
@@ -1067,7 +1025,7 @@
       "nmap-script",
       "http-headers"
     ],
-    "created": 1792746591.9677594,
+    "created": 1793746739.1371973,
     "id": "20b9d74d1e82"
   },
   {
@@ -1088,7 +1046,7 @@
       "nmap-script",
       "http-comments-displayer"
     ],
-    "created": 1792746591.967767,
+    "created": 1793746739.137202,
     "id": "44f7d439e226"
   },
   {
@@ -1109,29 +1067,71 @@
       "nmap-script",
       "http-referer-checker"
     ],
-    "created": 1792746591.9677799,
+    "created": 1793746739.1372066,
     "id": "55c15174df88"
   },
   {
-    "title": "unusual-port on 127.0.0.2:9200/tcp",
+    "title": "http-title on 127.0.0.2:9200/tcp",
     "severity": "info",
     "host": "127.0.0.2",
     "port": 9200,
     "proto": "tcp",
-    "source": "nmap-tcp:unusual-port",
-    "description": "nmap script `unusual-port` output.",
-    "evidence": "http unexpected on port tcp/9200",
+    "source": "nmap-tcp:http-title",
+    "description": "HTTP page title.",
+    "evidence": "Site doesn't have a title (application/json; charset=UTF-8).",
     "recommendation": "",
     "references": [],
-    "review_required": false,
-    "review_reason": "",
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
     "confidence": "firm",
     "tags": [
       "nmap-script",
-      "unusual-port"
+      "http-title"
     ],
-    "created": 1792746591.9677882,
-    "id": "486e9a8295fd"
+    "created": 1793746739.137211,
+    "id": "1e79b0c99b89"
+  },
+  {
+    "title": "http-useragent-tester on 127.0.0.2:9200/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 9200,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-useragent-tester",
+    "description": "nmap script `http-useragent-tester` output.",
+    "evidence": "Status for browser useragent: 200\n  Allowed User Agents: \n    Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\n    libwww\n    lwp-trivial\n    libcurl-agent/1.0\n    PHP/\n    Python-urllib/2.5\n    GT::WWW\n    Snoopy\n    MFC_Tear_Sample\n    HTTP::Lite\n    PHPCrawl\n    URI::Fetch\n    Zend_Http_Client\n    http client\n    PECL::HTTP\n    Wget/1.13.4 (linux-gnu)\n    WWW-Mechanize/1.34",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-useragent-tester"
+    ],
+    "created": 1793746739.1372154,
+    "id": "c4d4d95e843f"
+  },
+  {
+    "title": "http-mobileversion-checker on 127.0.0.2:9200/tcp",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 9200,
+    "proto": "tcp",
+    "source": "nmap-tcp:http-mobileversion-checker",
+    "description": "nmap script `http-mobileversion-checker` output.",
+    "evidence": "No mobile version detected.",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Script output is informational; an auditor should judge whether what it exposes matters for this client.",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "http-mobileversion-checker"
+    ],
+    "created": 1793746739.1372201,
+    "id": "35b33b3d778b"
   },
   {
     "title": "http-fetch on 127.0.0.2:9200/tcp",
@@ -1151,8 +1151,29 @@
       "nmap-script",
       "http-fetch"
     ],
-    "created": 1792746591.9677968,
+    "created": 1793746739.1372244,
     "id": "07d76b84dd57"
+  },
+  {
+    "title": "nmap host script: fcrdns",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": null,
+    "proto": "tcp",
+    "source": "nmap-udp:fcrdns",
+    "description": "Host-level nmap script `fcrdns` returned output.",
+    "evidence": "FAIL (No PTR record)",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nmap-script",
+      "fcrdns"
+    ],
+    "created": 1793746867.2270327,
+    "id": "2a50cf384ee3"
   },
   {
     "title": "nmap host script: unusual-port",
@@ -1172,7 +1193,7 @@
       "nmap-script",
       "unusual-port"
     ],
-    "created": 1792746720.0471053,
+    "created": 1793746867.227047,
     "id": "b75287b4205f"
   },
   {
@@ -1193,29 +1214,8 @@
       "nmap-script",
       "port-states"
     ],
-    "created": 1792746720.0471232,
+    "created": 1793746867.227052,
     "id": "67cdf0dc342c"
-  },
-  {
-    "title": "nmap host script: fcrdns",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": null,
-    "proto": "tcp",
-    "source": "nmap-udp:fcrdns",
-    "description": "Host-level nmap script `fcrdns` returned output.",
-    "evidence": "FAIL (No PTR record)",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nmap-script",
-      "fcrdns"
-    ],
-    "created": 1792746720.047131,
-    "id": "2a50cf384ee3"
   },
   {
     "title": "fingerprint-strings on 127.0.0.2:10161/udp",
@@ -1235,8 +1235,31 @@
       "nmap-script",
       "fingerprint-strings"
     ],
-    "created": 1792746720.0471594,
+    "created": 1793746867.2270727,
     "id": "4617422b85a5"
+  },
+  {
+    "title": "Codeigniter - .env File Discovery",
+    "severity": "high",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nuclei:codeigniter-env",
+    "description": "Codeigniter .env file was discovered.",
+    "evidence": "matched-at: https://127.0.0.2:8443/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Fedora; Linux i686; rv:120.0) Gecko/20100101 Firefox/120.0\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Tue, 03 Nov 2026 23:02:31 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "config",
+      "exposure",
+      "codeigniter"
+    ],
+    "created": 1793747273.9078336,
+    "id": "09f0d6147a4b"
   },
   {
     "title": "Codeigniter - .env File Discovery",
@@ -1246,7 +1269,7 @@
     "proto": "tcp",
     "source": "nuclei:codeigniter-env",
     "description": "Codeigniter .env file was discovered.",
-    "evidence": "matched-at: http://127.0.0.2:8080/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Debian; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Fri, 23 Oct 2026 09:13:23 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
+    "evidence": "matched-at: http://127.0.0.2:8080/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Mac OS X 13_2) AppleWebKit/537.36 (KHTML, like Gecko) Edge/116.0 Safari/537.36\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Tue, 03 Nov 2026 23:02:31 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -1258,31 +1281,8 @@
       "exposure",
       "codeigniter"
     ],
-    "created": 1792747120.647228,
+    "created": 1793747273.9079583,
     "id": "a01966da7e22"
-  },
-  {
-    "title": "Codeigniter - .env File Discovery",
-    "severity": "high",
-    "host": "127.0.0.2",
-    "port": 8443,
-    "proto": "tcp",
-    "source": "nuclei:codeigniter-env",
-    "description": "Codeigniter .env file was discovered.",
-    "evidence": "matched-at: https://127.0.0.2:8443/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Debian; Linux i686; rv:123.0) Gecko/20100101 Firefox/123.0\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Fri, 23 Oct 2026 09:13:23 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "config",
-      "exposure",
-      "codeigniter"
-    ],
-    "created": 1792747120.6473558,
-    "id": "09f0d6147a4b"
   },
   {
     "title": "Laravel - Sensitive Information Disclosure",
@@ -1292,7 +1292,7 @@
     "proto": "tcp",
     "source": "nuclei:laravel-env",
     "description": "A Laravel .env file was discovered, which stores sensitive information like database credentials and tokens. It should not be publicly accessible.",
-    "evidence": "matched-at: https://127.0.0.2:8443/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Mac OS X 13_2) AppleWebKit/537.36 (KHTML, like Gecko) Safari/111.0 Safari/537.36\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Fri, 23 Oct 2026 09:13:26 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
+    "evidence": "matched-at: https://127.0.0.2:8443/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Tue, 03 Nov 2026 23:02:33 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
     "recommendation": "",
     "references": [
       "https://laravel.com/docs/master/configuration#environment-configuration",
@@ -1307,7 +1307,7 @@
       "exposure",
       "laravel"
     ],
-    "created": 1792747120.647459,
+    "created": 1793747273.908038,
     "id": "3ec8c11e44e0"
   },
   {
@@ -1318,7 +1318,7 @@
     "proto": "tcp",
     "source": "nuclei:laravel-env",
     "description": "A Laravel .env file was discovered, which stores sensitive information like database credentials and tokens. It should not be publicly accessible.",
-    "evidence": "matched-at: http://127.0.0.2:8080/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Knoppix; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Fri, 23 Oct 2026 09:13:26 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
+    "evidence": "matched-at: http://127.0.0.2:8080/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Ubuntu; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Tue, 03 Nov 2026 23:02:34 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
     "recommendation": "",
     "references": [
       "https://laravel.com/docs/master/configuration#environment-configuration",
@@ -1333,7 +1333,7 @@
       "exposure",
       "laravel"
     ],
-    "created": 1792747120.6475642,
+    "created": 1793747273.9080982,
     "id": "b07ffc54fc88"
   },
   {
@@ -1344,7 +1344,7 @@
     "proto": "tcp",
     "source": "nuclei:iis-shortname",
     "description": "A website running via IIS on an old .net framework contains a get request vulnerability. Using the the tilde character \"~\" in the request, an attacker can locate short names of files and folders not normally visible.",
-    "evidence": "matched-at: http://127.0.0.2:8081/*~1*/a.aspx\n--- request ---\nGET /*~1*/a.aspx HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (SS; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8\r\nOrigin: http://127.0.0.2:8081\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nDate: Fri, 23 Oct 2026 09:13:38 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\nContent-Length: 0\r\n\r\n",
+    "evidence": "matched-at: http://127.0.0.2:8081/*~1*/a.aspx\n--- request ---\nGET /*~1*/a.aspx HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8\r\nOrigin: http://127.0.0.2:8081\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nDate: Tue, 03 Nov 2026 23:02:46 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\nContent-Length: 0\r\n\r\n",
     "recommendation": "",
     "references": [
       "https://github.com/lijiejie/IIS_shortname_Scanner",
@@ -1360,7 +1360,7 @@
       "edb",
       "fuzzing"
     ],
-    "created": 1792747120.6476517,
+    "created": 1793747273.908153,
     "id": "67d7759e5bbe"
   },
   {
@@ -1371,7 +1371,7 @@
     "proto": "tcp",
     "source": "nuclei:graphql-detect",
     "description": "nuclei template `graphql-detect` matched.",
-    "evidence": "matched-at: http://127.0.0.2:8080/graphql\n--- request ---\nPOST /graphql HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1 Safari/605.1.15\r\nContent-Length: 67\r\nAccept: */*\r\nAccept-Language: en\r\nContent-Type: application/json\r\nAccept-Encoding: gzip\r\n\r\n{\"query\":\"query IntrospectionQuery{__schema {queryType { name }}}\"}\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 445\r\nContent-Type: application/json\r\nDate: Fri, 23 Oct 2026 09:14:07 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n{\"data\": {\"__schema\": {\"queryType\": {\"name\": \"Query\"}, \"mutationType\": {\"name\": \"Mutation\"}, \"types\": [{\"name\": \"Query\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"invoices\"}, {\"name\": \"users\"}, {\"name\": \"internalAuditLog\"}]}, {\"name\": \"Mutation\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"deleteInvoice\"}, {\"name\": \"promoteUserToAdmin\"}]}, {\"name\": \"User\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"id\"}, {\"name\": \"email\"}, {\"name\": \"passwordHash\"}]}]}}}",
+    "evidence": "matched-at: http://127.0.0.2:8080/graphql\n--- request ---\nPOST /graphql HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Kubuntu; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36\r\nContent-Length: 67\r\nAccept: */*\r\nAccept-Language: en\r\nContent-Type: application/json\r\nAccept-Encoding: gzip\r\n\r\n{\"query\":\"query IntrospectionQuery{__schema {queryType { name }}}\"}\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 445\r\nContent-Type: application/json\r\nDate: Tue, 03 Nov 2026 23:03:15 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n{\"data\": {\"__schema\": {\"queryType\": {\"name\": \"Query\"}, \"mutationType\": {\"name\": \"Mutation\"}, \"types\": [{\"name\": \"Query\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"invoices\"}, {\"name\": \"users\"}, {\"name\": \"internalAuditLog\"}]}, {\"name\": \"Mutation\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"deleteInvoice\"}, {\"name\": \"promoteUserToAdmin\"}]}, {\"name\": \"User\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"id\"}, {\"name\": \"email\"}, {\"name\": \"passwordHash\"}]}]}}}",
     "recommendation": "",
     "references": [],
     "review_required": true,
@@ -1382,7 +1382,7 @@
       "tech",
       "graphql"
     ],
-    "created": 1792747120.647899,
+    "created": 1793747273.9083579,
     "id": "010215d669d7"
   },
   {
@@ -1393,7 +1393,7 @@
     "proto": "tcp",
     "source": "nuclei:graphql-detect",
     "description": "nuclei template `graphql-detect` matched.",
-    "evidence": "matched-at: https://127.0.0.2:8443/graphql\n--- request ---\nPOST /graphql HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.6 Safari/605.1.15\r\nContent-Length: 67\r\nAccept: */*\r\nAccept-Language: en\r\nContent-Type: application/json\r\nAccept-Encoding: gzip\r\n\r\n{\"query\":\"query IntrospectionQuery{__schema {queryType { name }}}\"}\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 445\r\nContent-Type: application/json\r\nDate: Fri, 23 Oct 2026 09:14:07 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n{\"data\": {\"__schema\": {\"queryType\": {\"name\": \"Query\"}, \"mutationType\": {\"name\": \"Mutation\"}, \"types\": [{\"name\": \"Query\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"invoices\"}, {\"name\": \"users\"}, {\"name\": \"internalAuditLog\"}]}, {\"name\": \"Mutation\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"deleteInvoice\"}, {\"name\": \"promoteUserToAdmin\"}]}, {\"name\": \"User\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"id\"}, {\"name\": \"email\"}, {\"name\": \"passwordHash\"}]}]}}}",
+    "evidence": "matched-at: https://127.0.0.2:8443/graphql\n--- request ---\nPOST /graphql HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Debian; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36\r\nContent-Length: 67\r\nAccept: */*\r\nAccept-Language: en\r\nContent-Type: application/json\r\nAccept-Encoding: gzip\r\n\r\n{\"query\":\"query IntrospectionQuery{__schema {queryType { name }}}\"}\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 445\r\nContent-Type: application/json\r\nDate: Tue, 03 Nov 2026 23:03:15 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n{\"data\": {\"__schema\": {\"queryType\": {\"name\": \"Query\"}, \"mutationType\": {\"name\": \"Mutation\"}, \"types\": [{\"name\": \"Query\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"invoices\"}, {\"name\": \"users\"}, {\"name\": \"internalAuditLog\"}]}, {\"name\": \"Mutation\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"deleteInvoice\"}, {\"name\": \"promoteUserToAdmin\"}]}, {\"name\": \"User\", \"kind\": \"OBJECT\", \"fields\": [{\"name\": \"id\"}, {\"name\": \"email\"}, {\"name\": \"passwordHash\"}]}]}}}",
     "recommendation": "",
     "references": [],
     "review_required": true,
@@ -1404,7 +1404,7 @@
       "tech",
       "graphql"
     ],
-    "created": 1792747120.6479847,
+    "created": 1793747273.9084406,
     "id": "ef8db41de2b0"
   },
   {
@@ -1415,7 +1415,7 @@
     "proto": "tcp",
     "source": "nuclei:waf-detect",
     "description": "A web application firewall was detected.",
-    "evidence": "matched-at: http://127.0.0.2:8080\nmatcher: nginxgeneric\n--- request ---\nPOST / HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\r\nConnection: close\r\nContent-Length: 27\r\nContent-Type: application/x-www-form-urlencoded\r\nAccept-Encoding: gzip\r\n\r\n_=<script>alert(1)</script>\n--- response ---\nHTTP/1.1 405 Method Not Allowed\r\nContent-Length: 30\r\nContent-Type: application/json\r\nDate: Fri, 23 Oct 2026 09:14:21 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n{\"error\":\"method not allowed\"}",
+    "evidence": "matched-at: http://127.0.0.2:8080\nmatcher: nginxgeneric\n--- request ---\nPOST / HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (CentOS; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0\r\nConnection: close\r\nContent-Length: 27\r\nContent-Type: application/x-www-form-urlencoded\r\nAccept-Encoding: gzip\r\n\r\n_=<script>alert(1)</script>\n--- response ---\nHTTP/1.1 405 Method Not Allowed\r\nContent-Length: 30\r\nContent-Type: application/json\r\nDate: Tue, 03 Nov 2026 23:03:29 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n{\"error\":\"method not allowed\"}",
     "recommendation": "",
     "references": [
       "https://github.com/Ekultek/WhatWaf"
@@ -1429,7 +1429,7 @@
       "tech",
       "misc"
     ],
-    "created": 1792747120.6480653,
+    "created": 1793747273.9085307,
     "id": "7112eb8043c8"
   },
   {
@@ -1440,7 +1440,7 @@
     "proto": "tcp",
     "source": "nuclei:generic-env",
     "description": "A .env file was discovered containing sensitive information like database credentials and tokens. It should not be publicly accessible.",
-    "evidence": "matched-at: http://127.0.0.2:8080/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.1 Safari/605.1.15\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Fri, 23 Oct 2026 09:14:47 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
+    "evidence": "matched-at: http://127.0.0.2:8080/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.18362\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Tue, 03 Nov 2026 23:04:00 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -1452,7 +1452,7 @@
       "exposure",
       "env"
     ],
-    "created": 1792747120.6481397,
+    "created": 1793747273.9086094,
     "id": "720530f438aa"
   },
   {
@@ -1463,7 +1463,7 @@
     "proto": "tcp",
     "source": "nuclei:generic-env",
     "description": "A .env file was discovered containing sensitive information like database credentials and tokens. It should not be publicly accessible.",
-    "evidence": "matched-at: https://127.0.0.2:8443/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Mac OS X 13_2) AppleWebKit/537.36 (KHTML, like Gecko) Edge/119.0 Safari/537.36\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Fri, 23 Oct 2026 09:14:47 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
+    "evidence": "matched-at: https://127.0.0.2:8443/.env\n--- request ---\nGET /.env HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.0.2 Safari/605.1.15\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 305\r\nContent-Type: text/plain\r\nDate: Tue, 03 Nov 2026 23:04:00 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -1475,7 +1475,7 @@
       "exposure",
       "env"
     ],
-    "created": 1792747120.6482222,
+    "created": 1793747273.908693,
     "id": "98fae4c1fe73"
   },
   {
@@ -1501,7 +1501,7 @@
       "network",
       "enum"
     ],
-    "created": 1792747120.648312,
+    "created": 1793747273.908783,
     "id": "cbe3eb8647ac"
   },
   {
@@ -1527,7 +1527,7 @@
       "network",
       "enum"
     ],
-    "created": 1792747120.6485472,
+    "created": 1793747273.9090085,
     "id": "fcb39868739d"
   },
   {
@@ -1553,7 +1553,7 @@
       "network",
       "enum"
     ],
-    "created": 1792747120.6488137,
+    "created": 1793747273.9092388,
     "id": "2918dce784bd"
   },
   {
@@ -1579,7 +1579,7 @@
       "network",
       "enum"
     ],
-    "created": 1792747120.648889,
+    "created": 1793747273.9093044,
     "id": "0b6a81264866"
   },
   {
@@ -1605,7 +1605,7 @@
       "detection",
       "tcp"
     ],
-    "created": 1792747120.648969,
+    "created": 1793747273.909357,
     "id": "0c196504965a"
   },
   {
@@ -1632,7 +1632,7 @@
       "exposure",
       "tcp"
     ],
-    "created": 1792747120.6491961,
+    "created": 1793747273.909501,
     "id": "759c3c5eb831"
   },
   {
@@ -1663,7 +1663,7 @@
       "shad0w",
       "tcp"
     ],
-    "created": 1792747120.649404,
+    "created": 1793747273.9097044,
     "id": "84d32e4311cc"
   },
   {
@@ -1690,7 +1690,7 @@
       "misconfig",
       "tcp"
     ],
-    "created": 1792747120.6494749,
+    "created": 1793747273.909764,
     "id": "b51d50f8db5a"
   },
   {
@@ -1721,7 +1721,7 @@
       "macc2",
       "tcp"
     ],
-    "created": 1792747120.6496975,
+    "created": 1793747273.9099898,
     "id": "a40fdd41077b"
   },
   {
@@ -1752,7 +1752,7 @@
       "mythic",
       "tcp"
     ],
-    "created": 1792747120.6497645,
+    "created": 1793747273.9100547,
     "id": "bc67d623b53b"
   },
   {
@@ -1783,7 +1783,7 @@
       "shad0w",
       "tcp"
     ],
-    "created": 1792747120.6498306,
+    "created": 1793747273.9100971,
     "id": "ecd97496d837"
   },
   {
@@ -1814,8 +1814,31 @@
       "silenttrinity",
       "tcp"
     ],
-    "created": 1792747120.649899,
+    "created": 1793747273.9101388,
     "id": "85aa10ae7f18"
+  },
+  {
+    "title": "Microsoft IIS version detect",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8081,
+    "proto": "tcp",
+    "source": "nuclei:microsoft-iis-version",
+    "description": "Some Microsoft IIS servers have the version on the response header. Useful when you need to find specific CVEs on your targets.",
+    "evidence": "matched-at: http://127.0.0.2:8081\nextracted: Microsoft-IIS/8.5\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Ubuntu; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/html\r\nDate: Tue, 03 Nov 2026 23:05:24 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\n\r\n<html><title>Intranet</title></html>",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "tech",
+      "microsoft",
+      "iis"
+    ],
+    "created": 1793747273.9101834,
+    "id": "72e75805a3c7"
   },
   {
     "title": "TLS Version - Detect",
@@ -1836,8 +1859,138 @@
       "ssl",
       "tls"
     ],
-    "created": 1792747120.649965,
+    "created": 1793747273.910223,
     "id": "cd2063de4285"
+  },
+  {
+    "title": "FingerprintHub Technology Fingerprint",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 9200,
+    "proto": "tcp",
+    "source": "nuclei:fingerprinthub-web-fingerprints",
+    "description": "FingerprintHub Technology Fingerprint tests run in nuclei.",
+    "evidence": "matched-at: http://127.0.0.2:9200\nmatcher: elasticsearch\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:9200\r\nUser-Agent: Mozilla/5.0 (Debian; Linux i686; rv:123.0) Gecko/20100101 Firefox/123.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 200 OK\r\nConnection: close\r\nContent-Length: 247\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{\n  \"name\" : \"es-node-1\",\n  \"cluster_name\" : \"billing-logs\",\n  \"cluster_uuid\" : \"lab-cluster-uuid\",\n  \"version\" : {\n    \"number\" : \"6.8.0\",\n    \"build_flavor\" : \"default\",\n    \"lucene_version\" : \"7.7.0\"\n  },\n  \"tagline\" : \"You Know, for Search\"\n}\n",
+    "recommendation": "",
+    "references": [
+      "https://github.com/0x727/FingerprintHub"
+    ],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "tech"
+    ],
+    "created": 1793747273.9103076,
+    "id": "49bae7745563"
+  },
+  {
+    "title": "Wappalyzer Technology Detection",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8081,
+    "proto": "tcp",
+    "source": "nuclei:tech-detect",
+    "description": "nuclei template `tech-detect` matched.",
+    "evidence": "matched-at: http://127.0.0.2:8081\nmatcher: ms-iis\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (ZZ; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/html\r\nDate: Tue, 03 Nov 2026 23:05:34 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\n\r\n<html><title>Intranet</title></html>",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "tech"
+    ],
+    "created": 1793747273.9103506,
+    "id": "06473c3fb5e2"
+  },
+  {
+    "title": "Wappalyzer Technology Detection",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nuclei:tech-detect",
+    "description": "nuclei template `tech-detect` matched.",
+    "evidence": "matched-at: https://127.0.0.2:8443\nmatcher: express\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Debian; Linux i686; rv:122.0) Gecko/20100101 Firefox/122.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 390\r\nContent-Type: text/html; charset=utf-8\r\nDate: Tue, 03 Nov 2026 23:05:34 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<h1>ACME Billing API Console</h1>\n<p>Internal use only. API reference: <a href=\"/swagger.json\">/swagger.json</a></p>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "tech"
+    ],
+    "created": 1793747273.9103944,
+    "id": "1b2221bc42f0"
+  },
+  {
+    "title": "Wappalyzer Technology Detection",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8080,
+    "proto": "tcp",
+    "source": "nuclei:tech-detect",
+    "description": "nuclei template `tech-detect` matched.",
+    "evidence": "matched-at: http://127.0.0.2:8080\nmatcher: express\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (SS; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 390\r\nContent-Type: text/html; charset=utf-8\r\nDate: Tue, 03 Nov 2026 23:05:34 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<h1>ACME Billing API Console</h1>\n<p>Internal use only. API reference: <a href=\"/swagger.json\">/swagger.json</a></p>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "tech"
+    ],
+    "created": 1793747273.9104524,
+    "id": "d3488bb27e56"
+  },
+  {
+    "title": "Nginx version detect",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8080,
+    "proto": "tcp",
+    "source": "nuclei:nginx-version",
+    "description": "Some nginx servers have the version on the response header. Useful when you need to find specific CVEs on your targets.",
+    "evidence": "matched-at: http://127.0.0.2:8080\nextracted: nginx/1.18.0\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/116.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 390\r\nContent-Type: text/html; charset=utf-8\r\nDate: Tue, 03 Nov 2026 23:05:36 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<h1>ACME Billing API Console</h1>\n<p>Internal use only. API reference: <a href=\"/swagger.json\">/swagger.json</a></p>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "tech",
+      "nginx"
+    ],
+    "created": 1793747273.9105978,
+    "id": "1fa03fa2300a"
+  },
+  {
+    "title": "Nginx version detect",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nuclei:nginx-version",
+    "description": "Some nginx servers have the version on the response header. Useful when you need to find specific CVEs on your targets.",
+    "evidence": "matched-at: https://127.0.0.2:8443\nextracted: nginx/1.18.0\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Debian; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 390\r\nContent-Type: text/html; charset=utf-8\r\nDate: Tue, 03 Nov 2026 23:05:36 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<h1>ACME Billing API Console</h1>\n<p>Internal use only. API reference: <a href=\"/swagger.json\">/swagger.json</a></p>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "tech",
+      "nginx"
+    ],
+    "created": 1793747273.9106407,
+    "id": "275857b8131a"
   },
   {
     "title": "robots.txt file",
@@ -1847,7 +2000,7 @@
     "proto": "tcp",
     "source": "nuclei:robots-txt",
     "description": "nuclei template `robots-txt` matched.",
-    "evidence": "matched-at: http://127.0.0.2:8080/robots.txt\n--- request ---\nGET /robots.txt HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (SS; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 51\r\nContent-Type: text/plain\r\nDate: Fri, 23 Oct 2026 09:16:19 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nUser-agent: *\nDisallow: /admin\nDisallow: /internal\n",
+    "evidence": "matched-at: http://127.0.0.2:8080/robots.txt\n--- request ---\nGET /robots.txt HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Ubuntu; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 51\r\nContent-Type: text/plain\r\nDate: Tue, 03 Nov 2026 23:06:09 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nUser-agent: *\nDisallow: /admin\nDisallow: /internal\n",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -1859,7 +2012,7 @@
       "misc",
       "generic"
     ],
-    "created": 1792747120.6500974,
+    "created": 1793747273.9106894,
     "id": "2458daefe313"
   },
   {
@@ -1870,7 +2023,7 @@
     "proto": "tcp",
     "source": "nuclei:robots-txt",
     "description": "nuclei template `robots-txt` matched.",
-    "evidence": "matched-at: https://127.0.0.2:8443/robots.txt\n--- request ---\nGET /robots.txt HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (ZZ; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 51\r\nContent-Type: text/plain\r\nDate: Fri, 23 Oct 2026 09:16:19 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nUser-agent: *\nDisallow: /admin\nDisallow: /internal\n",
+    "evidence": "matched-at: https://127.0.0.2:8443/robots.txt\n--- request ---\nGET /robots.txt HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Debian; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 51\r\nContent-Type: text/plain\r\nDate: Tue, 03 Nov 2026 23:06:09 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nUser-agent: *\nDisallow: /admin\nDisallow: /internal\n",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -1882,217 +2035,8 @@
       "misc",
       "generic"
     ],
-    "created": 1792747120.6501691,
+    "created": 1793747273.9107332,
     "id": "60951840101f"
-  },
-  {
-    "title": "AspNet Version Disclosure - Detect",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8081,
-    "proto": "tcp",
-    "source": "nuclei:aspnet-version-detect",
-    "description": "Detects version disclosed via 'X-AspNet-Version' header.",
-    "evidence": "matched-at: http://127.0.0.2:8081\nextracted: 4.0.30319\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/html\r\nDate: Fri, 23 Oct 2026 09:16:29 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\n\r\n<html><title>Intranet</title></html>",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "tech",
-      "detect",
-      "aspnet"
-    ],
-    "created": 1792747120.6502457,
-    "id": "acfad0ff5321"
-  },
-  {
-    "title": "Composer Config - Detect",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 2375,
-    "proto": "tcp",
-    "source": "nuclei:composer-config",
-    "description": "Composer configuration file detected.",
-    "evidence": "matched-at: http://127.0.0.2:2375/composer.json\nmatcher: composer.lock\n--- request ---\nGET /composer.json HTTP/1.1\r\nHost: 127.0.0.2:2375\r\nUser-Agent: Mozilla/5.0 (Windows; U; Windows NT 6.1; sv-SE) AppleWebKit/533.19.4 (KHTML, like Gecko) Version/5.0.3 Safari/533.19.4\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 404 Not Found\r\nConnection: close\r\nContent-Length: 29\r\nContent-Type: application/json\r\nDate: Fri, 23 Oct 2026 09:16:37 GMT\r\n\r\n{\"message\":\"page not found\"}\n",
-    "recommendation": "",
-    "references": [
-      "https://getcomposer.org/"
-    ],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "config",
-      "exposure"
-    ],
-    "created": 1792747120.6503205,
-    "id": "f45bd0c48a5f"
-  },
-  {
-    "title": "Composer Config - Detect",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 9200,
-    "proto": "tcp",
-    "source": "nuclei:composer-config",
-    "description": "Composer configuration file detected.",
-    "evidence": "matched-at: http://127.0.0.2:9200/composer.json\nmatcher: composer.lock\n--- request ---\nGET /composer.json HTTP/1.1\r\nHost: 127.0.0.2:9200\r\nUser-Agent: Mozilla/5.0 (ZZ; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 404 Not Found\r\nConnection: close\r\nContent-Length: 35\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{\n  \"message\" : \"page not found\"\n}\n",
-    "recommendation": "",
-    "references": [
-      "https://getcomposer.org/"
-    ],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "config",
-      "exposure"
-    ],
-    "created": 1792747120.6504674,
-    "id": "de38db6cebd7"
-  },
-  {
-    "title": "Microsoft IIS version detect",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8081,
-    "proto": "tcp",
-    "source": "nuclei:microsoft-iis-version",
-    "description": "Some Microsoft IIS servers have the version on the response header. Useful when you need to find specific CVEs on your targets.",
-    "evidence": "matched-at: http://127.0.0.2:8081\nextracted: Microsoft-IIS/8.5\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Safari/605.1.15\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/html\r\nDate: Fri, 23 Oct 2026 09:16:53 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\n\r\n<html><title>Intranet</title></html>",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "tech",
-      "microsoft",
-      "iis"
-    ],
-    "created": 1792747120.6509032,
-    "id": "72e75805a3c7"
-  },
-  {
-    "title": "HTTP Missing Security Headers",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8081,
-    "proto": "tcp",
-    "source": "nuclei:http-missing-security-headers",
-    "description": "This template searches for missing HTTP security headers. The impact of these missing headers can vary.",
-    "evidence": "matched-at: http://127.0.0.2:8081\nmatcher: clear-site-data\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/html\r\nDate: Fri, 23 Oct 2026 09:17:02 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\n\r\n<html><title>Intranet</title></html>",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "misconfig",
-      "headers",
-      "generic"
-    ],
-    "created": 1792747120.6509745,
-    "id": "641ec58957ef"
-  },
-  {
-    "title": "HTTP Missing Security Headers",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 2375,
-    "proto": "tcp",
-    "source": "nuclei:http-missing-security-headers",
-    "description": "This template searches for missing HTTP security headers. The impact of these missing headers can vary.",
-    "evidence": "matched-at: http://127.0.0.2:2375\nmatcher: x-content-type-options\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:2375\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:134.0) Gecko/20100101 Firefox/134.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 404 Not Found\r\nConnection: close\r\nContent-Length: 29\r\nContent-Type: application/json\r\nDate: Fri, 23 Oct 2026 09:17:02 GMT\r\n\r\n{\"message\":\"page not found\"}\n",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "misconfig",
-      "headers",
-      "generic"
-    ],
-    "created": 1792747120.6517613,
-    "id": "e3685b98616a"
-  },
-  {
-    "title": "HTTP Missing Security Headers",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "source": "nuclei:http-missing-security-headers",
-    "description": "This template searches for missing HTTP security headers. The impact of these missing headers can vary.",
-    "evidence": "matched-at: http://127.0.0.2:8080\nmatcher: strict-transport-security\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 273\r\nContent-Type: text/html; charset=utf-8\r\nDate: Fri, 23 Oct 2026 09:17:02 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "misconfig",
-      "headers",
-      "generic"
-    ],
-    "created": 1792747120.6525338,
-    "id": "4cd04228c942"
-  },
-  {
-    "title": "HTTP Missing Security Headers",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 9200,
-    "proto": "tcp",
-    "source": "nuclei:http-missing-security-headers",
-    "description": "This template searches for missing HTTP security headers. The impact of these missing headers can vary.",
-    "evidence": "matched-at: http://127.0.0.2:9200\nmatcher: strict-transport-security\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:9200\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 200 OK\r\nConnection: close\r\nContent-Length: 247\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{\n  \"name\" : \"es-node-1\",\n  \"cluster_name\" : \"billing-logs\",\n  \"cluster_uuid\" : \"lab-cluster-uuid\",\n  \"version\" : {\n    \"number\" : \"6.8.0\",\n    \"build_flavor\" : \"default\",\n    \"lucene_version\" : \"7.7.0\"\n  },\n  \"tagline\" : \"You Know, for Search\"\n}\n",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "misconfig",
-      "headers",
-      "generic"
-    ],
-    "created": 1792747120.6533198,
-    "id": "2fe9e8c251b4"
-  },
-  {
-    "title": "HTTP Missing Security Headers",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8443,
-    "proto": "tcp",
-    "source": "nuclei:http-missing-security-headers",
-    "description": "This template searches for missing HTTP security headers. The impact of these missing headers can vary.",
-    "evidence": "matched-at: https://127.0.0.2:8443\nmatcher: strict-transport-security\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (ZZ; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 273\r\nContent-Type: text/html; charset=utf-8\r\nDate: Fri, 23 Oct 2026 09:17:02 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "misconfig",
-      "headers",
-      "generic"
-    ],
-    "created": 1792747120.6541357,
-    "id": "a833dbc478bb"
   },
   {
     "title": "AspNetMvc Version - Detect",
@@ -2102,7 +2046,7 @@
     "proto": "tcp",
     "source": "nuclei:aspnetmvc-version-disclosure",
     "description": "Detects version disclosed via 'X-AspNetMvc-Version' header.",
-    "evidence": "matched-at: http://127.0.0.2:8081\nextracted: 5.2\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Macintosh, Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/html\r\nDate: Fri, 23 Oct 2026 09:17:29 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\n\r\n<html><title>Intranet</title></html>",
+    "evidence": "matched-at: http://127.0.0.2:8081\nextracted: 5.2\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Knoppix; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/html\r\nDate: Tue, 03 Nov 2026 23:06:31 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\n\r\n<html><title>Intranet</title></html>",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -2114,18 +2058,18 @@
       "tech",
       "detect"
     ],
-    "created": 1792747120.6549346,
+    "created": 1793747273.910777,
     "id": "1b006e2a7b0f"
   },
   {
-    "title": "Nginx version detect",
+    "title": "AspNet Version Disclosure - Detect",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 8080,
+    "port": 8081,
     "proto": "tcp",
-    "source": "nuclei:nginx-version",
-    "description": "Some nginx servers have the version on the response header. Useful when you need to find specific CVEs on your targets.",
-    "evidence": "matched-at: http://127.0.0.2:8080\nextracted: nginx/1.18.0\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (ZZ; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 273\r\nContent-Type: text/html; charset=utf-8\r\nDate: Fri, 23 Oct 2026 09:17:59 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
+    "source": "nuclei:aspnet-version-detect",
+    "description": "Detects version disclosed via 'X-AspNet-Version' header.",
+    "evidence": "matched-at: http://127.0.0.2:8081\nextracted: 4.0.30319\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Knoppix; Linux i686; rv:124.0) Gecko/20100101 Firefox/124.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/html\r\nDate: Tue, 03 Nov 2026 23:06:55 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\n\r\n<html><title>Intranet</title></html>",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -2134,32 +2078,11 @@
     "tags": [
       "nuclei",
       "tech",
-      "nginx"
+      "detect",
+      "aspnet"
     ],
-    "created": 1792747120.6550095,
-    "id": "1fa03fa2300a"
-  },
-  {
-    "title": "Nginx version detect",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8443,
-    "proto": "tcp",
-    "source": "nuclei:nginx-version",
-    "description": "Some nginx servers have the version on the response header. Useful when you need to find specific CVEs on your targets.",
-    "evidence": "matched-at: https://127.0.0.2:8443\nextracted: nginx/1.18.0\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 273\r\nContent-Type: text/html; charset=utf-8\r\nDate: Fri, 23 Oct 2026 09:17:59 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "tech",
-      "nginx"
-    ],
-    "created": 1792747120.6550834,
-    "id": "275857b8131a"
+    "created": 1793747273.9108207,
+    "id": "acfad0ff5321"
   },
   {
     "title": "ElasticSearch Information Disclosure",
@@ -2169,7 +2092,7 @@
     "proto": "tcp",
     "source": "nuclei:elasticsearch",
     "description": "Internal information is exposed in elasticsearch to external users.",
-    "evidence": "matched-at: http://127.0.0.2:9200/?pretty\nextracted: 6.8.0\n--- request ---\nGET /?pretty HTTP/1.1\r\nHost: 127.0.0.2:9200\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 200 OK\r\nConnection: close\r\nContent-Length: 247\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{\n  \"name\" : \"es-node-1\",\n  \"cluster_name\" : \"billing-logs\",\n  \"cluster_uuid\" : \"lab-cluster-uuid\",\n  \"version\" : {\n    \"number\" : \"6.8.0\",\n    \"build_flavor\" : \"default\",\n    \"lucene_version\" : \"7.7.0\"\n  },\n  \"tagline\" : \"You Know, for Search\"\n}\n",
+    "evidence": "matched-at: http://127.0.0.2:9200/?pretty\nextracted: 6.8.0\n--- request ---\nGET /?pretty HTTP/1.1\r\nHost: 127.0.0.2:9200\r\nUser-Agent: Mozilla/5.0 (Macintosh: Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 200 OK\r\nConnection: close\r\nContent-Length: 247\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{\n  \"name\" : \"es-node-1\",\n  \"cluster_name\" : \"billing-logs\",\n  \"cluster_uuid\" : \"lab-cluster-uuid\",\n  \"version\" : {\n    \"number\" : \"6.8.0\",\n    \"build_flavor\" : \"default\",\n    \"lucene_version\" : \"7.7.0\"\n  },\n  \"tagline\" : \"You Know, for Search\"\n}\n",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -2182,18 +2105,18 @@
       "elasticsearch",
       "misconfig"
     ],
-    "created": 1792747120.6551597,
+    "created": 1793747273.91088,
     "id": "6e23fe0d24ce"
   },
   {
-    "title": "Allowed Options Method",
+    "title": "HTTP Missing Security Headers",
     "severity": "info",
     "host": "127.0.0.2",
     "port": 8081,
     "proto": "tcp",
-    "source": "nuclei:options-method",
-    "description": "nuclei template `options-method` matched.",
-    "evidence": "matched-at: http://127.0.0.2:8081\nextracted: OPTIONS, GET, HEAD, POST, COPY, PROPFIND, DELETE, MOVE, PROPPATCH, MKCOL, LOCK, UNLOCK, PUT\n--- request ---\nOPTIONS / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Knoppix; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nAllow: OPTIONS, GET, HEAD, POST, COPY, PROPFIND, DELETE, MOVE, PROPPATCH, MKCOL, LOCK, UNLOCK, PUT\r\nContent-Type: text/html\r\nDate: Fri, 23 Oct 2026 09:18:17 GMT\r\nDav: 1, 2\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\nContent-Length: 0\r\n\r\n",
+    "source": "nuclei:http-missing-security-headers",
+    "description": "This template searches for missing HTTP security headers. The impact of these missing headers can vary.",
+    "evidence": "matched-at: http://127.0.0.2:8081\nmatcher: cross-origin-resource-policy\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/html\r\nDate: Tue, 03 Nov 2026 23:07:02 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\n\r\n<html><title>Intranet</title></html>",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -2201,12 +2124,104 @@
     "confidence": "firm",
     "tags": [
       "nuclei",
-      "miscellaneous",
-      "misc",
+      "misconfig",
+      "headers",
       "generic"
     ],
-    "created": 1792747120.6552584,
-    "id": "8170d4160ad7"
+    "created": 1793747273.9109387,
+    "id": "641ec58957ef"
+  },
+  {
+    "title": "HTTP Missing Security Headers",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 9200,
+    "proto": "tcp",
+    "source": "nuclei:http-missing-security-headers",
+    "description": "This template searches for missing HTTP security headers. The impact of these missing headers can vary.",
+    "evidence": "matched-at: http://127.0.0.2:9200\nmatcher: cross-origin-opener-policy\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:9200\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.10 Safari/605.1.15\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 200 OK\r\nConnection: close\r\nContent-Length: 247\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{\n  \"name\" : \"es-node-1\",\n  \"cluster_name\" : \"billing-logs\",\n  \"cluster_uuid\" : \"lab-cluster-uuid\",\n  \"version\" : {\n    \"number\" : \"6.8.0\",\n    \"build_flavor\" : \"default\",\n    \"lucene_version\" : \"7.7.0\"\n  },\n  \"tagline\" : \"You Know, for Search\"\n}\n",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "misconfig",
+      "headers",
+      "generic"
+    ],
+    "created": 1793747273.9114244,
+    "id": "2fe9e8c251b4"
+  },
+  {
+    "title": "HTTP Missing Security Headers",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8080,
+    "proto": "tcp",
+    "source": "nuclei:http-missing-security-headers",
+    "description": "This template searches for missing HTTP security headers. The impact of these missing headers can vary.",
+    "evidence": "matched-at: http://127.0.0.2:8080\nmatcher: strict-transport-security\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/17.17134\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 390\r\nContent-Type: text/html; charset=utf-8\r\nDate: Tue, 03 Nov 2026 23:07:02 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<h1>ACME Billing API Console</h1>\n<p>Internal use only. API reference: <a href=\"/swagger.json\">/swagger.json</a></p>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "misconfig",
+      "headers",
+      "generic"
+    ],
+    "created": 1793747273.9120505,
+    "id": "4cd04228c942"
+  },
+  {
+    "title": "HTTP Missing Security Headers",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8443,
+    "proto": "tcp",
+    "source": "nuclei:http-missing-security-headers",
+    "description": "This template searches for missing HTTP security headers. The impact of these missing headers can vary.",
+    "evidence": "matched-at: https://127.0.0.2:8443\nmatcher: referrer-policy\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0.1 Safari/605.1.15\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 390\r\nContent-Type: text/html; charset=utf-8\r\nDate: Tue, 03 Nov 2026 23:07:02 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<h1>ACME Billing API Console</h1>\n<p>Internal use only. API reference: <a href=\"/swagger.json\">/swagger.json</a></p>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "misconfig",
+      "headers",
+      "generic"
+    ],
+    "created": 1793747273.9125493,
+    "id": "a833dbc478bb"
+  },
+  {
+    "title": "HTTP Missing Security Headers",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 2375,
+    "proto": "tcp",
+    "source": "nuclei:http-missing-security-headers",
+    "description": "This template searches for missing HTTP security headers. The impact of these missing headers can vary.",
+    "evidence": "matched-at: http://127.0.0.2:2375\nmatcher: clear-site-data\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:2375\r\nUser-Agent: Mozilla/5.0 (Debian; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 404 Not Found\r\nConnection: close\r\nContent-Length: 29\r\nContent-Type: application/json\r\nDate: Tue, 03 Nov 2026 23:07:02 GMT\r\n\r\n{\"message\":\"page not found\"}\n",
+    "recommendation": "",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "nuclei",
+      "misconfig",
+      "headers",
+      "generic"
+    ],
+    "created": 1793747273.9130242,
+    "id": "e3685b98616a"
   },
   {
     "title": "robots.txt endpoint prober",
@@ -2216,7 +2231,7 @@
     "proto": "tcp",
     "source": "nuclei:robots-txt-endpoint",
     "description": "nuclei template `robots-txt-endpoint` matched.",
-    "evidence": "matched-at: http://127.0.0.2:8080/robots.txt\n--- request ---\nGET /robots.txt HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Ubuntu; Linux i686; rv:132.0) Gecko/20100101 Firefox/132.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 51\r\nContent-Type: text/plain\r\nDate: Fri, 23 Oct 2026 09:18:21 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nUser-agent: *\nDisallow: /admin\nDisallow: /internal\n",
+    "evidence": "matched-at: http://127.0.0.2:8080/robots.txt\n--- request ---\nGET /robots.txt HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Ubuntu; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 51\r\nContent-Type: text/plain\r\nDate: Tue, 03 Nov 2026 23:07:06 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nUser-agent: *\nDisallow: /admin\nDisallow: /internal\n",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -2228,7 +2243,7 @@
       "misc",
       "generic"
     ],
-    "created": 1792747120.6553292,
+    "created": 1793747273.9134889,
     "id": "8420f8597110"
   },
   {
@@ -2239,7 +2254,7 @@
     "proto": "tcp",
     "source": "nuclei:robots-txt-endpoint",
     "description": "nuclei template `robots-txt-endpoint` matched.",
-    "evidence": "matched-at: https://127.0.0.2:8443/robots.txt\n--- request ---\nGET /robots.txt HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (SS; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 51\r\nContent-Type: text/plain\r\nDate: Fri, 23 Oct 2026 09:18:21 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nUser-agent: *\nDisallow: /admin\nDisallow: /internal\n",
+    "evidence": "matched-at: https://127.0.0.2:8443/robots.txt\n--- request ---\nGET /robots.txt HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (Ubuntu; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 51\r\nContent-Type: text/plain\r\nDate: Tue, 03 Nov 2026 23:07:06 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\nUser-agent: *\nDisallow: /admin\nDisallow: /internal\n",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -2251,62 +2266,66 @@
       "misc",
       "generic"
     ],
-    "created": 1792747120.6553996,
+    "created": 1793747273.913532,
     "id": "160d4175f9fb"
   },
   {
-    "title": "Wappalyzer Technology Detection",
+    "title": "Composer Config - Detect",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 8081,
+    "port": 2375,
     "proto": "tcp",
-    "source": "nuclei:tech-detect",
-    "description": "nuclei template `tech-detect` matched.",
-    "evidence": "matched-at: http://127.0.0.2:8081\nmatcher: ms-iis\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 36\r\nContent-Type: text/html\r\nDate: Fri, 23 Oct 2026 09:18:32 GMT\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\n\r\n<html><title>Intranet</title></html>",
+    "source": "nuclei:composer-config",
+    "description": "Composer configuration file detected.",
+    "evidence": "matched-at: http://127.0.0.2:2375/composer.json\nmatcher: composer.lock\n--- request ---\nGET /composer.json HTTP/1.1\r\nHost: 127.0.0.2:2375\r\nUser-Agent: Mozilla/5.0 (SS; Linux i686; rv:126.0) Gecko/20100101 Firefox/126.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 404 Not Found\r\nConnection: close\r\nContent-Length: 29\r\nContent-Type: application/json\r\nDate: Tue, 03 Nov 2026 23:07:32 GMT\r\n\r\n{\"message\":\"page not found\"}\n",
     "recommendation": "",
-    "references": [],
+    "references": [
+      "https://getcomposer.org/"
+    ],
     "review_required": false,
     "review_reason": "",
     "confidence": "firm",
     "tags": [
       "nuclei",
-      "tech"
+      "config",
+      "exposure"
     ],
-    "created": 1792747120.6554697,
-    "id": "06473c3fb5e2"
+    "created": 1793747273.91358,
+    "id": "f45bd0c48a5f"
   },
   {
-    "title": "FingerprintHub Technology Fingerprint",
+    "title": "Composer Config - Detect",
     "severity": "info",
     "host": "127.0.0.2",
     "port": 9200,
     "proto": "tcp",
-    "source": "nuclei:fingerprinthub-web-fingerprints",
-    "description": "FingerprintHub Technology Fingerprint tests run in nuclei.",
-    "evidence": "matched-at: http://127.0.0.2:9200\nmatcher: elasticsearch\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:9200\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 200 OK\r\nConnection: close\r\nContent-Length: 247\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{\n  \"name\" : \"es-node-1\",\n  \"cluster_name\" : \"billing-logs\",\n  \"cluster_uuid\" : \"lab-cluster-uuid\",\n  \"version\" : {\n    \"number\" : \"6.8.0\",\n    \"build_flavor\" : \"default\",\n    \"lucene_version\" : \"7.7.0\"\n  },\n  \"tagline\" : \"You Know, for Search\"\n}\n",
+    "source": "nuclei:composer-config",
+    "description": "Composer configuration file detected.",
+    "evidence": "matched-at: http://127.0.0.2:9200/composer.json\nmatcher: composer.lock\n--- request ---\nGET /composer.json HTTP/1.1\r\nHost: 127.0.0.2:9200\r\nUser-Agent: Mozilla/5.0 (ZZ; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.0 404 Not Found\r\nConnection: close\r\nContent-Length: 35\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{\n  \"message\" : \"page not found\"\n}\n",
     "recommendation": "",
     "references": [
-      "https://github.com/0x727/FingerprintHub"
+      "https://getcomposer.org/"
     ],
     "review_required": false,
     "review_reason": "",
     "confidence": "firm",
     "tags": [
       "nuclei",
-      "tech"
+      "config",
+      "exposure"
     ],
-    "created": 1792747120.6555517,
-    "id": "49bae7745563"
+    "created": 1793747273.9136245,
+    "id": "de38db6cebd7"
   },
   {
-    "title": "Wappalyzer Technology Detection",
+    "title": "Allowed Options Method",
     "severity": "info",
     "host": "127.0.0.2",
-    "port": 8443,
+    "port": 8081,
     "proto": "tcp",
-    "source": "nuclei:tech-detect",
-    "description": "nuclei template `tech-detect` matched.",
-    "evidence": "matched-at: https://127.0.0.2:8443\nmatcher: express\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8443\r\nUser-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 273\r\nContent-Type: text/html; charset=utf-8\r\nDate: Fri, 23 Oct 2026 09:18:32 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
+    "source": "nuclei:options-method",
+    "description": "nuclei template `options-method` matched.",
+    "evidence": "matched-at: http://127.0.0.2:8081\nextracted: OPTIONS, GET, HEAD, POST, COPY, PROPFIND, DELETE, MOVE, PROPPATCH, MKCOL, LOCK, UNLOCK, PUT\n--- request ---\nOPTIONS / HTTP/1.1\r\nHost: 127.0.0.2:8081\r\nUser-Agent: Mozilla/5.0 (Windows NT 11.0) AppleWebKit/537.36 (KHTML, like Gecko) Safari/121.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nAllow: OPTIONS, GET, HEAD, POST, COPY, PROPFIND, DELETE, MOVE, PROPPATCH, MKCOL, LOCK, UNLOCK, PUT\r\nContent-Type: text/html\r\nDate: Tue, 03 Nov 2026 23:07:35 GMT\r\nDav: 1, 2\r\nServer: Microsoft-IIS/8.5\r\nX-Aspnet-Version: 4.0.30319\r\nX-Aspnetmvc-Version: 5.2\r\nX-Powered-By: ASP.NET\r\nContent-Length: 0\r\n\r\n",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -2314,31 +2333,12 @@
     "confidence": "firm",
     "tags": [
       "nuclei",
-      "tech"
+      "miscellaneous",
+      "misc",
+      "generic"
     ],
-    "created": 1792747120.6556246,
-    "id": "1b2221bc42f0"
-  },
-  {
-    "title": "Wappalyzer Technology Detection",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "source": "nuclei:tech-detect",
-    "description": "nuclei template `tech-detect` matched.",
-    "evidence": "matched-at: http://127.0.0.2:8080\nmatcher: express\n--- request ---\nGET / HTTP/1.1\r\nHost: 127.0.0.2:8080\r\nUser-Agent: Mozilla/5.0 (Knoppix; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36\r\nConnection: close\r\nAccept: */*\r\nAccept-Language: en\r\nAccept-Encoding: gzip\r\n\r\n\n--- response ---\nHTTP/1.1 200 OK\r\nContent-Length: 273\r\nContent-Type: text/html; charset=utf-8\r\nDate: Fri, 23 Oct 2026 09:18:32 GMT\r\nServer: nginx/1.18.0\r\nX-Powered-By: Express\r\n\r\n<!doctype html>\n<html><head><title>ACME Billing &mdash; API Console</title></head>\n<body>\n<div id=\"swagger-ui\"></div>\n<script src=\"/static/swagger-ui-bundle.js\"></script>\n<script>\n  SwaggerUIBundle({ url: \"/swagger.json\", dom_id: '#swagger-ui' });\n</script>\n</body></html>\n",
-    "recommendation": "",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "nuclei",
-      "tech"
-    ],
-    "created": 1792747120.655765,
-    "id": "d3488bb27e56"
+    "created": 1793747273.9139218,
+    "id": "8170d4160ad7"
   },
   {
     "title": "Detect SSL Certificate Issuer",
@@ -2359,7 +2359,7 @@
       "ssl",
       "tls"
     ],
-    "created": 1792747120.6559055,
+    "created": 1793747273.9139612,
     "id": "dc22c6b07c6a"
   },
   {
@@ -2384,7 +2384,7 @@
       "tls",
       "self-signed"
     ],
-    "created": 1792747120.6559718,
+    "created": 1793747273.9139993,
     "id": "6259b4e15eb6"
   },
   {
@@ -2406,29 +2406,8 @@
       "ssl",
       "tls"
     ],
-    "created": 1792747120.6560352,
+    "created": 1793747273.9140372,
     "id": "b4c82266de11"
-  },
-  {
-    "title": "MySQL reachable from the internet on 127.0.0.2:3306/tcp",
-    "severity": "high",
-    "host": "127.0.0.2",
-    "port": 3306,
-    "proto": "tcp",
-    "source": "extscan:exposure",
-    "description": "Database engine exposed directly to the internet. Detected as `mysql` (MySQL 5.7.33-log).",
-    "evidence": "127.0.0.2:3306/tcp open; service=mysql; product=MySQL; version=5.7.33-log",
-    "recommendation": "Restrict this port to known management sources at the perimeter, or move access behind a VPN/bastion. If the service must be public, confirm authentication is enforced and the build is current.",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Confirm whether MySQL on this host is intentional and, if so, whether authentication and patch level are adequate. Do not test credentials without explicit written approval.",
-    "confidence": "firm",
-    "tags": [
-      "exposure",
-      "mysql"
-    ],
-    "created": 1792747120.6604571,
-    "id": "7f7984487ff6"
   },
   {
     "title": "SSH service on 127.0.0.2:2222",
@@ -2447,29 +2426,8 @@
     "tags": [
       "ssh"
     ],
-    "created": 1792747120.6598685,
+    "created": 1793747273.9166577,
     "id": "410bdadf2834"
-  },
-  {
-    "title": "Docker API (plaintext) reachable from the internet on 127.0.0.2:2375/tcp",
-    "severity": "critical",
-    "host": "127.0.0.2",
-    "port": 2375,
-    "proto": "tcp",
-    "source": "extscan:exposure",
-    "description": "An unauthenticated Docker socket is container-host takeover. Detected as `docker` (Docker remote API).",
-    "evidence": "127.0.0.2:2375/tcp open; service=docker; product=Docker remote API; version=",
-    "recommendation": "Restrict this port to known management sources at the perimeter, or move access behind a VPN/bastion. If the service must be public, confirm authentication is enforced and the build is current.",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Confirm whether Docker API (plaintext) on this host is intentional and, if so, whether authentication and patch level are adequate. Do not test credentials without explicit written approval.",
-    "confidence": "firm",
-    "tags": [
-      "exposure",
-      "docker"
-    ],
-    "created": 1792747120.660267,
-    "id": "eae7d9dc54db"
   },
   {
     "title": "Redis reachable from the internet on 127.0.0.2:6379/tcp",
@@ -2489,8 +2447,50 @@
       "exposure",
       "redis"
     ],
-    "created": 1792747120.6604888,
+    "created": 1793747273.9170113,
     "id": "fb14769a080f"
+  },
+  {
+    "title": "Docker API (plaintext) reachable from the internet on 127.0.0.2:2375/tcp",
+    "severity": "critical",
+    "host": "127.0.0.2",
+    "port": 2375,
+    "proto": "tcp",
+    "source": "extscan:exposure",
+    "description": "An unauthenticated Docker socket is container-host takeover. Detected as `docker` (Docker remote API).",
+    "evidence": "127.0.0.2:2375/tcp open; service=docker; product=Docker remote API; version=",
+    "recommendation": "Restrict this port to known management sources at the perimeter, or move access behind a VPN/bastion. If the service must be public, confirm authentication is enforced and the build is current.",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Confirm whether Docker API (plaintext) on this host is intentional and, if so, whether authentication and patch level are adequate. Do not test credentials without explicit written approval.",
+    "confidence": "firm",
+    "tags": [
+      "exposure",
+      "docker"
+    ],
+    "created": 1793747273.916866,
+    "id": "eae7d9dc54db"
+  },
+  {
+    "title": "MySQL reachable from the internet on 127.0.0.2:3306/tcp",
+    "severity": "high",
+    "host": "127.0.0.2",
+    "port": 3306,
+    "proto": "tcp",
+    "source": "extscan:exposure",
+    "description": "Database engine exposed directly to the internet. Detected as `mysql` (MySQL 5.7.33-log).",
+    "evidence": "127.0.0.2:3306/tcp open; service=mysql; product=MySQL; version=5.7.33-log",
+    "recommendation": "Restrict this port to known management sources at the perimeter, or move access behind a VPN/bastion. If the service must be public, confirm authentication is enforced and the build is current.",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Confirm whether MySQL on this host is intentional and, if so, whether authentication and patch level are adequate. Do not test credentials without explicit written approval.",
+    "confidence": "firm",
+    "tags": [
+      "exposure",
+      "mysql"
+    ],
+    "created": 1793747273.916995,
+    "id": "7f7984487ff6"
   },
   {
     "title": "IIS/ASP.NET version disclosure on 127.0.0.2:8081",
@@ -2511,7 +2511,7 @@
       "aspnet",
       "information-disclosure"
     ],
-    "created": 1792747120.6770666,
+    "created": 1793747273.933297,
     "id": "c148a4e4f3fa"
   },
   {
@@ -2534,7 +2534,7 @@
       "handler",
       "information-disclosure"
     ],
-    "created": 1792747120.6796968,
+    "created": 1793747273.9405208,
     "id": "9ab90f0ad511"
   },
   {
@@ -2557,7 +2557,7 @@
       "handler",
       "information-disclosure"
     ],
-    "created": 1792747120.6857533,
+    "created": 1793747273.9442976,
     "id": "64bc3599776f"
   },
   {
@@ -2578,7 +2578,7 @@
       "iis",
       "default-content"
     ],
-    "created": 1792747120.699144,
+    "created": 1793747273.989627,
     "id": "3e13cf5a37e5"
   },
   {
@@ -2599,7 +2599,7 @@
       "iis",
       "webdav"
     ],
-    "created": 1792747120.7047381,
+    "created": 1793747274.009745,
     "id": "568b4976bc80"
   },
   {
@@ -2623,7 +2623,7 @@
       "shortname",
       "information-disclosure"
     ],
-    "created": 1792747120.7116416,
+    "created": 1793747274.0237963,
     "id": "32cc81cfbb16"
   },
   {
@@ -2645,7 +2645,7 @@
       "aspnet",
       "information-disclosure"
     ],
-    "created": 1792747120.7226136,
+    "created": 1793747274.0337527,
     "id": "e61f859c26a2"
   },
   {
@@ -2666,7 +2666,7 @@
       "exposure",
       "elasticsearch"
     ],
-    "created": 1792747120.7226586,
+    "created": 1793747274.033798,
     "id": "b624d7a6d80c"
   },
   {
@@ -2677,7 +2677,7 @@
     "proto": "tcp",
     "source": "extscan:tls",
     "description": "TLS configuration as observed.",
-    "evidence": "negotiated: TLSv1.3  cipher: TLS_AES_256_GCM_SHA384 (256 bit)\nsubject: CN = billing.lab.invalid, O = extscan lab\nissuer: CN = billing.lab.invalid, O = extscan lab\nvalidity: Oct 23 09:08:18 2026 GMT .. Nov 22 09:08:18 2026 GMT\nSANs: 127.0.0.2, billing.lab.invalid\nprotocols: TLSv1.0=no, TLSv1.1=no, TLSv1.2=yes, TLSv1.3=yes",
+    "evidence": "negotiated: TLSv1.3  cipher: TLS_AES_256_GCM_SHA384 (256 bit)\nsubject: CN = billing.lab.invalid, O = extscan lab\nissuer: CN = billing.lab.invalid, O = extscan lab\nvalidity: Nov  3 22:57:24 2026 GMT .. Dec  3 22:57:24 2026 GMT\nSANs: 127.0.0.2, billing.lab.invalid\nprotocols: TLSv1.0=no, TLSv1.1=no, TLSv1.2=yes, TLSv1.3=yes",
     "recommendation": "",
     "references": [],
     "review_required": false,
@@ -2687,7 +2687,7 @@
       "tls",
       "fingerprint"
     ],
-    "created": 1792747120.758325,
+    "created": 1793747274.0391,
     "id": "87146bc6dfd9"
   },
   {
@@ -2708,7 +2708,7 @@
       "tls",
       "certificate"
     ],
-    "created": 1792747120.7583396,
+    "created": 1793747274.0391173,
     "id": "842585abd751"
   },
   {
@@ -2732,8 +2732,71 @@
       "default-credentials",
       "community:public"
     ],
-    "created": 1792747120.7688265,
+    "created": 1793747274.084431,
     "id": "3e9c24efcb24"
+  },
+  {
+    "title": "HTTP service: Intranet on 127.0.0.2:8081",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 8081,
+    "proto": "tcp",
+    "source": "extscan:http",
+    "description": "An HTTP service is reachable at http://127.0.0.2:8081. It identifies itself as `Microsoft-IIS/8.5`.",
+    "evidence": "GET http://127.0.0.2:8081 -> 200 OK\ntitle: Intranet\nserver: Microsoft-IIS/8.5\nx-powered-by: ASP.NET\nx-aspnet-version: 4.0.30319\nx-aspnetmvc-version: 5.2",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "An auditor should confirm whether this application is intended to be internet-facing, and who owns it.",
+    "confidence": "firm",
+    "tags": [
+      "http",
+      "fingerprint"
+    ],
+    "created": 1793747273.9345715,
+    "id": "ad8ddbb7c29d"
+  },
+  {
+    "title": "Version-disclosing HTTP headers on 127.0.0.2:8081",
+    "severity": "low",
+    "host": "127.0.0.2",
+    "port": 8081,
+    "proto": "tcp",
+    "source": "extscan:http",
+    "description": "The server returns headers naming the product and version, which lets an attacker select exploits without probing.",
+    "evidence": "server: Microsoft-IIS/8.5\nx-powered-by: ASP.NET\nx-aspnet-version: 4.0.30319\nx-aspnetmvc-version: 5.2",
+    "recommendation": "Suppress or genericise Server/X-Powered-By and similar headers.",
+    "references": [],
+    "review_required": false,
+    "review_reason": "",
+    "confidence": "firm",
+    "tags": [
+      "http",
+      "information-disclosure"
+    ],
+    "created": 1793747273.9345913,
+    "id": "cfe18069330d"
+  },
+  {
+    "title": "HTTP service: untitled on 127.0.0.2:2375",
+    "severity": "info",
+    "host": "127.0.0.2",
+    "port": 2375,
+    "proto": "tcp",
+    "source": "extscan:http",
+    "description": "An HTTP service is reachable at http://127.0.0.2:2375.",
+    "evidence": "GET http://127.0.0.2:2375 -> 404 Not Found",
+    "recommendation": "",
+    "references": [],
+    "review_required": true,
+    "review_reason": "An auditor should confirm whether this application is intended to be internet-facing, and who owns it.",
+    "confidence": "firm",
+    "tags": [
+      "http",
+      "fingerprint"
+    ],
+    "created": 1793747273.9374454,
+    "id": "465960dfad55"
   },
   {
     "title": "HTTP service: ACME Billing \u2014 API Console on 127.0.0.2:8080",
@@ -2753,7 +2816,7 @@
       "http",
       "fingerprint"
     ],
-    "created": 1792747120.6741793,
+    "created": 1793747273.9383202,
     "id": "fc77dfeb9f7c"
   },
   {
@@ -2774,7 +2837,7 @@
       "http",
       "information-disclosure"
     ],
-    "created": 1792747120.6741974,
+    "created": 1793747273.938339,
     "id": "0977a65c6fe4"
   },
   {
@@ -2796,7 +2859,7 @@
       "path-check",
       "/robots.txt"
     ],
-    "created": 1792747120.6778152,
+    "created": 1793747273.9450927,
     "id": "93c23ea1fdc3"
   },
   {
@@ -2807,7 +2870,7 @@
     "proto": "tcp",
     "source": "extscan:paths",
     "description": "An environment file is readable; these normally hold database credentials and API keys.",
-    "evidence": "GET http://127.0.0.2:8080/.env -> 200 OK\ncontent-type: text/plain\nlength: 305\n\nAPP_ENV=production\nDATABASE_URL=<redacted, 80 chars>\nSTRIPE_SECRET_KEY=<redacted, 32 chars>\nJWT_SIGNING_SECRET=<redacted, 32 chars>\nAWS_ACCESS_KEY_ID=<redacted, 25 chars>\nSMTP_PASSWORD=<redacted, 18 chars>\nDEBUG=false\n",
+    "evidence": "GET http://127.0.0.2:8080/.env -> 200 OK\ncontent-type: text/plain\nlength: 305\n\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
     "recommendation": "Remove the file from the document root or block the path at the edge; rotate anything it disclosed.",
     "references": [],
     "review_required": true,
@@ -2818,7 +2881,7 @@
       "path-check",
       "/.env"
     ],
-    "created": 1792747120.6865997,
+    "created": 1793747273.9874408,
     "id": "bbc7ddd50a11"
   },
   {
@@ -2840,7 +2903,7 @@
       "path-check",
       "/swagger.json"
     ],
-    "created": 1792747120.6902504,
+    "created": 1793747274.0100722,
     "id": "2de132b14e68"
   },
   {
@@ -2862,7 +2925,7 @@
       "path-check",
       "/graphql"
     ],
-    "created": 1792747120.7272604,
+    "created": 1793747274.049407,
     "id": "2086ab0283ec"
   },
   {
@@ -2884,7 +2947,7 @@
       "path-check",
       "protected"
     ],
-    "created": 1792747120.7396312,
+    "created": 1793747274.0538616,
     "id": "6bd6e3604165"
   },
   {
@@ -2906,7 +2969,7 @@
       "path-check",
       "/metrics"
     ],
-    "created": 1792747120.756009,
+    "created": 1793747274.0776274,
     "id": "6835ff87c381"
   },
   {
@@ -2927,71 +2990,8 @@
       "http",
       "fingerprint"
     ],
-    "created": 1792747120.6742961,
+    "created": 1793747273.9349186,
     "id": "054ee41a0018"
-  },
-  {
-    "title": "HTTP service: Intranet on 127.0.0.2:8081",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 8081,
-    "proto": "tcp",
-    "source": "extscan:http",
-    "description": "An HTTP service is reachable at http://127.0.0.2:8081. It identifies itself as `Microsoft-IIS/8.5`.",
-    "evidence": "GET http://127.0.0.2:8081 -> 200 OK\ntitle: Intranet\nserver: Microsoft-IIS/8.5\nx-powered-by: ASP.NET\nx-aspnet-version: 4.0.30319\nx-aspnetmvc-version: 5.2",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "An auditor should confirm whether this application is intended to be internet-facing, and who owns it.",
-    "confidence": "firm",
-    "tags": [
-      "http",
-      "fingerprint"
-    ],
-    "created": 1792747120.6756096,
-    "id": "ad8ddbb7c29d"
-  },
-  {
-    "title": "Version-disclosing HTTP headers on 127.0.0.2:8081",
-    "severity": "low",
-    "host": "127.0.0.2",
-    "port": 8081,
-    "proto": "tcp",
-    "source": "extscan:http",
-    "description": "The server returns headers naming the product and version, which lets an attacker select exploits without probing.",
-    "evidence": "server: Microsoft-IIS/8.5\nx-powered-by: ASP.NET\nx-aspnet-version: 4.0.30319\nx-aspnetmvc-version: 5.2",
-    "recommendation": "Suppress or genericise Server/X-Powered-By and similar headers.",
-    "references": [],
-    "review_required": false,
-    "review_reason": "",
-    "confidence": "firm",
-    "tags": [
-      "http",
-      "information-disclosure"
-    ],
-    "created": 1792747120.6756287,
-    "id": "cfe18069330d"
-  },
-  {
-    "title": "HTTP service: untitled on 127.0.0.2:2375",
-    "severity": "info",
-    "host": "127.0.0.2",
-    "port": 2375,
-    "proto": "tcp",
-    "source": "extscan:http",
-    "description": "An HTTP service is reachable at http://127.0.0.2:2375.",
-    "evidence": "GET http://127.0.0.2:2375 -> 404 Not Found",
-    "recommendation": "",
-    "references": [],
-    "review_required": true,
-    "review_reason": "An auditor should confirm whether this application is intended to be internet-facing, and who owns it.",
-    "confidence": "firm",
-    "tags": [
-      "http",
-      "fingerprint"
-    ],
-    "created": 1792747120.6759884,
-    "id": "465960dfad55"
   },
   {
     "title": "HTTP service: ACME Billing \u2014 API Console on 127.0.0.2:8443",
@@ -3011,7 +3011,7 @@
       "http",
       "fingerprint"
     ],
-    "created": 1792747120.6816704,
+    "created": 1793747273.9438562,
     "id": "e9db3117311f"
   },
   {
@@ -3032,7 +3032,7 @@
       "http",
       "information-disclosure"
     ],
-    "created": 1792747120.681682,
+    "created": 1793747273.9438717,
     "id": "524471e42801"
   },
   {
@@ -3053,7 +3053,7 @@
       "http",
       "headers"
     ],
-    "created": 1792747120.6816916,
+    "created": 1793747273.9438832,
     "id": "3b9f6244a263"
   },
   {
@@ -3075,7 +3075,7 @@
       "path-check",
       "/robots.txt"
     ],
-    "created": 1792747120.6903408,
+    "created": 1793747273.955684,
     "id": "8d2813a89ad5"
   },
   {
@@ -3086,7 +3086,7 @@
     "proto": "tcp",
     "source": "extscan:paths",
     "description": "An environment file is readable; these normally hold database credentials and API keys.",
-    "evidence": "GET https://127.0.0.2:8443/.env -> 200 OK\ncontent-type: text/plain\nlength: 305\n\nAPP_ENV=production\nDATABASE_URL=<redacted, 80 chars>\nSTRIPE_SECRET_KEY=<redacted, 32 chars>\nJWT_SIGNING_SECRET=<redacted, 32 chars>\nAWS_ACCESS_KEY_ID=<redacted, 25 chars>\nSMTP_PASSWORD=<redacted, 18 chars>\nDEBUG=false\n",
+    "evidence": "GET https://127.0.0.2:8443/.env -> 200 OK\ncontent-type: text/plain\nlength: 305\n\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
     "recommendation": "Remove the file from the document root or block the path at the edge; rotate anything it disclosed.",
     "references": [],
     "review_required": true,
@@ -3097,7 +3097,7 @@
       "path-check",
       "/.env"
     ],
-    "created": 1792747120.7230182,
+    "created": 1793747274.0191984,
     "id": "f78278c13c50"
   },
   {
@@ -3119,7 +3119,7 @@
       "path-check",
       "/swagger.json"
     ],
-    "created": 1792747120.7379625,
+    "created": 1793747274.0334888,
     "id": "f736eab823ac"
   },
   {
@@ -3141,7 +3141,7 @@
       "path-check",
       "/graphql"
     ],
-    "created": 1792747120.7803826,
+    "created": 1793747274.0937517,
     "id": "5905961c175a"
   },
   {
@@ -3163,7 +3163,7 @@
       "path-check",
       "protected"
     ],
-    "created": 1792747120.7833557,
+    "created": 1793747274.0975904,
     "id": "5e9032886a6b"
   },
   {
@@ -3185,29 +3185,8 @@
       "path-check",
       "/metrics"
     ],
-    "created": 1792747120.797841,
+    "created": 1793747274.116649,
     "id": "5766856bec70"
-  },
-  {
-    "title": "Credential-bearing file readable at http://127.0.0.2:8080/.env",
-    "severity": "critical",
-    "host": "127.0.0.2",
-    "port": 8080,
-    "proto": "tcp",
-    "source": "extscan:secret_file",
-    "description": "The file is served to unauthenticated clients and contains 4 key(s) whose names indicate secrets. Values are redacted here deliberately: the finding is that they are reachable, and the report should not become another copy of the client's credentials.",
-    "evidence": "GET http://127.0.0.2:8080/.env -> 200  length: 305\nsecret-like keys present: AWS_ACCESS_KEY_ID, JWT_SIGNING_SECRET, SMTP_PASSWORD, STRIPE_SECRET_KEY\n\nAPP_ENV=production\nDATABASE_URL=<redacted, 80 chars>\nSTRIPE_SECRET_KEY=<redacted, 32 chars>\nJWT_SIGNING_SECRET=<redacted, 32 chars>\nAWS_ACCESS_KEY_ID=<redacted, 25 chars>\nSMTP_PASSWORD=<redacted, 18 chars>\nDEBUG=false\n",
-    "recommendation": "Remove the file from the web root, block the path, and rotate every credential it contained -- treat them as compromised.",
-    "references": [],
-    "review_required": true,
-    "review_reason": "Confirm these are live production credentials and drive the rotation. This is usually the highest-priority item in a report.",
-    "confidence": "firm",
-    "tags": [
-      "secrets",
-      "information-disclosure"
-    ],
-    "created": 1792747120.8546112,
-    "id": "7aeab74d6f71"
   },
   {
     "title": "Credential-bearing file readable at https://127.0.0.2:8443/.env",
@@ -3216,8 +3195,8 @@
     "port": 8443,
     "proto": "tcp",
     "source": "extscan:secret_file",
-    "description": "The file is served to unauthenticated clients and contains 4 key(s) whose names indicate secrets. Values are redacted here deliberately: the finding is that they are reachable, and the report should not become another copy of the client's credentials.",
-    "evidence": "GET https://127.0.0.2:8443/.env -> 200  length: 305\nsecret-like keys present: AWS_ACCESS_KEY_ID, JWT_SIGNING_SECRET, SMTP_PASSWORD, STRIPE_SECRET_KEY\n\nAPP_ENV=production\nDATABASE_URL=<redacted, 80 chars>\nSTRIPE_SECRET_KEY=<redacted, 32 chars>\nJWT_SIGNING_SECRET=<redacted, 32 chars>\nAWS_ACCESS_KEY_ID=<redacted, 25 chars>\nSMTP_PASSWORD=<redacted, 18 chars>\nDEBUG=false\n",
+    "description": "The file is served to unauthenticated clients and contains 4 key(s) whose names indicate secrets. The values are shown in the evidence so a reviewer can judge whether they are live, expired or placeholders.",
+    "evidence": "GET https://127.0.0.2:8443/.env -> 200  length: 305\nsecret-like keys present: AWS_ACCESS_KEY_ID, JWT_SIGNING_SECRET, SMTP_PASSWORD, STRIPE_SECRET_KEY\n\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
     "recommendation": "Remove the file from the web root, block the path, and rotate every credential it contained -- treat them as compromised.",
     "references": [],
     "review_required": true,
@@ -3227,8 +3206,29 @@
       "secrets",
       "information-disclosure"
     ],
-    "created": 1792747120.8622217,
+    "created": 1793747274.1627727,
     "id": "0440b29a93bf"
+  },
+  {
+    "title": "Credential-bearing file readable at http://127.0.0.2:8080/.env",
+    "severity": "critical",
+    "host": "127.0.0.2",
+    "port": 8080,
+    "proto": "tcp",
+    "source": "extscan:secret_file",
+    "description": "The file is served to unauthenticated clients and contains 4 key(s) whose names indicate secrets. The values are shown in the evidence so a reviewer can judge whether they are live, expired or placeholders.",
+    "evidence": "GET http://127.0.0.2:8080/.env -> 200  length: 305\nsecret-like keys present: AWS_ACCESS_KEY_ID, JWT_SIGNING_SECRET, SMTP_PASSWORD, STRIPE_SECRET_KEY\n\nAPP_ENV=production\nDATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing\nSTRIPE_SECRET_KEY=fake-stripe-value-for-tests-only\nJWT_SIGNING_SECRET=fake-jwt-signing-value-for-tests\nAWS_ACCESS_KEY_ID=fake-aws-key-id-for-tests\nSMTP_PASSWORD=fake-smtp-password\nDEBUG=false\n",
+    "recommendation": "Remove the file from the web root, block the path, and rotate every credential it contained -- treat them as compromised.",
+    "references": [],
+    "review_required": true,
+    "review_reason": "Confirm these are live production credentials and drive the rotation. This is usually the highest-priority item in a report.",
+    "confidence": "firm",
+    "tags": [
+      "secrets",
+      "information-disclosure"
+    ],
+    "created": 1793747274.1707387,
+    "id": "7aeab74d6f71"
   },
   {
     "title": "GraphQL introspection enabled at http://127.0.0.2:8080/graphql",
@@ -3250,7 +3250,7 @@
       "graphql",
       "information-disclosure"
     ],
-    "created": 1792747120.878362,
+    "created": 1793747274.1999655,
     "id": "2fc8cb4d7192"
   },
   {
@@ -3273,7 +3273,7 @@
       "graphql",
       "information-disclosure"
     ],
-    "created": 1792747120.884921,
+    "created": 1793747274.210707,
     "id": "3484af4fec04"
   },
   {
@@ -3294,7 +3294,7 @@
       "http",
       "content-review"
     ],
-    "created": 1792747120.9011512,
+    "created": 1793747274.234973,
     "id": "808fcb3d29df"
   },
   {
@@ -3315,7 +3315,7 @@
       "http",
       "content-review"
     ],
-    "created": 1792747120.9095383,
+    "created": 1793747274.2408032,
     "id": "3ead2d6871fd"
   },
   {
@@ -3336,7 +3336,7 @@
       "http",
       "content-review"
     ],
-    "created": 1792747120.915325,
+    "created": 1793747274.2468028,
     "id": "d2200ae371b9"
   },
   {
@@ -3360,7 +3360,7 @@
       "api",
       "information-disclosure"
     ],
-    "created": 1792747120.9283178,
+    "created": 1793747274.2607396,
     "id": "ad2827bbe444"
   },
   {
@@ -3383,7 +3383,7 @@
       "authentication",
       "owasp-api"
     ],
-    "created": 1792747120.9283395,
+    "created": 1793747274.2607646,
     "id": "2fd00072e735"
   },
   {
@@ -3405,7 +3405,7 @@
       "api",
       "triage-hint"
     ],
-    "created": 1792747120.9283922,
+    "created": 1793747274.2608404,
     "id": "e117402b5e09"
   },
   {
@@ -3427,7 +3427,7 @@
       "scope",
       "asset-discovery"
     ],
-    "created": 1792747120.9285052,
+    "created": 1793747274.260948,
     "id": "7bd547645ee2"
   },
   {
@@ -3448,7 +3448,7 @@
       "http",
       "content-review"
     ],
-    "created": 1792747120.9338331,
+    "created": 1793747274.2672079,
     "id": "dc7d7881bb28"
   },
   {
@@ -3469,7 +3469,7 @@
       "http",
       "content-review"
     ],
-    "created": 1792747120.9561334,
+    "created": 1793747274.3040507,
     "id": "c20446759bb4"
   },
   {
@@ -3493,7 +3493,7 @@
       "api",
       "information-disclosure"
     ],
-    "created": 1792747120.9694219,
+    "created": 1793747274.3237855,
     "id": "f3334fd69242"
   },
   {
@@ -3516,7 +3516,7 @@
       "authentication",
       "owasp-api"
     ],
-    "created": 1792747120.9694393,
+    "created": 1793747274.323805,
     "id": "05d0fc4ccf4f"
   },
   {
@@ -3538,7 +3538,7 @@
       "api",
       "triage-hint"
     ],
-    "created": 1792747120.9694781,
+    "created": 1793747274.323847,
     "id": "0dde7b1a5a7e"
   },
   {
@@ -3560,7 +3560,7 @@
       "scope",
       "asset-discovery"
     ],
-    "created": 1792747120.9695365,
+    "created": 1793747274.3239045,
     "id": "1fc4210c90e9"
   },
   {
@@ -3581,7 +3581,7 @@
       "http",
       "content-review"
     ],
-    "created": 1792747120.9764,
+    "created": 1793747274.3318248,
     "id": "2006df9ca89f"
   },
   {
@@ -3602,7 +3602,7 @@
       "http",
       "content-review"
     ],
-    "created": 1792747121.0086517,
+    "created": 1793747274.3758705,
     "id": "5da318c92303"
   },
   {
@@ -3624,7 +3624,7 @@
       "authentication",
       "owasp-api"
     ],
-    "created": 1792747121.0147152,
+    "created": 1793747274.3822474,
     "id": "0e9564c8cefd"
   },
   {
@@ -3646,7 +3646,7 @@
       "authentication",
       "owasp-api"
     ],
-    "created": 1792747121.0201225,
+    "created": 1793747274.3892477,
     "id": "821b41c80756"
   },
   {
@@ -3667,7 +3667,7 @@
       "api",
       "documentation"
     ],
-    "created": 1792747121.0256193,
+    "created": 1793747274.397116,
     "id": "ff044622e223"
   },
   {
@@ -3689,7 +3689,7 @@
       "authentication",
       "owasp-api"
     ],
-    "created": 1792747121.0314012,
+    "created": 1793747274.403324,
     "id": "46a60a5ff437"
   },
   {
@@ -3711,7 +3711,7 @@
       "authentication",
       "owasp-api"
     ],
-    "created": 1792747121.0375323,
+    "created": 1793747274.4102473,
     "id": "b50fadd9f8e9"
   },
   {
@@ -3732,7 +3732,7 @@
       "api",
       "documentation"
     ],
-    "created": 1792747121.043168,
+    "created": 1793747274.4167895,
     "id": "ec2d26b395de"
   }
 ]

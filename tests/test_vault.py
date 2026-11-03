@@ -158,7 +158,7 @@ class TestVaultGapsAndRerender(_VaultCase):
         root = self.render()
         summary = (root / f"{vault.SUMMARY}.md").read_text()
         gaps = (root / f"{vault.GAPS}.md").read_text()
-        self.assertIn("1 coverage gap, 1 serious", summary)
+        self.assertIn("2 coverage gaps, 1 serious", summary)
         self.assertIn("Templated web checks did not complete", summary)
         self.assertIn("Templated web checks did not complete", gaps)
         self.assertLess(summary.index("coverage gap"), summary.index("## 1."))
