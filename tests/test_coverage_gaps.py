@@ -158,6 +158,77 @@ class TestProbeFailure(_Stage):
         self.assertEqual(record["error"], "timed out after 1s")
 
 
+class TestGapsClearWhenRetrySucceeds(_Stage):
+    """A gap that `resume` later covers must leave the report, or it overstates loss."""
+
+    web = TestNucleiFailure.web
+
+    def test_nuclei_gap_clears_after_a_clean_rerun(self):
+        self.fake_tool("nuclei", "exit 1")
+        with self.only_fake_tools_on_path():
+            self.probe(self.web, only=["nuclei"])
+        self.assertEqual(len(self.gaps()), 1)
+        self.fake_tool("nuclei", "exit 0")
+        with self.only_fake_tools_on_path():
+            svc = self.probe(self.web, only=["nuclei"])
+        self.assertEqual(self.gaps(), [])
+        self.assertEqual(svc.probed_by, ["nuclei"])
+
+    def test_dry_run_never_clears_a_nuclei_gap(self):
+        with self.only_fake_tools_on_path():
+            self.probe(self.web, only=["nuclei"])
+        self.runner = Runner(self.store, dry_run=True)
+        with self.only_fake_tools_on_path():
+            svc = self.probe(self.web, only=["nuclei"])
+        self.assertEqual(self.gaps(), [("probe:nuclei", "nuclei", ["127.0.0.1"])])
+        self.assertNotIn("nuclei", svc.probed_by)
+
+    def test_probe_gap_clears_only_for_the_service_that_succeeded(self):
+        a = Service(host="127.0.0.1", port=22, proto="tcp", name="ssh")
+        b = Service(host="127.0.0.1", port=2222, proto="tcp", name="ssh")
+        ssh = next(p for p in probes.REGISTRY if p.name == "ssh")
+        self.store.save_services([a, b])
+        with mock.patch.object(ssh, "run", side_effect=RuntimeError("boom")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            pipeline.probe(self.store, self.scope, self.policy, self.runner, only=["ssh"])
+        self.assertEqual(len(self.gaps()), 2)
+
+        def flaky(_ctx, svc):
+            if svc.port == 2222:
+                raise RuntimeError("still down")
+            return [], []
+        with mock.patch.object(ssh, "run", side_effect=flaky), \
+                contextlib.redirect_stdout(io.StringIO()):
+            pipeline.probe(self.store, self.scope, self.policy, self.runner, only=["ssh"])
+        self.assertEqual([d.reason.split(":")[0] for d in self.store.degradations()],
+                         ["127.0.0.1/tcp/2222"])
+
+    def test_nmap_batch_gap_clears_when_resume_parses_it(self):
+        good = Path(__file__).parent / "fixtures" / "nmap-tcp.xml"
+        (self.tmp / "out.xml").write_bytes(b"\0" + good.read_bytes()[1:])
+        self.fake_tool("nmap", 'while [ $# -gt 0 ]; do [ "$1" = -oA ] && '
+                               f'/bin/cp {self.tmp}/out.xml "$2.xml"; shift; done; exit 0')
+        with self.only_fake_tools_on_path(), contextlib.redirect_stdout(io.StringIO()):
+            pipeline.discover(self.store, self.scope, self.policy, self.runner, udp=False)
+            self.assertEqual(len(self.gaps()), 1)
+            shutil.copy(good, self.tmp / "out.xml")
+            pipeline.discover(self.store, self.scope, self.policy, self.runner,
+                              udp=False, resume=True)
+        self.assertEqual(self.gaps(), [])
+
+    def test_installing_nmap_clears_the_missing_tool_gap(self):
+        with self.only_fake_tools_on_path(), contextlib.redirect_stdout(io.StringIO()):
+            pipeline.discover(self.store, self.scope, self.policy, self.runner, udp=False)
+        self.assertEqual([d.reason for d in self.store.degradations()], [pipeline.NMAP_MISSING])
+        good = Path(__file__).parent / "fixtures" / "nmap-tcp.xml"
+        self.fake_tool("nmap", 'while [ $# -gt 0 ]; do [ "$1" = -oA ] && '
+                               f'/bin/cp {good} "$2.xml"; shift; done; exit 0')
+        with self.only_fake_tools_on_path(), contextlib.redirect_stdout(io.StringIO()):
+            pipeline.discover(self.store, self.scope, self.policy, self.runner,
+                              udp=False, resume=True)
+        self.assertEqual(self.gaps(), [])
+
+
 class TestUnprivilegedUdp(_Stage):
     def test_tcp_only_notice_comes_before_the_scan(self):
         out = io.StringIO()

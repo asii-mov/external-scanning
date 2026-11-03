@@ -60,6 +60,7 @@ def _coverage_lost(store: Store, deg: Degradation) -> None:
 
 
 UDP_NEEDS_ROOT = "nmap -sU requires root and the run is unprivileged"
+NMAP_MISSING = str(ToolMissing("nmap"))
 
 
 def _warn(store: Store, message: str) -> None:
@@ -134,6 +135,8 @@ def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
             totals["chunks_done"] += 1
             store.checkpoint(stage_key, key)
             aborter.record(ok=True)
+            store.remove_degradations(lambda d, label=label: d.stage == stage_key and (
+                d.reason.startswith(f"{label} ") or d.reason == NMAP_MISSING))
 
             if salvaged:
                 totals["salvaged"] += 1
@@ -199,7 +202,8 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
             remedy=f"Re-run as root: `{rerun}`",
         ))
     elif do_udp:
-        store.remove_degradations("discover:udp", UDP_NEEDS_ROOT)
+        store.remove_degradations(
+            lambda d: d.stage == "discover:udp" and d.reason == UDP_NEEDS_ROOT)
         print("→ nmap UDP discovery")
         summary["udp"] = _run_nmap_pass(store, scope, policy, runner, "udp", resume)
         if summary["udp"]:
@@ -281,8 +285,9 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
         try:
             res, findings, leads = nuclei.run(runner, scope, policy, services)
             failure = res.failure if res else ""
+            ran = res is not None and not res.skipped
         except ToolMissing as exc:
-            findings, leads, failure = [], [], str(exc)
+            findings, leads, failure, ran = [], [], str(exc), False
         all_findings += findings
         all_leads += leads
         print(f"  {len(findings)} result(s), {len(leads)} lead(s)")
@@ -295,7 +300,8 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 remedy="Run nuclei by hand against raw/nuclei-targets.txt to see why, "
                        "then `extscan probe <run> --only nuclei`.",
             ))
-        else:
+        elif ran:
+            store.remove_degradations(lambda d: d.stage == "probe:nuclei")
             for w in web:
                 store.mark_probed(w.id, "nuclei")
 
@@ -320,6 +326,8 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                     findings, leads = fut.result()
                 except Exception as exc:
                     failed.add((p.name, svc.id))
+                    store.remove_degradations(lambda d, p=p, svc=svc: (
+                        d.stage == f"probe:{p.name}" and d.reason.startswith(f"{svc.id}: ")))
                     _coverage_lost(store, Degradation(
                         stage=f"probe:{p.name}", component=p.name,
                         reason=f"{svc.id}: {type(exc).__name__}: {exc}"[:300],
@@ -333,6 +341,10 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
 
     added_f = store.add_findings(all_findings)
     added_l = store.add_leads(all_leads, max_total=policy.max_leads_per_run)
+    covered = {(f"probe:{p.name}", f"{svc.id}: ") for p, svc in jobs
+               if (p.name, svc.id) not in failed}
+    store.remove_degradations(lambda d: any(
+        d.stage == stage and d.reason.startswith(prefix) for stage, prefix in covered))
     for p, svc in jobs:
         if (p.name, svc.id) not in failed:
             store.mark_probed(svc.id, p.name)
@@ -493,7 +505,8 @@ def screenshot(store: Store, scope: Scope, policy: Policy, force: bool = False,
     if todo:
         try:
             with shooter_factory() as shooter:
-                store.remove_degradations("screenshot", SHOTS_UNAVAILABLE)
+                store.remove_degradations(
+                    lambda d: d.stage == "screenshot" and d.reason == SHOTS_UNAVAILABLE)
                 shots_mod.capture(store.path, todo, shooter)
         except shots_mod.BrowserUnavailable as exc:
             _coverage_lost(store, Degradation(
@@ -511,7 +524,7 @@ def screenshot(store: Store, scope: Scope, policy: Policy, force: bool = False,
     shots_mod.save(store.path, merged)
 
     failed_roots = [s for s in merged if s.kind == "service" and s.status != "captured"]
-    store.remove_degradations("screenshot", SHOTS_FAILED)
+    store.remove_degradations(lambda d: d.stage == "screenshot" and d.reason == SHOTS_FAILED)
     if failed_roots:
         _coverage_lost(store, Degradation(
             stage="screenshot", component="chromium", reason=SHOTS_FAILED,

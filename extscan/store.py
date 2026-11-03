@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from .models import CommandRecord, Finding, Host, Lead, Service
@@ -205,9 +205,12 @@ class Store:
         existing.append(deg)
         self._write("degradations.json", [d.to_dict() for d in existing])
 
-    def remove_degradations(self, stage: str, reason: str) -> None:
-        kept = [d for d in self.degradations() if (d.stage, d.reason) != (stage, reason)]
-        self._write("degradations.json", [d.to_dict() for d in kept])
+    def remove_degradations(self, match: Callable[[Degradation], bool]) -> None:
+        """Drop recorded gaps that later work has covered."""
+        existing = self.degradations()
+        kept = [d for d in existing if not match(d)]
+        if len(kept) != len(existing):
+            self._write("degradations.json", [d.to_dict() for d in kept])
 
     def checkpoint(self, stage: str, key: str) -> None:
         data = self._read("checkpoints.json", {})
