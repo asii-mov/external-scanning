@@ -17,7 +17,7 @@ target.
    read -- not a scan of someone else's network.
 
 3. **Client secrets do not leave the engagement.** Anything heading for a model
-   goes through the same redaction the report uses. An exposed `.env` is
+   is redacted first. Reports are not: they go to a human reviewer. An exposed `.env` is
    evidence that credentials are reachable; it is not something to upload to a
    third-party API.
 

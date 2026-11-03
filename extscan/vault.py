@@ -957,10 +957,9 @@ class _Vault:
           "checks (HTTP paths and headers, TLS, SNMP, IIS).")
         w("3. **Chase.** Follow-up leads from the probes: API specifications, GraphQL, "
           "readable files, SNMP walks.")
-        w("4. **Screenshot.** Headless Chromium, every request scope-checked. Pages "
-          "holding secrets are not captured.")
-        w("5. **Report.** Triage, then this vault. Secret values and non-default SNMP "
-          "community strings are redacted here. The run directory keeps them raw.")
+        w("4. **Screenshot.** Headless Chromium, every request scope-checked.")
+        w("5. **Report.** Triage, then this vault. Evidence is reproduced as captured, "
+          "secrets included, for a reviewer to judge before anything is delivered.")
         w("")
         for warning in self.meta.get("warnings", []):
             w(f"> [!warning] {_text(warning)}")

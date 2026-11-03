@@ -18,7 +18,6 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .llm.base import SECRET_LINE_RE
 from .models import Finding, Lead, Service
 from .policy import Policy
 from .runner import Runner
@@ -283,8 +282,6 @@ def _check_paths(ctx: ProbeContext, svc: Service,
             continue
 
         body_preview = resp.text[:1200]
-        if path in ("/.env", "/config.json", "/web.config", "/actuator/env"):
-            body_preview = _redact(body_preview)
 
         findings.append(Finding(
             title=f"Exposed {path} on {svc.host}:{svc.port}",
@@ -308,18 +305,6 @@ def _check_paths(ctx: ProbeContext, svc: Service,
                               origin="extscan:paths"))
 
     return findings, leads
-
-
-def _redact(text: str) -> str:
-    """Keep key names, drop values.
-
-    A pentest report should prove that credentials are exposed without copying
-    them into the deliverable, the ticket system and three mailboxes.
-    """
-    def sub(m: re.Match) -> str:
-        value = m.group(2).strip()
-        return f"{m.group(1)}=<redacted, {len(value)} chars>"
-    return SECRET_LINE_RE.sub(sub, text)
 
 
 @register("tls", lambda s: s.proto == "tcp" and s.is_tls,

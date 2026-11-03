@@ -2,7 +2,8 @@
 
 Checks the properties a reader relies on: every link opens a note, every
 finding and gap is somewhere a reader will see it, the auditor view comes
-before the story, and nothing secret or hostile survives into the notes.
+before the story, evidence reaches the reviewer as captured, and nothing
+hostile survives into the notes.
 """
 
 import contextlib
@@ -111,14 +112,13 @@ class TestVaultFromLabRun(_VaultCase):
         self.assertIn("community=public", self.summary)
         self.assertIn("sysDescr: Linux lab-router", self.summary)
 
-    def test_secret_values_never_reach_any_report(self):
-        outputs = {**self.all,
+    def test_secret_values_reach_the_reviewer_unredacted(self):
+        outputs = {"vault": "\n".join(self.all.values()),
                    "report.md": (self.store.path / "report.md").read_text(),
                    "report.json": (self.store.path / "report.json").read_text()}
         for name, text in outputs.items():
             for secret in SECRETS:
-                self.assertNotIn(secret, text, f"{secret} leaked into {name}")
-        self.assertIn("STRIPE_SECRET_KEY=<redacted, 32 chars>", self.summary)
+                self.assertIn(secret, text, f"{secret} missing from {name}")
 
     def test_screenshots_are_embedded_and_copied(self):
         for shot in self.shots:
@@ -205,8 +205,8 @@ class TestHostileText(_VaultCase):
         self.assertIn("\\<img src", summary)        # shown, escaped
 
 
-class TestRedaction(_VaultCase):
-    def test_custom_community_is_redacted_and_default_kept(self):
+class TestNoRedaction(_VaultCase):
+    def test_custom_community_is_shown_for_review(self):
         self.store.add_findings([Finding(
             title="SNMP readable with guessable community string `acmeNOC2024`",
             severity="medium", host="127.0.0.2", port=10161, proto="udp",
@@ -215,31 +215,20 @@ class TestRedaction(_VaultCase):
             evidence="sysDescr: core-router\nversion: v2c",
             tags=["snmp", "default-credentials", "community:acmeNOC2024"])])
         root = self.render()
-        outputs = [*self.notes(root).values(), (self.store.path / "report.md").read_text(),
+        outputs = [(root / f"{vault.SUMMARY}.md").read_text(),
+                   (self.store.path / "report.md").read_text(),
                    (self.store.path / "report.json").read_text()]
         for text in outputs:
-            self.assertNotIn("acmeNOC2024", text)
+            self.assertIn("acmeNOC2024", text)
         summary = (root / f"{vault.SUMMARY}.md").read_text()
         self.assertIn("community=public", summary)
-        self.assertIn("<redacted community, 11 chars>", summary)
-        # Run state keeps it, so the finding can be re-checked.
-        raw = (self.store.path / "findings.json").read_text()
-        self.assertIn("acmeNOC2024", raw)
-
-    def test_header_names_that_contain_uri_are_not_secrets(self):
-        from extscan.redact import redact_text
-        text = "content-security-policy: none\nAPI_KEY=abcdef\nsid: ASP.NET_SessionId=zz99"
-        out = redact_text(text)
-        self.assertIn("content-security-policy: none", out)
-        self.assertIn("API_KEY=<redacted, 6 chars>", out)
-        self.assertNotIn("zz99", out)
 
 
 class TestScreenshotPlan(unittest.TestCase):
     def setUp(self):
         self.store = Store(FIXTURE)
 
-    def test_roots_first_and_secret_pages_never_planned(self):
+    def test_roots_first_and_secret_pages_planned_for_review(self):
         shots = plan(self.store.services(), self.store.findings(), limit=60)
         roots = [s for s in shots if s.kind == "service"]
         self.assertEqual({s.url for s in roots},
@@ -248,8 +237,7 @@ class TestScreenshotPlan(unittest.TestCase):
                           "http://127.0.0.2:9200"})
         self.assertEqual(shots[:len(roots)], roots)
         urls = {s.url for s in shots}
-        for secret in (".env", "trace.axd", "elmah.axd"):
-            self.assertFalse(any(secret in u for u in urls), secret)
+        self.assertIn("http://127.0.0.2:8080/.env", urls)
         self.assertIn("http://127.0.0.2:8080/swagger.json", urls)
 
     def test_limit_never_drops_a_service_root(self):

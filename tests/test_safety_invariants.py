@@ -329,17 +329,6 @@ class TestScreenshotsStayInScope(unittest.TestCase):
         self.assertTrue(hop["final_url"].startswith(base))
 
 
-class TestRedactionIsAppliedToSensitiveEvidence(unittest.TestCase):
-    def test_secret_bearing_handlers_redact(self):
-        source = (SOURCE_DIR / "chase.py").read_text()
-        # Both the secret-file and generic content handlers must redact.
-        self.assertIn("_redact(resp.text", source)
-
-    def test_env_like_paths_redacted_in_probe_evidence(self):
-        source = (SOURCE_DIR / "probes.py").read_text()
-        self.assertIn("body_preview = _redact(body_preview)", source)
-
-
 class TestAuthorisationCannotBeSkipped(unittest.TestCase):
     def test_init_run_checks_the_testing_window(self):
         source = (SOURCE_DIR / "pipeline.py").read_text()

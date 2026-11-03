@@ -16,10 +16,6 @@ each request is fetched with redirects disabled and the browser never sees a
 3xx. A redirected navigation becomes a meta refresh, which is a new routed
 navigation. A redirected subresource is followed here, one checked hop at a
 time. Off-scope requests are aborted and listed, never sent.
-
-Pages whose evidence carries secrets (`.env`, config files) are not
-captured: a screenshot cannot be redacted, and the report's proof block
-already shows the key names.
 """
 
 from __future__ import annotations
@@ -36,17 +32,11 @@ from urllib.parse import urljoin, urlsplit
 
 from .models import Finding, Service, severity_rank
 from .policy import ScreenshotPolicy
-from .redact import redact_text
 from .scope import Scope, ScopeError
 
 SHOTS_FILE = "screenshots.json"
 SHOTS_DIR = "screenshots"
 MAX_HOPS = 5
-
-# Never photographed, whatever their severity: the page is the secret.
-SECRET_PATHS = {"/.env", "/.git/config", "/config.json", "/web.config", "/actuator/env",
-                "/actuator/heapdump", "/debug/pprof/", "/.DS_Store", "/trace.axd",
-                "/elmah.axd"}
 
 _EVIDENCE_URL_RE = re.compile(r"(?m)^(?:GET\s+|matched-at:\s*|spec:\s*)(https?://\S+)")
 
@@ -90,13 +80,6 @@ def finding_url(f: Finding) -> str:
     return m.group(1).rstrip(".,;") if m else ""
 
 
-def _holds_secrets(f: Finding, url: str) -> bool:
-    path = re.sub(r"^https?://[^/]+", "", url).split("?")[0] or "/"
-    if path in SECRET_PATHS or "secrets" in f.tags:
-        return True
-    return redact_text(f.evidence) != f.evidence
-
-
 def plan(services: list[Service], findings: list[Finding], limit: int) -> list[Shot]:
     """Root page of every web service, then pages behind medium+ findings."""
     web = {s.id: s for s in services if s.is_http and s.proto == "tcp"}
@@ -111,7 +94,7 @@ def plan(services: list[Service], findings: list[Finding], limit: int) -> list[S
             continue
         svc_id = f"{f.host}/{f.proto}/{f.port}"
         url = finding_url(f)
-        if svc_id not in web or not url or _holds_secrets(f, url):
+        if svc_id not in web or not url:
             continue
         if url.rstrip("/") == web[svc_id].base_url():
             shots[web[svc_id].base_url()].finding_ids.append(f.id)

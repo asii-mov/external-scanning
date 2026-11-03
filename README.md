@@ -163,7 +163,7 @@ fragile infrastructure.
 | `chase` → `openapi` | finds the spec, enumerates operations, flags those declaring no authentication (writes especially), notes out-of-scope servers |
 | `chase` → `graphql` | introspection, schema size, whether mutations are exposed |
 | `chase` → `api_endpoint` | confirms one documented-as-open **GET** really is open |
-| `chase` → `secret_file` | credential-bearing files, with values redacted |
+| `chase` → `secret_file` | credential-bearing files, with the values shown for review |
 | `chase` → `git_exposure` | readable `.git` metadata |
 | `chase` → `snmp_walk` | interface and address tables, to show what the exposure actually discloses |
 
@@ -221,9 +221,10 @@ model was written by the target:
    finding sourced to `llm-analysis`, pinned to `info` severity regardless of
    the model's opinion, marked tentative and flagged for review. It cannot
    decide what to scan, widen scope, or move an item up the remediation queue.
-3. **Secrets do not leave the engagement.** Evidence goes through the same
-   redaction as the report before transmission. An exposed `.env` proves
-   credentials are reachable; it is not something to upload to an API.
+3. **Secrets do not leave the engagement.** Evidence is redacted before it
+   is sent to the model. An exposed `.env` proves credentials are reachable;
+   it is not something to upload to an API. This is the only redaction in
+   extscan: reports keep evidence as captured.
 
 A run with no model produces the same findings minus the commentary, and says
 so. Nothing depends on it — which is what makes it safe to use.
@@ -253,13 +254,12 @@ Deliberate, tested, and not configurable away:
 - **No system proxy.** `http_proxy` in the operator's shell would route client
   traffic through a third party and make results reflect the proxy, not the
   target.
-- **Secrets redacted.** Evidence proves an `.env` is readable and names the
-  keys; it does not copy the values into the report, the ticket and three
-  mailboxes. Every rendered report (`report.md`, `report.json`, the vault)
-  also drops session ids, cookie values, credentials in URLs and SNMP
-  community strings that are not well-known defaults. Pages whose evidence
-  holds secrets are never screenshotted, because an image cannot be redacted.
-  The run state keeps raw values, so findings can be re-checked.
+- **Secrets are shown, for a human to judge.** extscan is a human-in-the-loop
+  tool. Evidence keeps the values it found (an `.env`'s keys and values,
+  cookies, community strings), and pages holding them are screenshotted, so
+  the reviewer can tell a live credential from an expired one or a
+  placeholder. Reports are working documents: review and sanitise them
+  before they go to the client or anywhere else.
 - **Screenshots stay in scope.** The browser's every request, subresources and
   each redirect hop included, is scope-checked before it is sent. Off-scope
   requests are blocked and listed in the caption.
@@ -353,7 +353,7 @@ Elasticsearch, Docker API, SNMP) with a matching scope and policy in
 `examples/lab/`. See `docs/LAB.md`.
 
 The suite deliberately covers the things that cause false positives in client
-reports — soft-404 filtering, OpenAPI base-path joining, secret redaction,
+reports — soft-404 filtering, OpenAPI base-path joining,
 scope refusal of hostile redirects, SHA-1 signature detection — and the
 failure paths: truncated-scan salvage, checkpoint resume, circuit breaking, and
 a dead model endpoint costing bounded work. Tests pass with and without the

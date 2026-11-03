@@ -40,7 +40,7 @@ running on your machine shows up in the results.
 | 2375/tcp | Docker remote API, no auth | `docker Docker remote API` | **critical** Docker API (plaintext) exposure |
 | 3306/tcp | MySQL 5.7.33 handshake | `mysql MySQL 5.7.33-log` | **high** database exposed |
 | 6379/tcp | Redis 5.0.7, no `requirepass` | `redis Redis key-value store 5.0.7` | **critical** Redis exposure, `redis-info` |
-| 8080/tcp | Billing app (`targetapp.py`) | `http nginx 1.18.0` | `.env` with redacted secrets, Swagger spec with unauthenticated writes, GraphQL introspection, `/metrics`, soft-404 handling, a confirmed-open `/api/admin/users` |
+| 8080/tcp | Billing app (`targetapp.py`) | `http nginx 1.18.0` | `.env` with fake secrets, Swagger spec with unauthenticated writes, GraphQL introspection, `/metrics`, soft-404 handling, a confirmed-open `/api/admin/users` |
 | 8081/tcp | IIS 8.5 / ASP.NET | `http Microsoft IIS httpd 8.5` | `trace.axd`, `elmah.axd`, WebDAV write verbs, 8.3 short-name oracle, verbose error page |
 | 8443/tcp | Billing app over TLS | `ssl/http nginx 1.18.0` | Same as 8080, plus a self-signed certificate |
 | 9200/tcp | Elasticsearch 6.8.0 | `http Elasticsearch REST API 6.8.0` | **critical** Elasticsearch exposure |

@@ -41,14 +41,13 @@ SPEC = {
     },
 }
 
-# Fake credentials for the redaction tests.
+# Fake credentials, so tests can check secrets reach the report for review.
 #
 # Keep these values deliberately UNLIKE real credential formats. An earlier
 # version used a realistic `sk_live_...` Stripe shape and GitHub's push
 # protection blocked the push -- correctly, since a scanner cannot tell an
 # invented key from a live one. Realism here buys nothing: the probe matches on
-# the key *name*, so the values only need to be greppable to prove they were
-# redacted out of the report.
+# the key *name*, so the values only need to be greppable.
 ENV = """APP_ENV=production
 DATABASE_URL=postgres://billing:NOT-A-REAL-PASSWORD@db-prod-01.corp.acme.example:5432/billing
 STRIPE_SECRET_KEY=fake-stripe-value-for-tests-only

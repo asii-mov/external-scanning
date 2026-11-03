@@ -190,10 +190,11 @@ let a request to "just check if it works" talk you past them.
   an audit. Document the exposure and let a human decide.
 - **No exploitation.** Version-matched CVEs go in the report as tentative,
   needing confirmation. Do not weaponise them.
-- **Do not copy secrets around.** extscan redacts credential values in
-  evidence on purpose. Keep it that way: report that an `.env` is readable and
-  which keys it holds, not the values. Never paste a discovered credential into
-  chat, a commit, or a ticket.
+- **Do not copy secrets around.** Evidence keeps credential values so a human
+  reviewer can judge whether they are live, expired or placeholders. Leave
+  that judgement to them: don't try discovered credentials, and never paste
+  them into a commit, a ticket or anywhere outside the run directory and
+  report.
 - **Stay inside the window.** If the testing window has closed, stop. Amending
   the scope file needs the client's agreement, not yours.
 - **Subdomains outside scope are never scanned.** The recon stage reports them

@@ -1,6 +1,6 @@
 """Probe and chase helpers: the judgement calls that keep reports honest.
 
-Soft-404 handling, secret redaction and API URL joining get their own tests
+Soft-404 handling and API URL joining get their own tests
 because each one, when wrong, produces a confident false positive in a
 document a client reads.
 """
@@ -9,7 +9,7 @@ import unittest
 
 from extscan.chase import _join_api, _looks_like_app_error, _parse_yaml_paths
 from extscan.models import Service
-from extscan.probes import SENSITIVE_TCP, SENSITIVE_UDP, _looks_like_real_hit, _redact
+from extscan.probes import SENSITIVE_TCP, SENSITIVE_UDP, _looks_like_real_hit
 from extscan.tools.net import Response
 
 
@@ -72,40 +72,6 @@ class TestSoftFourOhFour(unittest.TestCase):
             "/actuator", resp(200, '{"_links":{}}', "application/json")))
         self.assertFalse(_looks_like_real_hit(
             "/actuator", resp(200, "<html>404</html>", "text/html")))
-
-
-class TestRedaction(unittest.TestCase):
-    """Evidence must prove exposure without copying the client's secrets."""
-
-    def test_values_removed_keys_kept(self):
-        # Placeholder values, chosen not to resemble real credential formats
-        # so the repo never trips a secret scanner.
-        text = ("DATABASE_URL=postgres://user:fake-db-password@db/app\n"
-                "STRIPE_SECRET_KEY=fake-stripe-value\n"
-                "DEBUG=false\n")
-        out = _redact(text)
-        self.assertNotIn("fake-db-password", out)
-        self.assertNotIn("fake-stripe-value", out)
-        self.assertIn("DATABASE_URL", out)
-        self.assertIn("STRIPE_SECRET_KEY", out)
-        self.assertIn("redacted", out)
-        self.assertIn("DEBUG=false", out)          # non-secret keys survive
-
-    def test_length_preserved_for_triage(self):
-        out = _redact("API_TOKEN=0123456789\n")
-        self.assertIn("10 chars", out)
-
-    def test_colon_separated_config(self):
-        out = _redact("password: fake-password-value\n")
-        self.assertNotIn("fake-password-value", out)
-
-    def test_case_insensitive_key_match(self):
-        out = _redact("aws_secret_access_key=fake-aws-secret-value\n")
-        self.assertNotIn("fake-aws-secret-value", out)
-
-    def test_plain_text_untouched(self):
-        text = "User-agent: *\nDisallow: /admin\n"
-        self.assertEqual(_redact(text), text)
 
 
 class TestApiUrlJoining(unittest.TestCase):

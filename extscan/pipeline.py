@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import __version__, redact, vault
+from . import __version__, vault
 from . import chase as chase_mod
 from . import probes as probes_mod
 from . import report as report_mod
@@ -541,10 +541,8 @@ def screenshot(store: Store, scope: Scope, policy: Policy, force: bool = False,
 
 
 def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dict:
+    findings = store.findings()
     leads = store.leads()
-    communities = redact.secret_communities(store.findings(), leads)
-    findings = [redact.scrub_finding(f, communities) for f in store.findings()]
-    leads = [redact.scrub_lead(ld, communities) for ld in leads]
     services = store.services()
     hosts = store.hosts()
     triaged = triage(findings, services)

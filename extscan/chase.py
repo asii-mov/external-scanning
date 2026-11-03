@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from urllib.parse import urljoin, urlsplit
 
 from .models import Finding, Lead
-from .probes import ProbeContext, _redact
+from .probes import ProbeContext
 from .runner import have
 from .scope import ScopeError
 from .tools import net, snmp
@@ -423,7 +423,7 @@ def chase_git_exposure(ctx: ProbeContext, lead: Lead) -> ChaseResult:
             "object fetching is permitted, the entire source history can be reconstructed, "
             "including credentials committed and later removed."
         ),
-        evidence="\n\n".join(f"GET {base}{k}\n{_redact(v)}" for k, v in results.items()),
+        evidence="\n\n".join(f"GET {base}{k}\n{v}" for k, v in results.items()),
         recommendation="Block .git at the web server or deploy from a build artefact "
                        "rather than a working copy. Rotate any secret ever committed.",
         review_required=True,
@@ -453,7 +453,7 @@ def chase_web_paths(ctx: ProbeContext, lead: Lead) -> ChaseResult:
         description=f"Retrieved for context. {lead.reason}",
         evidence=(f"GET {url} -> {resp.status} {resp.reason}\n"
                   f"content-type: {resp.content_type}  length: {len(resp.body)}\n\n"
-                  + _redact(resp.text[:1500])
+                  + resp.text[:1500]
                   + (("\n\nlinks:\n" + "\n".join(f"  {link}" for link in links)) if links else "")),
         review_required=True,
         review_reason="An auditor should judge whether the content disclosed here matters "
@@ -478,16 +478,16 @@ def chase_secret_file(ctx: ProbeContext, lead: Lead) -> ChaseResult:
         severity=sev, host=lead.host, port=lead.port, source="extscan:secret_file",
         description=(
             f"The file is served to unauthenticated clients and contains "
-            f"{len(uniq)} key(s) whose names indicate secrets. Values are redacted here "
-            "deliberately: the finding is that they are reachable, and the report should "
-            "not become another copy of the client's credentials."
+            f"{len(uniq)} key(s) whose names indicate secrets. The values are shown in "
+            "the evidence so a reviewer can judge whether they are live, expired or "
+            "placeholders."
             if uniq else
             "The file is served to unauthenticated clients. No obvious secret key names "
             "were matched, but the content should be reviewed."
         ),
         evidence=(f"GET {lead.url} -> {resp.status}  length: {len(resp.body)}\n"
                   f"secret-like keys present: {', '.join(uniq[:40]) or 'none matched'}\n\n"
-                  + _redact(resp.text[:1200])),
+                  + resp.text[:1200]),
         recommendation="Remove the file from the web root, block the path, and rotate "
                        "every credential it contained -- treat them as compromised.",
         review_required=True,
@@ -552,7 +552,7 @@ def chase_api_endpoint(ctx: ProbeContext, lead: Lead) -> ChaseResult:
                            " Impact depends on what the response contains."),
             evidence=(f"GET {lead.url} -> {resp.status} {resp.reason}\n"
                       f"content-type: {resp.content_type}  length: {len(resp.body)}\n\n"
-                      + _redact(resp.text[:1000])),
+                      + resp.text[:1000]),
             recommendation="Require authentication on this endpoint.",
             review_required=True,
             review_reason="Check whether the returned data is sensitive, and whether other "

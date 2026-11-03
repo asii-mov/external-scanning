@@ -37,8 +37,7 @@ The notes below are kept as the spec it was built to.
   - Use headless Chromium (Playwright) or `gowitness`, as an optional extra
     like `extscan[llm]`. A missing browser is a coverage gap, not a failure.
   - Capture the root page plus pages that produced findings (Swagger UI,
-    admin panels). Pages holding secrets (`.env`, `trace.axd`) are not
-    captured: an image cannot be redacted.
+    admin panels, `.env`). A human reviews every capture.
   - Every capture goes through `scope.assert_url`, like any other request.
     Follow no redirects off scope.
   - Keep images out of `report.json`.
@@ -50,10 +49,9 @@ The notes below are kept as the spec it was built to.
       excerpt:
   - SNMP: the community string that worked and the `sysDescr` it returned.
   - HTTP: the request line and response status, with headers trimmed.
-  - Secrets: key names only. Values stay redacted, as the current report
-    already does.
-  - Non-default SNMP community strings are credentials. Redact them like
-    secrets, and keep known defaults such as `public` visible.
+  - Secrets and SNMP community strings: shown as captured. A human judges
+    whether they are live, expired or examples. (Redaction was removed: this
+    is a human-in-the-loop tool.)
 - [x] **Keep the auditor view.** The manual review queue and coverage gaps
       stay near the top. The narrative must not bury "this was never checked".
 - [x] **Tests.** Render a vault from the lab (`tests/lab.py`) run fixtures,
