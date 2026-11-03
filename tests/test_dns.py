@@ -332,7 +332,10 @@ class TestTransport(unittest.TestCase):
             return header(qid, q) + b"\x01a" + struct.pack("!H", 0xC000 | start)
 
         def forward_pointer(qid, q):
-            return header(qid, q) + struct.pack("!H", 0xC000 | 0x3FFF)
+            start = len(header(qid, q))
+            target = wire_name("x.lab.test")
+            return (header(qid, q) + struct.pack("!HHHIH", 0xC000 | (start + 12), 5, 1, 300,
+                                                 len(target)) + target)
 
         def truncated(qid, q):
             full = response(qid, q, answer=[("www.lab.test", "A", "192.0.2.80")])
@@ -380,6 +383,190 @@ class TestTransport(unittest.TestCase):
                 client.ask(auths[0], "www.other.test", "A")
         self.assertNotIn("www.other.test", ns.asked())
         self.assertFalse(ns.queries[-1].rd)
+
+
+NSEC_ZONE = [*ZONE,
+             ("vpn-admin.lab.test", "A", "192.0.2.9"),
+             ("lab.test", "NSEC", "mail.lab.test NS SOA MX NSEC"),
+             ("mail.lab.test", "NSEC", "ns1.lab.test A NSEC"),
+             ("ns1.lab.test", "NSEC", "vpn-admin.lab.test A NSEC"),
+             ("vpn-admin.lab.test", "NSEC", "www.lab.test A NSEC"),
+             ("www.lab.test", "NSEC", "lab.test A NSEC")]
+
+TAKEOVER_ZONE = [*ZONE,
+                 ("assets.lab.test", "CNAME", "lab-assets.s3.amazonaws.com"),
+                 ("old.lab.test", "CNAME", "old-app.vendor.test"),
+                 ("shop.lab.test", "CNAME", "lab-shop.herokuapp.com"),
+                 ("lab-shop.herokuapp.com", "A", "192.0.2.99"),
+                 ("news.lab.test", "MX", "10 mx.lapsed-mail.test"),
+                 ("dev.lab.test", "NS", "ns.lapsed-dns.test"),
+                 ("lame.lab.test", "NS", "ns1.lab.test")]
+TAKEOVER_NAMES = ["assets.lab.test", "old.lab.test", "shop.lab.test", "news.lab.test",
+                  "dev.lab.test", "lame.lab.test", "www.lab.test"]
+
+
+def audit(ns: FakeDns, known=(), scope: Scope | None = None, **policy):
+    results = dns.audit_zone(scope or lab_scope(), APEX, list(known), ns.policy(**policy))
+    return {r.check: r for r in results}
+
+
+def with_link(records, owner: str, nxt: str):
+    return [(o, t, f"{nxt} A NSEC") if (o, t) == (owner, "NSEC") else (o, t, d)
+            for o, t, d in records]
+
+
+class TestZoneTransfer(unittest.TestCase):
+    def test_allowed_transfer_is_a_medium_finding_with_the_dump(self):
+        with FakeDns(axfr=True) as ns:
+            axfr = audit(ns)["axfr"]
+        self.assertTrue(axfr.covered)
+        [finding] = axfr.findings
+        self.assertEqual((finding.severity, finding.host, finding.proto, finding.port),
+                         ("medium", APEX, "dns", None))
+        self.assertIn("ns1.lab.test", finding.title)
+        [(name, dump)] = axfr.artifacts
+        self.assertIn("ns1.lab.test", name)
+        self.assertIn("www.lab.test. 300 IN A 192.0.2.80", dump)
+        self.assertEqual([q.proto for q in ns.queries if q.qtype == "AXFR"], ["tcp"])
+
+    def test_refused_transfer_is_covered_with_no_finding(self):
+        with FakeDns(axfr=False) as ns:
+            axfr = audit(ns)["axfr"]
+        self.assertTrue(axfr.covered)
+        self.assertEqual(axfr.findings, ())
+        self.assertIsNone(axfr.gap())
+
+    def test_silent_nameserver_is_a_named_gap(self):
+        with FakeDns(axfr="silent") as ns:
+            axfr = audit(ns)["axfr"]
+        self.assertFalse(axfr.covered)
+        gap = axfr.gap()
+        self.assertEqual((gap.stage, gap.component), ("recon", "dns:axfr:lab.test"))
+        self.assertIn("ns1.lab.test", gap.reason)
+
+    def test_unreachable_resolver_loses_every_check(self):
+        with FakeDns(silent=True) as ns:
+            results = audit(ns)
+        self.assertEqual(sorted(results), ["axfr", "nsec-walk", "takeover"])
+        self.assertTrue(all(r.gap() is not None for r in results.values()))
+
+    def test_names_from_the_transfer_are_checked_for_takeover(self):
+        with FakeDns(TAKEOVER_ZONE, axfr=True) as ns:
+            takeover = audit(ns)["takeover"]
+        self.assertIn("Dangling CNAME assets.lab.test -> lab-assets.s3.amazonaws.com",
+                      [f.title for f in takeover.findings])
+
+
+class TestNsecWalk(unittest.TestCase):
+    def test_walk_lists_every_name_and_stops_at_the_apex(self):
+        with FakeDns(NSEC_ZONE) as ns:
+            walk = audit(ns)["nsec-walk"]
+        self.assertTrue(walk.covered)
+        self.assertEqual(walk.names, ("lab.test", "mail.lab.test", "ns1.lab.test",
+                                      "vpn-admin.lab.test", "www.lab.test"))
+        [finding] = walk.findings
+        self.assertEqual(finding.severity, "low")
+        self.assertIn("vpn-admin.lab.test", finding.evidence)
+        self.assertEqual(ns.asked("NSEC").count("lab.test"), 1)
+        self.assertTrue(all(q.do and not q.rd for q in ns.queries if q.qtype == "NSEC"))
+
+    def test_looping_chain_ends_the_walk_as_partial(self):
+        with FakeDns(with_link(NSEC_ZONE, "www.lab.test", "mail.lab.test")) as ns:
+            walk = audit(ns)["nsec-walk"]
+        self.assertFalse(walk.covered)
+        self.assertEqual(walk.gap().component, "dns:nsec-walk:lab.test")
+        self.assertLessEqual(len(ns.asked("NSEC")), 5)
+
+    def test_walk_is_bounded_by_max_walk_steps(self):
+        with FakeDns(NSEC_ZONE) as ns:
+            walk = audit(ns, max_walk_steps=2)["nsec-walk"]
+        self.assertFalse(walk.covered)
+        self.assertEqual(len(ns.asked("NSEC")), 3)
+        self.assertEqual(walk.findings[0].severity, "low")
+
+    def test_link_out_of_the_zone_is_never_followed(self):
+        with FakeDns(with_link(NSEC_ZONE, "ns1.lab.test", "x.evil.test")) as ns:
+            walk = audit(ns, scope=lab_scope(APEX, "evil.test"))["nsec-walk"]
+        self.assertFalse(walk.covered)
+        self.assertNotIn("x.evil.test", ns.asked())
+        self.assertEqual(walk.names, ("lab.test", "mail.lab.test", "ns1.lab.test"))
+
+    def test_nsec3_zone_is_reported_without_walking(self):
+        with FakeDns([*ZONE, ("lab.test", "NSEC3PARAM", "1 0 10 abcd")]) as ns:
+            walk = audit(ns)["nsec-walk"]
+        self.assertTrue(walk.covered)
+        [finding] = walk.findings
+        self.assertEqual(finding.severity, "info")
+        self.assertIn("iterations 10, salt abcd", finding.evidence)
+        self.assertEqual(ns.asked("NSEC"), [])
+
+    def test_unsigned_zone_is_covered_with_no_finding(self):
+        with FakeDns() as ns:
+            walk = audit(ns)["nsec-walk"]
+        self.assertTrue(walk.covered)
+        self.assertEqual(walk.findings, ())
+
+
+class TestTakeoverCandidates(unittest.TestCase):
+    def test_each_dangling_record_is_one_candidate(self):
+        with FakeDns(TAKEOVER_ZONE, refuse={("lame.lab.test", "SOA")}) as ns:
+            takeover = audit(ns, TAKEOVER_NAMES)["takeover"]
+        self.assertTrue(takeover.covered)
+        self.assertEqual(sorted((f.title, f.severity) for f in takeover.findings), [
+            ("Dangling CNAME assets.lab.test -> lab-assets.s3.amazonaws.com", "medium"),
+            ("Dangling CNAME old.lab.test -> old-app.vendor.test", "low"),
+            ("Dangling MX news.lab.test -> mx.lapsed-mail.test", "low"),
+            ("Delegation of dev.lab.test to missing nameserver ns.lapsed-dns.test",
+             "medium"),
+            ("Lame delegation of lame.lab.test", "medium"),
+        ])
+        for f in takeover.findings:
+            self.assertTrue(f.review_required, f.title)
+            self.assertEqual(f.confidence, "tentative")
+            self.assertIn("takeover-candidate", f.tags)
+            self.assertEqual((f.host, f.proto, f.source), (APEX, "dns", "extscan:dns"))
+
+    def test_live_targets_and_healthy_delegations_give_nothing(self):
+        with FakeDns(TAKEOVER_ZONE) as ns:
+            takeover = audit(ns, ["shop.lab.test", "lame.lab.test", "www.lab.test"])
+        self.assertEqual(takeover["takeover"].findings, ())
+
+    def test_targets_outside_the_zone_are_only_asked_for_addresses(self):
+        with FakeDns(TAKEOVER_ZONE, refuse={("lame.lab.test", "SOA")}) as ns:
+            audit(ns, [*TAKEOVER_NAMES, "www.example.test", "evillab.test"])
+        outside = [q for q in ns.queries if not dns._under(q.name, APEX)]
+        self.assertEqual(sorted({q.name for q in outside}),
+                         ["mx.lapsed-mail.test", "ns.lapsed-dns.test"])
+        self.assertTrue(all(q.qtype == "A" and q.rd for q in outside))
+        self.assertNotIn("www.example.test", ns.asked())
+        self.assertNotIn("evillab.test", ns.asked())
+
+    def test_names_past_max_names_are_a_gap(self):
+        with FakeDns(TAKEOVER_ZONE) as ns:
+            takeover = audit(ns, TAKEOVER_NAMES, max_names=3)["takeover"]
+        self.assertIn("over dns.max_names=3", takeover.gap().reason)
+
+
+class TestAuditBoundaries(unittest.TestCase):
+    def test_zone_outside_scope_is_refused_before_any_packet(self):
+        with FakeDns() as ns, self.assertRaises(ScopeError):
+            dns.audit_zone(lab_scope(), "example.test", [], ns.policy())
+        self.assertEqual(ns.queries, [])
+
+    def test_dry_run_sends_nothing_and_plans_every_check(self):
+        with FakeDns() as ns:
+            results = dns.audit_zone(lab_scope(), APEX, TAKEOVER_NAMES, ns.policy(),
+                                     dry_run=True)
+        self.assertEqual(ns.queries, [])
+        self.assertEqual([r.check for r in results], ["axfr", "nsec-walk", "takeover"])
+        self.assertTrue(all(r.planned and not r.covered and r.gap() is None
+                            for r in results))
+
+    def test_skipped_checks_send_nothing(self):
+        with FakeDns(NSEC_ZONE, axfr=True) as ns:
+            results = audit(ns, skip=["axfr", "nsec-walk"])
+        self.assertEqual(sorted(results), ["takeover"])
+        self.assertEqual(ns.asked("AXFR") + ns.asked("NSEC"), [])
 
 
 if __name__ == "__main__":
