@@ -80,7 +80,7 @@ class CheckResult:
         stage this check ran in."""
         if not self.partial:
             return None
-        check = next(c for c in (*CHECKS, HOST_NAMES) if c.name == self.check)
+        check = next(c for c in (*CHECKS, HOST_NAMES, SUBZONES) if c.name == self.check)
         return Degradation(stage=stage, component=self.component,
                            reason="; ".join(self.lost)[:200],
                            impact=check.impact.format(subject=self.subject),
@@ -563,6 +563,8 @@ class _Zone:
     names: set[str]
     authorities: list[_Authority] = field(default_factory=list)
     authority_gaps: tuple[str, ...] = ()
+    delegations: dict[str, tuple[list[_Authority], tuple[str, ...]]] = field(
+        default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -581,6 +583,10 @@ def audit_zone(scope: Scope, zone: str, known_names: list[str], policy: DnsPolic
                dry_run: bool = False) -> list[CheckResult]:
     """Run every enabled check against one in-scope zone, one result each.
 
+    With `policy.subzones`, each delegated sub-zone the takeover check
+    finds also gets the checks that need authorities, then one `subzones`
+    result says whether every sub-zone was reached.
+
     Network trouble never raises: it becomes `lost` entries. Raises
     ValueError for an unknown `policy.skip` name and ScopeError for a zone
     outside scope.domains, both before any packet. Names in `known_names`
@@ -589,20 +595,49 @@ def audit_zone(scope: Scope, zone: str, known_names: list[str], policy: DnsPolic
     enabled = [c for c in CHECKS if c.name in _enabled(policy)]
     zone = scope.assert_dns_name(zone, "dns audit")
     if dry_run:
-        return [CheckResult(c.name, zone, planned=True) for c in enabled]
+        planned = [*enabled, SUBZONES] if policy.subzones else enabled
+        return [CheckResult(c.name, zone, planned=True) for c in planned]
     client = _Client(scope, policy)
     authorities, gaps = client.authorities(zone)
     names = {n for n in map(_normalise, known_names) if _under(n, zone) and _encodable(n)}
     z = _Zone(zone, client, policy, names | {zone}, authorities, gaps)
     results = []
     for check in enabled:
-        if check.needs_authorities and not z.authorities:
-            result = CheckResult(check.name, zone, lost=gaps)
-        else:
-            result = check.run(z)
+        result = _run(check, z)
         z.names |= {n for n in result.names if _encodable(n)}
         results.append(result)
+    if policy.subzones:
+        results += _subzones(z, enabled)
     return results
+
+
+def _run(check: _Check, z: _Zone) -> CheckResult:
+    if check.needs_authorities and not z.authorities:
+        return CheckResult(check.name, z.zone, lost=z.authority_gaps)
+    return check.run(z)
+
+
+def _subzones(z: _Zone, enabled: list[_Check]) -> list[CheckResult]:
+    """Transfer and walk the sub-zones delegated from `z`, asking the
+    nameservers the parent's referral named, at most dns.max_subzones of
+    them. A sub-zone that is itself a scope domain gets its own audit."""
+    if "takeover" not in {c.name for c in enabled}:
+        return [CheckResult(SUBZONES.name, z.zone, lost=(
+            "dns.skip includes takeover, the check that finds the delegations",))]
+    found = sorted(s for s in z.delegations if s not in z.client.scope.domains)
+    cap = z.policy.max_subzones
+    results = []
+    for sub in found[:cap]:
+        authorities, gaps = z.delegations[sub]
+        if not authorities and not gaps:
+            gaps = (f"no nameserver of {sub} has an address",)
+        child = _Zone(sub, z.client, z.policy, {sub}, authorities, gaps)
+        results += [_run(c, child) for c in enabled if c.needs_authorities]
+    lost = ()
+    if found[cap:]:
+        lost = (f"{len(found) - cap} delegated sub-zone(s) over dns.max_subzones={cap} "
+                f"were not transferred or walked (first: {found[cap]})",)
+    return [*results, CheckResult(SUBZONES.name, z.zone, lost=lost)]
 
 
 def _enabled(policy: DnsPolicy) -> set[str]:
@@ -864,6 +899,8 @@ def _dangling_ns(z: _Zone, name: str) -> tuple[list[Finding], bool]:
         return findings, answered
     auths, gaps = ((z.authorities, z.authority_gaps) if parent is None
                    else z.client.authorities(name, parent))
+    if parent is not None:
+        z.delegations[name] = (auths, gaps)
     statuses = {a.host: z.client.ask(a, name, "SOA").status for a in auths}
     if gaps or any(s in ("timeout", "error") for s in statuses.values()):
         return findings, False
@@ -944,3 +981,9 @@ HOST_NAMES = _Check(
     "host-names", False,
     "Some host names of {subject} were not checked for dangling CNAME or MX records.",
     "Check the resolver (dns.resolvers), then re-run `extscan discover <run> --resume`.")
+
+SUBZONES = _Check(
+    "subzones", False,
+    "Not every sub-zone delegated from {subject} was checked for zone transfer and "
+    "NSEC walking.",
+    "Raise dns.max_subzones, then re-run `extscan recon`.")

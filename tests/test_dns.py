@@ -115,6 +115,10 @@ def response(qid: int, q: Query, rcode: int = 0, answer=(), authority=(),
 class FakeDns:
     """Resolver and authority in one, on UDP and TCP at the same loopback port.
 
+    It is authoritative for every zone with an SOA in `records`, the way one
+    server can host a parent and its child, and gives referrals for other
+    delegations.
+
     `axfr` is True (serve the zone), False (REFUSED) or "silent" (accept the
     connection, never reply). `silent` drops every query, `truncate` sets TC
     on every UDP reply, `refuse` holds (name, type) pairs answered REFUSED,
@@ -124,6 +128,7 @@ class FakeDns:
     def __init__(self, records=ZONE, *, axfr=False, silent=False, truncate=False,
                  refuse=(), raw: Callable[[int, Query], bytes | None] | None = None):
         self.records = [tuple(r) for r in records]
+        self.zones = {r[0] for r in self.records if r[1] == "SOA"}
         self.axfr, self.silent, self.truncate = axfr, silent, truncate
         self.refuse = set(refuse)
         self.raw = raw
@@ -223,19 +228,29 @@ class FakeDns:
     def _transfer(self, qid: int, q: Query) -> list[bytes] | None:
         if self.axfr == "silent" or q.proto != "tcp":
             return None
-        if not self.axfr:
+        if not self.axfr or q.name not in self.zones:
             return [response(qid, q, rcode=5)]
-        body = [r for r in self.records if dns._under(r[0], APEX) and r != SOA]
+        soa = self._soa(q.name)
+        body = [r for r in self.records if r != soa and (
+            self._hosting(r[0]) == q.name
+            or (r[1] == "NS" and r[0] in self.zones and dns._under(r[0], q.name)))]
         half = len(body) // 2
-        return [response(qid, q, answer=[SOA, *body[:half]]),
-                response(qid, q, answer=[*body[half:], SOA])]
+        return [response(qid, q, answer=[soa, *body[:half]]),
+                response(qid, q, answer=[*body[half:], soa])]
+
+    def _hosting(self, name: str) -> str | None:
+        """The deepest zone this server is authoritative for that holds `name`."""
+        return max((z for z in self.zones if dns._under(name, z)), key=len, default=None)
+
+    def _soa(self, zone: str):
+        return next(r for r in self.records if r[0] == zone and r[1] == "SOA")
 
     def resolve(self, q: Query):
         if (q.name, q.qtype) in self.refuse:
             return 5, [], []
         name, chain = q.name, []
         for _ in range(8):
-            if not q.rd and name != APEX:
+            if not q.rd:
                 cut = self._delegation(name)
                 if cut:
                     return 0, [], cut
@@ -248,7 +263,8 @@ class FakeDns:
                 chain.append(cname[0])
                 name = cname[0][2]
                 continue
-            negative = [SOA] if dns._under(name, APEX) else []
+            zone = self._hosting(name)
+            negative = [self._soa(zone)] if zone else []
             if owned or any(r[0].endswith("." + name) for r in self.records):
                 return 0, chain, negative
             return 3, chain, negative
@@ -259,7 +275,7 @@ class FakeDns:
         labels = name.split(".")
         for i in range(len(labels) - 1):
             cut = ".".join(labels[i:])
-            if cut == APEX:
+            if cut in self.zones:
                 return None
             ns = [r for r in self.records if r[0] == cut and r[1] == "NS"]
             if ns:
@@ -554,6 +570,93 @@ class TestTakeoverCandidates(unittest.TestCase):
         with FakeDns(TAKEOVER_ZONE) as ns:
             takeover = audit(ns, TAKEOVER_NAMES, max_names=3)["takeover"]
         self.assertIn("over dns.max_names=3", takeover.gap("recon").reason)
+
+
+def child_zone(zone: str, *names: str):
+    """A signed sub-zone, delegated from lab.test and hosted on the same fake."""
+    owners = [zone, *names, f"ns1.{zone}"]
+    return [(zone, "SOA", f"ns1.{zone} hostmaster.lab.test 1 3600 600 86400 300"),
+            (zone, "NS", f"ns1.{zone}"),
+            (f"ns1.{zone}", "A", "127.0.0.1"),
+            *[(n, "A", "192.0.2.40") for n in names],
+            *[(o, "NSEC", f"{owners[(i + 1) % len(owners)]} A NSEC")
+              for i, o in enumerate(owners)]]
+
+
+EU_ZONE = child_zone("eu.lab.test", "app.eu.lab.test")
+US_ZONE = child_zone("us.lab.test")
+SUBZONE_CHECKS = {"AXFR", "NSEC", "NSEC3PARAM"}
+
+
+def zone_queries(ns: FakeDns, zone: str) -> list[tuple[str, str]]:
+    return [(q.name, q.qtype) for q in ns.queries
+            if q.qtype in SUBZONE_CHECKS and dns._under(q.name, zone)]
+
+
+class TestSubZones(unittest.TestCase):
+    def results(self, records, scope: Scope | None = None, **policy):
+        with FakeDns(records, axfr=True) as ns:
+            results = dns.audit_zone(scope or lab_scope(), APEX, [], ns.policy(**policy))
+        return ns, {r.component: r for r in results}
+
+    def test_by_default_a_sub_zone_is_only_checked_for_takeover(self):
+        ns, results = self.results([*ZONE, *EU_ZONE])
+        self.assertIn("eu.lab.test", ns.asked("SOA"))
+        self.assertEqual(zone_queries(ns, "eu.lab.test"), [])
+        self.assertEqual(sorted(results), ["dns:axfr:lab.test", "dns:nsec-walk:lab.test",
+                                           "dns:takeover:lab.test"])
+
+    def test_opted_in_sub_zones_are_transferred_and_walked(self):
+        ns, results = self.results([*ZONE, *EU_ZONE], subzones=True)
+        self.assertEqual(sorted(results), [
+            "dns:axfr:eu.lab.test", "dns:axfr:lab.test", "dns:nsec-walk:eu.lab.test",
+            "dns:nsec-walk:lab.test", "dns:subzones:lab.test", "dns:takeover:lab.test"])
+        self.assertTrue(all(r.covered for r in results.values()))
+        [axfr] = results["dns:axfr:eu.lab.test"].findings
+        self.assertEqual((axfr.title, axfr.host),
+                         ("Zone transfer (AXFR) of eu.lab.test allowed by ns1.eu.lab.test",
+                          "eu.lab.test"))
+        [walk] = results["dns:nsec-walk:eu.lab.test"].findings
+        self.assertIn("app.eu.lab.test", walk.evidence)
+        self.assertEqual(ns.asked("AXFR"), ["lab.test", "eu.lab.test"])
+        self.assertTrue(all(not q.rd for q in ns.queries if q.qtype in SUBZONE_CHECKS))
+
+    def test_sub_zones_past_the_cap_are_lost_coverage(self):
+        ns, results = self.results([*ZONE, *EU_ZONE, *US_ZONE], subzones=True,
+                                   max_subzones=1)
+        self.assertIn("dns:axfr:eu.lab.test", results)
+        self.assertNotIn("dns:axfr:us.lab.test", results)
+        self.assertEqual(zone_queries(ns, "us.lab.test"), [])
+        gap = results["dns:subzones:lab.test"].gap("recon")
+        self.assertIn("1 delegated sub-zone(s) over dns.max_subzones=1", gap.reason)
+        self.assertIn("us.lab.test", gap.reason)
+
+    def test_sub_zone_with_no_reachable_nameserver_is_lost_coverage(self):
+        records = [r for r in [*ZONE, *EU_ZONE] if r[:2] != ("ns1.eu.lab.test", "A")]
+        _, results = self.results(records, subzones=True)
+        for check in ("axfr", "nsec-walk"):
+            self.assertIn("no nameserver of eu.lab.test has an address",
+                          results[f"dns:{check}:eu.lab.test"].gap("recon").reason)
+
+    def test_sub_zone_that_is_a_scope_domain_is_left_to_its_own_audit(self):
+        ns, results = self.results([*ZONE, *EU_ZONE], lab_scope(APEX, "eu.lab.test"),
+                                   subzones=True)
+        self.assertNotIn("dns:axfr:eu.lab.test", results)
+        self.assertEqual(zone_queries(ns, "eu.lab.test"), [])
+
+    def test_skipping_takeover_leaves_sub_zones_as_a_gap(self):
+        ns, results = self.results([*ZONE, *EU_ZONE], subzones=True, skip=["takeover"])
+        self.assertEqual(zone_queries(ns, "eu.lab.test"), [])
+        self.assertIn("takeover", results["dns:subzones:lab.test"].gap("recon").reason)
+
+    def test_dry_run_plans_the_sub_zone_audit_and_sends_nothing(self):
+        with FakeDns([*ZONE, *EU_ZONE], axfr=True) as ns:
+            results = dns.audit_zone(lab_scope(), APEX, [], ns.policy(subzones=True),
+                                     dry_run=True)
+        self.assertEqual(ns.queries, [])
+        self.assertEqual([r.check for r in results],
+                         ["axfr", "nsec-walk", "takeover", "subzones"])
+        self.assertTrue(all(r.planned for r in results))
 
 
 HOST = "192.0.2.5"

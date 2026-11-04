@@ -22,7 +22,7 @@ from extscan.runner import Runner
 from extscan.scope import Scope
 from extscan.store import Store
 from extscan.tools import dns, nmap, subdomains
-from tests.test_dns import CLIENT_ZONE, ZONE, FakeDns
+from tests.test_dns import CLIENT_ZONE, EU_ZONE, US_ZONE, ZONE, FakeDns
 
 
 class _Stage(unittest.TestCase):
@@ -237,8 +237,8 @@ class TestDnsGaps(_Stage):
         super().setUp()
         self.scope.domains = ["lab.test"]
 
-    def recon(self, ns: FakeDns, names=(), source_errors=()):
-        self.policy.dns = ns.policy(timeout_sec=0.2)
+    def recon(self, ns: FakeDns, names=(), source_errors=(), **policy):
+        self.policy.dns = ns.policy(timeout_sec=0.2, **policy)
         found = [subdomains.Enumerated(name=n) for n in names]
         with mock.patch.object(subdomains, "enumerate_domain",
                                return_value=(found, list(source_errors))), \
@@ -280,6 +280,20 @@ class TestDnsGaps(_Stage):
             self.recon(ns)
             self.assertEqual(ns.queries, [])
         self.assertEqual(self.dns_gaps(), before)
+
+    def test_sub_zone_gaps_clear_on_their_own(self):
+        broken = [r for r in EU_ZONE if r[:2] != ("ns1.eu.lab.test", "A")]
+        with FakeDns([*ZONE, *broken, *US_ZONE], axfr=True) as ns:
+            self.recon(ns, subzones=True, max_subzones=1)
+        self.assertEqual([c for c, _ in self.dns_gaps()],
+                         ["dns:axfr:eu.lab.test", "dns:nsec-walk:eu.lab.test",
+                          "dns:subzones:lab.test"])
+        with FakeDns([*ZONE, *EU_ZONE, *US_ZONE], axfr=True) as ns:
+            self.recon(ns, subzones=True, max_subzones=2)
+        self.assertEqual(self.dns_gaps(), [])
+        titles = [f.title for f in self.store.findings()]
+        for zone in ("eu.lab.test", "us.lab.test"):
+            self.assertIn(f"Zone transfer (AXFR) of {zone} allowed by ns1.{zone}", titles)
 
     def test_checks_run_on_enumerated_names_even_when_a_source_failed(self):
         records = [*ZONE, ("assets.lab.test", "CNAME", "lab-assets.s3.amazonaws.com")]

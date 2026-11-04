@@ -160,17 +160,20 @@ class ReconPolicy:
 @dataclass
 class DnsPolicy:
     """DNS checks (zone transfer, NSEC walking, dangling records) run inside
-    recon for every scope.domains entry."""
+    recon for every scope.domains entry, and on in-scope hosts' names at the
+    end of discover."""
 
     resolvers: list[str] = field(default_factory=list)  # "ip" or "ip:port"; [] = resolv.conf
     port: int = 53                      # authoritative servers' port
     timeout_sec: float = 3.0
     retries: int = 1
     query_interval_sec: float = 0.02
-    skip: list[str] = field(default_factory=list)   # check names from tools/dns.py CHECKS
+    skip: list[str] = field(default_factory=list)   # axfr, nsec-walk, takeover, host-names
     max_names: int = 2000
     max_walk_steps: int = 5000
     max_axfr_records: int = 200_000
+    subzones: bool = False              # also transfer and walk delegated sub-zones
+    max_subzones: int = 20
 
 
 @dataclass
