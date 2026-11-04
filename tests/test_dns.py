@@ -435,7 +435,7 @@ class TestZoneTransfer(unittest.TestCase):
             axfr = audit(ns, scope=lab_scope(allow_private=False))["axfr"]
         self.assertFalse(axfr.covered)
         self.assertEqual(axfr.findings, ())
-        self.assertIn("internal address 127.0.0.1", axfr.gap().reason)
+        self.assertIn("internal address 127.0.0.1", axfr.gap("recon").reason)
         self.assertNotIn("AXFR", [q.qtype for q in ns.queries])
 
     def test_refused_transfer_is_covered_with_no_finding(self):
@@ -443,21 +443,21 @@ class TestZoneTransfer(unittest.TestCase):
             axfr = audit(ns)["axfr"]
         self.assertTrue(axfr.covered)
         self.assertEqual(axfr.findings, ())
-        self.assertIsNone(axfr.gap())
+        self.assertIsNone(axfr.gap("recon"))
 
     def test_silent_nameserver_is_a_named_gap(self):
         with FakeDns(axfr="silent") as ns:
             axfr = audit(ns)["axfr"]
         self.assertFalse(axfr.covered)
-        gap = axfr.gap()
-        self.assertEqual((gap.stage, gap.component), ("recon", "dns:axfr:lab.test"))
+        gap = axfr.gap("recon")
+        self.assertEqual(gap.component, "dns:axfr:lab.test")
         self.assertIn("ns1.lab.test", gap.reason)
 
     def test_unreachable_resolver_loses_every_check(self):
         with FakeDns(silent=True) as ns:
             results = audit(ns)
         self.assertEqual(sorted(results), ["axfr", "nsec-walk", "takeover"])
-        self.assertTrue(all(r.gap() is not None for r in results.values()))
+        self.assertTrue(all(r.gap("recon") is not None for r in results.values()))
 
     def test_names_from_the_transfer_are_checked_for_takeover(self):
         with FakeDns(TAKEOVER_ZONE, axfr=True) as ns:
@@ -483,7 +483,7 @@ class TestNsecWalk(unittest.TestCase):
         with FakeDns(with_link(NSEC_ZONE, "www.lab.test", "mail.lab.test")) as ns:
             walk = audit(ns)["nsec-walk"]
         self.assertFalse(walk.covered)
-        self.assertEqual(walk.gap().component, "dns:nsec-walk:lab.test")
+        self.assertEqual(walk.gap("recon").component, "dns:nsec-walk:lab.test")
         self.assertLessEqual(len(ns.asked("NSEC")), 5)
 
     def test_walk_is_bounded_by_max_walk_steps(self):
@@ -553,7 +553,7 @@ class TestTakeoverCandidates(unittest.TestCase):
     def test_names_past_max_names_are_a_gap(self):
         with FakeDns(TAKEOVER_ZONE) as ns:
             takeover = audit(ns, TAKEOVER_NAMES, max_names=3)["takeover"]
-        self.assertIn("over dns.max_names=3", takeover.gap().reason)
+        self.assertIn("over dns.max_names=3", takeover.gap("recon").reason)
 
 
 class TestAuditBoundaries(unittest.TestCase):
@@ -568,7 +568,7 @@ class TestAuditBoundaries(unittest.TestCase):
                                      dry_run=True)
         self.assertEqual(ns.queries, [])
         self.assertEqual([r.check for r in results], ["axfr", "nsec-walk", "takeover"])
-        self.assertTrue(all(r.planned and not r.covered and r.gap() is None
+        self.assertTrue(all(r.planned and not r.covered and r.gap("recon") is None
                             for r in results))
 
     def test_skipped_checks_send_nothing(self):

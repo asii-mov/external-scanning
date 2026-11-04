@@ -40,20 +40,20 @@ from extscan.resilience import Degradation
 from extscan.scope import Scope, ScopeError, is_internal_address
 
 SOURCE = "extscan:dns"
-STAGE = "recon"
 
 
 @dataclass(frozen=True)
 class CheckResult:
-    """What one check learned about one zone, and what it could not cover.
+    """What one check learned about one subject, and what it could not cover.
 
-    A dry run gives `planned` results: nothing was sent, so nothing is
-    covered or lost. Otherwise `lost` lists each piece of coverage that did
-    not happen; the findings from the parts that did run are kept.
+    The subject is a zone, or for `host-names` an in-scope address. A dry
+    run gives `planned` results: nothing was sent, so nothing is covered or
+    lost. Otherwise `lost` lists each piece of coverage that did not happen;
+    the findings from the parts that did run are kept.
     """
 
     check: str
-    zone: str
+    subject: str
     findings: tuple[Finding, ...] = ()
     lost: tuple[str, ...] = ()
     names: tuple[str, ...] = ()
@@ -62,7 +62,7 @@ class CheckResult:
 
     @property
     def component(self) -> str:
-        return f"dns:{self.check}:{self.zone}"
+        return f"dns:{self.check}:{self.subject}"
 
     @property
     def covered(self) -> bool:
@@ -72,14 +72,17 @@ class CheckResult:
     def partial(self) -> bool:
         return not self.planned and bool(self.lost)
 
-    def gap(self) -> Degradation | None:
+    def gap(self, stage: str) -> Degradation | None:
+        """The coverage lost, as a gap recorded under `stage`, the pipeline
+        stage this check ran in."""
         if not self.partial:
             return None
         check = next(c for c in CHECKS if c.name == self.check)
-        return Degradation(stage=STAGE, component=self.component,
+        return Degradation(stage=stage, component=self.component,
                            reason="; ".join(self.lost)[:200],
-                           impact=check.impact.format(zone=self.zone),
-                           remedy=check.remedy, hosts=[self.zone])
+                           impact=check.impact.format(subject=self.subject),
+                           remedy=check.remedy, hosts=[self.subject])
+
 
 _TYPES = {
     "A": 1, "NS": 2, "CNAME": 5, "SOA": 6, "PTR": 12, "MX": 15, "TXT": 16,
@@ -841,15 +844,15 @@ CLAIMABLE_SUFFIXES = (
 # In run order: the two discovery checks feed the names they find into takeover.
 CHECKS: tuple[_Check, ...] = (
     _Check("axfr", True,
-           "Zone transfer was not tested against every nameserver of {zone}.",
+           "Zone transfer was not tested against every nameserver of {subject}.",
            "Check TCP/53 reachability to the nameservers, then re-run `extscan recon`.",
            _axfr_check),
     _Check("nsec-walk", True,
-           "DNSSEC zone walking was not completed for {zone}.",
+           "DNSSEC zone walking was not completed for {subject}.",
            "Raise dns.max_walk_steps or check reachability, then re-run `extscan recon`.",
            _nsec_walk),
     _Check("takeover", False,
-           "Some names under {zone} were not checked for dangling CNAME, MX or NS records.",
+           "Some names under {subject} were not checked for dangling CNAME, MX or NS records.",
            "Check the resolver (dns.resolvers), then re-run `extscan recon`.",
            _takeover),
 )

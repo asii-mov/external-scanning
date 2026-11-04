@@ -273,23 +273,28 @@ def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
 def _audit_dns(store: Store, scope: Scope, policy: Policy, runner: Runner,
                domain: str, names: list[str]) -> int:
     """Run the DNS checks for one domain. Returns the number of findings."""
-    found = 0
-    for result in dns.audit_zone(scope, domain, names, policy.dns, dry_run=runner.dry_run):
-        if result.planned:
-            print(f"  [dry-run] dns {result.check} for {domain}")
-            continue
-        store.add_findings(result.findings)
-        for name, text in result.artifacts:
-            store.write_raw(name, text)
-        found += len(result.findings)
-        print(f"  dns {result.check}: {len(result.findings)} finding(s)")
-        gap = result.gap()
-        if gap:
-            _coverage_lost(store, gap)
-        # Added before the old ones go, so a crash in between never drops a gap.
-        store.remove_degradations(lambda d, c=result.component, g=gap: (
-            d.stage == dns.STAGE and d.component == c and (g is None or d.reason != g.reason)))
-    return found
+    results = dns.audit_zone(scope, domain, names, policy.dns, dry_run=runner.dry_run)
+    return sum(_record_dns(store, "recon", r) for r in results)
+
+
+def _record_dns(store: Store, stage: str, result: dns.CheckResult) -> int:
+    """Store one DNS check's findings and artifacts, and record or clear its
+    gap under `stage`. A planned (dry-run) result touches nothing."""
+    if result.planned:
+        print(f"  [dry-run] dns {result.check} for {result.subject}")
+        return 0
+    store.add_findings(result.findings)
+    for name, text in result.artifacts:
+        store.write_raw(name, text)
+    print(f"  dns {result.check} {result.subject}: {len(result.findings)} finding(s)")
+    gap = result.gap(stage)
+    if gap:
+        _coverage_lost(store, gap)
+    # Added before the old ones go, so a crash in between never drops a gap.
+    store.remove_degradations(lambda d: (
+        d.stage == stage and d.component == result.component
+        and (gap is None or d.reason != gap.reason)))
+    return len(result.findings)
 
 
 def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
