@@ -85,6 +85,21 @@ the same in a report:
 sudo .venv/bin/extscan discover <run> --udp-only   # clears the gap once UDP has run
 ```
 
+## Try it on the lab first
+
+The repo ships a lab: deliberately exposed services on `127.0.0.2`, with a
+scope file that authorises only that address. It is the way to see a full
+run, report and coverage gaps before you have a signed scope.
+
+```bash
+uv run python -m tests.lab                # terminal 1, Ctrl-C to stop
+uv run extscan run --scope examples/lab/scope.json --policy examples/lab/policy.json   # terminal 2
+uv run extscan gaps latest
+```
+
+About 8 minutes with nuclei. `docs/LAB.md` lists what each service should
+produce.
+
 ## Authorisation is mandatory
 
 extscan will not scan anything without a scope file recording who authorised
@@ -114,7 +129,8 @@ address space (RFC 1918, loopback, link-local, CGNAT) is refused unless
 `allow_private` is set, a scope that expands past `max_hosts` is refused, and
 scanning outside the testing window stops the run.
 
-See `examples/scope.example.json`.
+See `examples/scope.example.json`. Copy it and set the window to the dates
+the client agreed; `--dry-run` checks the window too.
 
 ## Use
 

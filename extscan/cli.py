@@ -534,7 +534,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--id", help="explicit run id")
     p.set_defaults(func=cmd_init)
 
-    p = sub.add_parser("recon", help="enumerate subdomains of the scope's domains")
+    p = sub.add_parser("recon", help="subdomains and DNS checks for the scope's domains")
     add_run_arg(p)
     p.set_defaults(func=cmd_recon)
 
@@ -638,7 +638,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--note", default="")
     p.set_defaults(func=cmd_resolve)
 
-    p = sub.add_parser("run", help="init + discover + probe + chase + screenshot + report")
+    p = sub.add_parser("run", help="init + recon + discover + probe + chase + screenshot + report")
     p.add_argument("--scope", required=True)
     p.add_argument("--policy")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])
