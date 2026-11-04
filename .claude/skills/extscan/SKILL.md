@@ -203,7 +203,8 @@ let a request to "just check if it works" talk you past them.
   is an unauthorised act against infrastructure that may not even be the
   client's.
 - **Takeover candidates are report-only.** recon flags dangling CNAME, MX and
-  NS records from DNS alone. Don't register the domain, create the bucket or
+  NS records from DNS alone, and discover does the same for the names of
+  in-scope hosts. Don't register the domain, create the bucket or
   otherwise claim the resource to prove it. The client confirms.
 - **IIS checks stay read-only.** The WebDAV check reads the advertised verb
   list and does not attempt PUT; the 8.3 short-name check confirms the

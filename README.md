@@ -151,6 +151,7 @@ fragile infrastructure.
 | Stage | Covers |
 |---|---|
 | `discover` | nmap TCP (SYN when privileged, connect otherwise) + UDP, service/version detection, `default,safe,vuln` NSE categories, OS fingerprint |
+| `discover` → dns | the host names nmap reported for each live in-scope address, checked one by one for dangling CNAME and MX records, with findings on that address. Names under no scope domain are listed in one info finding, so the reviewer can add the client's domains and get the zone checks. Skip with `dns.skip: ["host-names"]` |
 | `probe` → `nuclei` | templated web checks across every discovered HTTP service at once |
 | `probe` → `http_fingerprint` | root page, fingerprint and security headers, ~23 disclosure paths with soft-404 filtering |
 | `probe` → `tls` | certificate detail, expiry, self-signing, which TLS versions are actually offered |
@@ -160,7 +161,7 @@ fragile infrastructure.
 | `probe` → `iis` | IIS/ASP.NET: `trace.axd`/`elmah.axd`, WebDAV verbs, 8.3 short-name oracle, verbose error pages, version headers, default content |
 | `probe` → `sslscan` | cipher-level TLS audit — RC4/3DES/export suites, CRIME, insecure renegotiation (needs `sslscan`) |
 | `recon` → subdomains | certificate transparency + `subfinder`/`amass`, resolved and split into in-scope (scannable) and out-of-scope (reported, never touched) |
-| `recon` → dns | per scope domain, built-in DNS client: zone transfer (AXFR) against each nameserver, NSEC zone walking (NSEC3 recognised, not cracked), and takeover candidates from dangling CNAME, MX and NS records and lame delegations. Report only. Tune or skip checks with the policy's `dns` section (`resolvers`, `skip`, bounds) |
+| `recon` → dns | per scope domain, built-in DNS client: zone transfer (AXFR) against each nameserver, NSEC zone walking (NSEC3 recognised, not cracked), and takeover candidates from dangling CNAME, MX and NS records and lame delegations. Report only. Tune or skip checks with the policy's `dns` section (`resolvers`, `skip`, bounds). `subzones: true` also transfers and walks each delegated sub-zone, up to `max_subzones` |
 | `chase` → `openapi` | finds the spec, enumerates operations, flags those declaring no authentication (writes especially), notes out-of-scope servers |
 | `chase` → `graphql` | introspection, schema size, whether mutations are exposed |
 | `chase` → `api_endpoint` | confirms one documented-as-open **GET** really is open |
@@ -264,9 +265,14 @@ Deliberate, tested, and not configurable away:
 - **DNS queries stay on the scope's domains.** `Scope.assert_dns_name` in
   `extscan/scope.py` gates every DNS query: the name must be a `domains` entry
   or sit under one. Zone transfers and NSEC walks go only to the zone's own
-  nameservers. A CNAME, MX or NS target outside the zone is only checked for
-  existence, with an A query through the resolver. extscan never contacts it,
-  never sends it HTTP and never tries to claim it. Only opcode QUERY is sent.
+  nameservers, which for a sub-zone are the ones its parent's referral names.
+  A CNAME, MX or NS target outside the zone is only checked for existence,
+  with an A query through the resolver. extscan never contacts it, never
+  sends it HTTP and never tries to claim it. Only opcode QUERY is sent.
+- **A host's name never opens its zone.** The one exception to that gate is
+  a host name nmap reported for an in-scope address. The resolver is asked
+  for its A and MX records and nothing else, so the nameservers of the zone
+  it belongs to are never looked up, asked for a transfer or walked.
 - **Screenshots stay in scope.** The browser's every request, subresources and
   each redirect hop included, is scope-checked before it is sent. Off-scope
   requests are blocked and listed in the caption.

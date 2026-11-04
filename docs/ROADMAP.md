@@ -79,9 +79,12 @@ a critical finding that costs nothing to check once you know where the record
 points.
 **Done:** `recon` resolves CNAME chains and reports NXDOMAIN targets (medium
 under a known claimable provider suffix), dangling MX and NS records and lame
-delegations as takeover candidates, from DNS alone.
+delegations as takeover candidates, from DNS alone. `discover` runs the CNAME
+and MX checks on the host names of in-scope addresses, name by name, and
+`dns.subzones` adds zone transfer and NSEC walking for delegated sub-zones.
 **Left:** match live targets against provider takeover fingerprints, then one
-HTTP request to check for the unclaimed marker.
+HTTP request to check for the unclaimed marker. Names learned from a
+sub-zone's transfer or walk are not yet fed back into the takeover check.
 **Catch:** claiming a bucket to prove the finding is **not** read-only and not
 authorised. Report the condition and let the client confirm.
 
