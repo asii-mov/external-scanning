@@ -13,6 +13,7 @@ Every external command the pipeline runs goes through here so that:
 
 from __future__ import annotations
 
+import importlib.util
 import shlex
 import shutil
 import signal
@@ -195,6 +196,22 @@ TOOL_HINTS: dict[str, dict[str, str]] = {
         "debian": "sudo apt install snmp",
         "macos": "brew install net-snmp",
     },
+    "subfinder": {
+        "purpose": "passive subdomain sources for recon (optional; crt.sh alone without it)",
+        "debian": "go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
+        "macos": "brew install subfinder",
+    },
+    "amass": {
+        "purpose": "passive subdomain enumeration, used when listed in recon.sources (optional)",
+        "debian": "go install github.com/owasp-amass/amass/v4/...@master",
+        "macos": "brew install amass",
+    },
+    "playwright": {
+        "module": "playwright",
+        "purpose": "web screenshots for the report (optional; a coverage gap without it)",
+        "debian": "uv sync --extra screenshots && uv run playwright install chromium",
+        "macos": "uv sync --extra screenshots && uv run playwright install chromium",
+    },
 }
 
 
@@ -213,10 +230,14 @@ def doctor() -> dict:
     """Report which external tools are available."""
     rows = {}
     for tool, info in TOOL_HINTS.items():
-        present = have(tool)
+        if "module" in info:
+            spec = importlib.util.find_spec(info["module"])
+            path = (spec.origin or info["module"]) if spec else ""
+        else:
+            path = shutil.which(tool) or ""
         rows[tool] = {
-            "present": present,
-            "path": shutil.which(tool) or "",
+            "present": bool(path),
+            "path": path,
             "purpose": info["purpose"],
             "install_debian": info.get("debian", ""),
             "install_macos": info.get("macos", ""),
