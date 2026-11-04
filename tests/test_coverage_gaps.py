@@ -88,6 +88,30 @@ class TestNucleiFailure(_Stage):
         self.assertEqual(self.gaps(), [])
         self.assertEqual(svc.probed_by, ["nuclei"])
 
+    def test_skipped_nuclei_is_a_gap_until_it_runs(self):
+        self.store.save_services([self.web])
+        with contextlib.redirect_stdout(io.StringIO()):
+            pipeline.probe(self.store, self.scope, self.policy, self.runner,
+                           only=[], skip_nuclei=True)
+        self.assertEqual(self.gaps(), [("probe:nuclei", "nuclei", ["127.0.0.1"])])
+        self.assertIn("--skip-nuclei", self.store.degradations()[0].reason)
+        self.assertNotIn("nuclei", self.store.services()[0].probed_by)
+
+        self.fake_tool("nuclei", "exit 0")
+        with self.only_fake_tools_on_path():
+            self.probe(self.store.services()[0], only=["nuclei"])
+        self.assertEqual(self.gaps(), [])
+
+    def test_skipping_nuclei_after_it_ran_leaves_no_gap(self):
+        self.fake_tool("nuclei", "exit 0")
+        with self.only_fake_tools_on_path():
+            svc = self.probe(self.web, only=["nuclei"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            pipeline.probe(self.store, self.scope, self.policy, self.runner,
+                           only=[], skip_nuclei=True)
+        self.assertEqual(self.gaps(), [])
+        self.assertEqual(svc.probed_by, ["nuclei"])
+
 
 class TestFuzzerFindings(_Stage):
     """Minimized cases from tests/fuzz_failures.py."""
@@ -420,9 +444,17 @@ class TestUdpRerunCommand(unittest.TestCase):
 
 
 class TestDoctorTools(unittest.TestCase):
-    def test_lists_sslscan_and_not_the_unused_httpx(self):
+    def test_lists_every_optional_tool_and_not_the_unused_httpx(self):
         tools = [t for t in runner.doctor() if not t.startswith("_")]
-        self.assertEqual(tools, ["nmap", "nuclei", "sslscan", "testssl.sh", "snmpwalk"])
+        self.assertEqual(tools, ["nmap", "nuclei", "sslscan", "testssl.sh", "snmpwalk",
+                                 "subfinder", "amass", "playwright"])
+
+    def test_playwright_is_found_as_a_python_module_not_on_path(self):
+        with mock.patch.object(runner.importlib.util, "find_spec", return_value=None):
+            self.assertFalse(runner.doctor()["playwright"]["present"])
+        with mock.patch.object(runner.importlib.util, "find_spec",
+                               return_value=mock.Mock(origin="/venv/playwright/__init__.py")):
+            self.assertTrue(runner.doctor()["playwright"]["present"])
 
 
 class TestNseScriptSelection(unittest.TestCase):

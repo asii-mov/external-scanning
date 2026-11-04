@@ -30,7 +30,7 @@ uv run extscan run --scope examples/lab/scope.json --policy examples/lab/policy.
 ```
 
 A full lab scan takes about 8 minutes with nuclei, or 70 seconds with
-`extscan probe --skip-nuclei`. Without root it is TCP only, which is expected.
+`extscan probe --skip-nuclei` (recorded as a nuclei coverage gap). Without root it is TCP only, which is expected.
 
 ## Data in the repo
 

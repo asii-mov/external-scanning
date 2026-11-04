@@ -330,7 +330,17 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
     all_leads: list[Lead] = []
 
     web = [s for s in services if s.is_http]
-    if web and not skip_nuclei and (only is None or "nuclei" in only):
+    unchecked = [s for s in web if "nuclei" not in s.probed_by]
+    if skip_nuclei and unchecked:
+        _coverage_lost(store, Degradation(
+            stage="probe:nuclei", component="nuclei",
+            reason="nuclei skipped by the operator (--skip-nuclei)",
+            impact=f"Templated web checks were not run against {len(unchecked)} web "
+                   "service(s). Any nuclei finding is missing from this report.",
+            severity="serious", hosts=sorted({w.host for w in unchecked}),
+            remedy="`extscan probe <run> --only nuclei`, or `extscan resume <run>`.",
+        ))
+    elif web and not skip_nuclei and (only is None or "nuclei" in only):
         print(f"→ nuclei against {len(web)} web service(s)")
         try:
             res, findings, leads = nuclei.run(runner, scope, policy, services)

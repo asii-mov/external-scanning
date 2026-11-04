@@ -24,7 +24,8 @@ uv run extscan gaps latest
 ```
 
 A full run takes about 8 minutes, nearly all of it nuclei. With
-`--skip-nuclei` on `probe`, or nuclei missing, it takes about 70 seconds.
+`--skip-nuclei` on `probe`, or nuclei missing, it takes about 70 seconds,
+and the report carries a nuclei coverage gap until `extscan resume` runs it.
 The report lands in `runs/<id>/report.md`,
 which is gitignored like any other run.
 
