@@ -9,7 +9,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-10-16T09:42:44.280484315Z"
+exclude-newer = "2026-10-28T12:26:03.69058862Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -120,7 +120,6 @@ wheels = [
 
 [[package]]
 name = "extscan"
-version = "0.2.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
