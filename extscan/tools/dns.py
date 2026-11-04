@@ -3,14 +3,17 @@
 Three report-only checks run against each `scope.domains` entry: zone transfer
 (AXFR) against the zone's authoritative servers, DNSSEC NSEC zone walking
 (NSEC3 is recognised, never cracked), and dangling CNAME/MX/NS records that
-could allow a subdomain takeover.
+could allow a subdomain takeover. A fourth, `host-names`, checks the names of
+in-scope hosts for dangling CNAME and MX records, one name at a time.
 
 Listing a domain authorises enumerating its names, not scanning what they
 point to. So every packet goes through `_Client._send`, which allows three
 lanes and nothing else:
 
 * resolver: any record type, for names under a scope domain, to the
-  configured recursive resolver;
+  configured recursive resolver. A and MX only for a name in the client's
+  `names`, the exact host names of in-scope addresses. Those names never
+  unlock their zone: nothing outside scope.domains reaches the auth lane;
 * exists: A/AAAA only, for any name, to the resolver. This answers "does the
   CNAME/MX/NS target exist?" without contacting the target;
 * auth: names under the zone an authority was learned for, sent to that
@@ -77,7 +80,7 @@ class CheckResult:
         stage this check ran in."""
         if not self.partial:
             return None
-        check = next(c for c in CHECKS if c.name == self.check)
+        check = next(c for c in (*CHECKS, HOST_NAMES) if c.name == self.check)
         return Degradation(stage=stage, component=self.component,
                            reason="; ".join(self.lost)[:200],
                            impact=check.impact.format(subject=self.subject),
@@ -105,6 +108,7 @@ _RCODES = {0: "ok", 2: "servfail", 3: "nxdomain", 5: "refused", 9: "notauth"}
 Status = Literal["ok", "nodata", "nxdomain", "servfail", "refused", "notauth",
                  "timeout", "error"]
 _UNANSWERED = frozenset({"timeout", "error", "servfail"})
+_NAME_TYPES = frozenset({"A", "MX"})
 
 
 @dataclass(frozen=True)
@@ -436,9 +440,10 @@ class _Client:
     at an arbitrary host. Every verb returns an `_Answer`; the only exception
     that escapes is ScopeError."""
 
-    def __init__(self, scope: Scope, policy: DnsPolicy):
+    def __init__(self, scope: Scope, policy: DnsPolicy, names: frozenset[str] = frozenset()):
         self.scope = scope
         self.policy = policy
+        self.names = names
         self.resolvers = [_server(s, 53) for s in (policy.resolvers or _system_resolvers())]
         self._cache: dict[tuple[str, str, str], _Answer] = {}
         self._last_send = 0.0
@@ -495,6 +500,8 @@ class _Client:
             if rtype not in ("A", "AAAA"):
                 raise ScopeError(f"refusing {rtype} query for {name!r}: names outside "
                                  "scope may only be checked for existence")
+            name = _normalise(name)
+        elif lane == "resolver" and rtype in _NAME_TYPES and _normalise(name) in self.names:
             name = _normalise(name)
         else:
             name = self.scope.assert_dns_name(name, f"dns {rtype} query")
@@ -560,11 +567,14 @@ class _Zone:
 
 @dataclass(frozen=True)
 class _Check:
+    """A check's name, the gap text its lost coverage gets, and for a zone
+    check, how it runs."""
+
     name: str
     needs_authorities: bool
     impact: str
     remedy: str
-    run: Callable[[_Zone], CheckResult]
+    run: Callable[[_Zone], CheckResult] | None = None
 
 
 def audit_zone(scope: Scope, zone: str, known_names: list[str], policy: DnsPolicy, *,
@@ -576,12 +586,8 @@ def audit_zone(scope: Scope, zone: str, known_names: list[str], policy: DnsPolic
     outside scope.domains, both before any packet. Names in `known_names`
     outside the zone are dropped, not queried. A dry run opens no socket.
     """
-    unknown = sorted(set(policy.skip) - {c.name for c in CHECKS})
-    if unknown:
-        raise ValueError(f"unknown dns.skip check(s) {unknown}; "
-                         f"choose from {[c.name for c in CHECKS]}")
+    enabled = [c for c in CHECKS if c.name in _enabled(policy)]
     zone = scope.assert_dns_name(zone, "dns audit")
-    enabled = [c for c in CHECKS if c.name not in policy.skip]
     if dry_run:
         return [CheckResult(c.name, zone, planned=True) for c in enabled]
     client = _Client(scope, policy)
@@ -599,17 +605,82 @@ def audit_zone(scope: Scope, zone: str, known_names: list[str], policy: DnsPolic
     return results
 
 
-def _finding(z: _Zone, check: str, title: str, severity: str, **fields) -> Finding:
+def _enabled(policy: DnsPolicy) -> set[str]:
+    names = [c.name for c in (*CHECKS, HOST_NAMES)]
+    unknown = sorted(set(policy.skip) - set(names))
+    if unknown:
+        raise ValueError(f"unknown dns.skip check(s) {unknown}; choose from {names}")
+    return set(names) - set(policy.skip)
+
+
+def audit_hosts(scope: Scope, hostnames: dict[str, list[str]], policy: DnsPolicy, *,
+                dry_run: bool = False) -> list[CheckResult]:
+    """Check each in-scope address's host names for dangling CNAME and MX
+    records, one `host-names` result per address that has a name.
+
+    Name level only. The client may ask the resolver for A and MX of exactly
+    these names, so their zones' nameservers are never looked up, transferred
+    or walked. Raises ValueError for an unknown `policy.skip` name and
+    ScopeError for an address outside scope, both before any packet.
+    """
+    if HOST_NAMES.name not in _enabled(policy):
+        return []
+    for address in hostnames:
+        if not scope.contains(address):
+            raise ScopeError(f"refusing DNS checks on the names of {address!r}: "
+                             "the address is not in scope")
+    names = {address: sorted({n for n in map(_normalise, found) if n and _encodable(n)})
+             for address, found in sorted(hostnames.items())}
+    names = {address: found for address, found in names.items() if found}
+    if dry_run:
+        return [CheckResult(HOST_NAMES.name, address, planned=True) for address in names]
+    client = _Client(scope, policy, frozenset().union(*names.values()))
+    results = []
+    for address, found in names.items():
+        findings, lost = _check_names(found, (
+            lambda n, a=address: _dangling_cname(client, a, n),
+            lambda n, a=address: _dangling_mx(client, a, n)))
+        results.append(CheckResult(HOST_NAMES.name, address, tuple(findings), tuple(lost)))
+    return results
+
+
+OUTSIDE_DOMAINS_TITLE = "Host names of in-scope addresses outside scope.domains"
+
+
+def names_outside_domains(scope: Scope, hostnames: dict[str, list[str]]) -> Finding | None:
+    """One info finding listing the host names of in-scope addresses that
+    sit under no scope.domains entry, or None when there are none."""
+    outside = sorted({(_normalise(n), address) for address, found in hostnames.items()
+                      for n in found if _normalise(n)
+                      and not any(_under(_normalise(n), d) for d in scope.domains)})
+    if not outside:
+        return None
+    return Finding(
+        title=OUTSIDE_DOMAINS_TITLE, severity="info", host="", port=None, proto="dns",
+        source=SOURCE, tags=["dns", HOST_NAMES.name],
+        description=f"{len(outside)} host name(s) of in-scope addresses are not under any "
+                    "scope.domains entry. extscan checked each name itself for dangling "
+                    "CNAME and MX records. It did not look up the nameservers of the zones "
+                    "these names belong to, try a zone transfer there or walk NSEC "
+                    "records, because those zones are not in scope.",
+        evidence="\n".join(f"{address}  {name}" for name, address in outside)[:4000],
+        review_required=True,
+        review_reason="If any of these names belong to the client's own domains, add "
+                      "those domains to scope.domains so the zone-level checks (zone "
+                      "transfer, NSEC walk) run on them too.")
+
+
+def _finding(host: str, check: str, title: str, severity: str, **fields) -> Finding:
     tags = ["dns", check, *fields.pop("tags", [])]
     fields["evidence"] = fields.get("evidence", "")[:4000]
-    return Finding(title=title, severity=severity, host=z.zone, port=None, proto="dns",
+    return Finding(title=title, severity=severity, host=host, port=None, proto="dns",
                    source=SOURCE, tags=tags, **fields)
 
 
-def _candidate(z: _Zone, title: str, severity: str, description: str,
+def _candidate(host: str, title: str, severity: str, description: str,
                evidence: str) -> Finding:
     return _finding(
-        z, "takeover", title, severity, description=description, evidence=evidence,
+        host, "takeover", title, severity, description=description, evidence=evidence,
         recommendation="Remove the record if the resource behind it is gone, or "
                        "re-create the resource in an account the client controls.",
         references=["https://github.com/EdOverflow/can-i-take-over-xyz"],
@@ -646,7 +717,7 @@ def _axfr_check(z: _Zone) -> CheckResult:
         artifacts.append((f"dns-axfr-{z.zone}-{auth.host}.txt", "\n".join(lines) + "\n"))
         note = f" ({answer.detail})" if answer.detail else ""
         findings.append(_finding(
-            z, "axfr", f"Zone transfer (AXFR) of {z.zone} allowed by {auth.host}", "medium",
+            z.zone, "axfr", f"Zone transfer (AXFR) of {z.zone} allowed by {auth.host}", "medium",
             description=f"The nameserver {auth.host} ({auth.address}) answered a full zone "
                         f"transfer request for {z.zone} from an unauthenticated external "
                         f"host and returned {len(answer.records)} record(s){note}. A zone "
@@ -669,7 +740,7 @@ def _nsec_walk(z: _Zone) -> CheckResult:
     if param.of("NSEC3PARAM", z.zone):
         alg, flags, iterations, salt = param.of("NSEC3PARAM", z.zone)[0].split()[:4]
         return CheckResult("nsec-walk", z.zone, (_finding(
-            z, "nsec-walk", f"{z.zone} uses DNSSEC NSEC3 denial of existence", "info",
+            z.zone, "nsec-walk", f"{z.zone} uses DNSSEC NSEC3 denial of existence", "info",
             description="NSEC3 hashes the names in its denial chain, so the zone cannot "
                         "be listed by walking it. The hashes can still be collected and "
                         "guessed offline against a word list; extscan does not do that.",
@@ -685,7 +756,7 @@ def _nsec_walk(z: _Zone) -> CheckResult:
         return CheckResult("nsec-walk", z.zone)
     walked, lost = _walk(z, auth, answer)
     finding = _finding(
-        z, "nsec-walk", f"DNSSEC NSEC records let anyone list the names in {z.zone}", "low",
+        z.zone, "nsec-walk", f"DNSSEC NSEC records let anyone list the names in {z.zone}", "low",
         description=f"{z.zone} is signed with NSEC records. Each one names the next name "
                     "in the zone, so following the chain lists the zone much like a zone "
                     f"transfer. extscan walked {len(walked)} name(s) from {auth.host}"
@@ -724,8 +795,8 @@ def _walk(z: _Zone, auth: _Authority, answer: _Answer) -> tuple[list[str], str]:
     return walked, f"stopped after dns.max_walk_steps={z.policy.max_walk_steps} links"
 
 
-def _dangling_cname(z: _Zone, name: str) -> tuple[list[Finding], bool]:
-    answer = z.client.lookup(name, "A")
+def _dangling_cname(client: _Client, host: str, name: str) -> tuple[list[Finding], bool]:
+    answer = client.lookup(name, "A")
     if answer.status in _UNANSWERED:
         return [], False
     chain = [r for r in answer.records if r.type == "CNAME"]
@@ -737,7 +808,7 @@ def _dangling_cname(z: _Zone, name: str) -> tuple[list[Finding], bool]:
              if suffix else "if the resource or domain behind it can be registered by "
                             "someone else")
     return [_candidate(
-        z, f"Dangling CNAME {name} -> {target}", "medium" if suffix else "low",
+        host, f"Dangling CNAME {name} -> {target}", "medium" if suffix else "low",
         description=f"{name} is an alias for {target}, which does not exist (NXDOMAIN). "
                     f"Whoever creates {target} would control what {name} serves; "
                     f"{where}.",
@@ -745,22 +816,22 @@ def _dangling_cname(z: _Zone, name: str) -> tuple[list[Finding], bool]:
                  + f"\n{target}: NXDOMAIN")], True
 
 
-def _dangling_mx(z: _Zone, name: str) -> tuple[list[Finding], bool]:
-    answer = z.client.lookup(name, "MX")
+def _dangling_mx(client: _Client, host: str, name: str) -> tuple[list[Finding], bool]:
+    answer = client.lookup(name, "MX")
     if answer.status in _UNANSWERED:
         return [], False
     findings, answered = [], True
-    for host in sorted({d.split()[-1] for d in answer.of("MX", name)} - {"."}):
-        target = z.client.exists(host)
+    for exchanger in sorted({d.split()[-1] for d in answer.of("MX", name)} - {"."}):
+        target = client.exists(exchanger)
         if target.status in _UNANSWERED:
             answered = False
         elif target.status == "nxdomain":
             findings.append(_candidate(
-                z, f"Dangling MX {name} -> {host}", "low",
-                description=f"{name} lists {host} as a mail exchanger, and {host} does not "
-                            "exist. If its domain can be registered, whoever registers it "
-                            f"can receive mail sent to {name}.",
-                evidence=f"{name} MX {host}\n{host}: NXDOMAIN"))
+                host, f"Dangling MX {name} -> {exchanger}", "low",
+                description=f"{name} lists {exchanger} as a mail exchanger, and {exchanger} "
+                            "does not exist. If its domain can be registered, whoever "
+                            f"registers it can receive mail sent to {name}.",
+                evidence=f"{name} MX {exchanger}\n{exchanger}: NXDOMAIN"))
     return findings, answered
 
 
@@ -783,7 +854,7 @@ def _dangling_ns(z: _Zone, name: str) -> tuple[list[Finding], bool]:
             answered = False
         elif target.status == "nxdomain":
             findings.append(_candidate(
-                z, f"Delegation of {name} to missing nameserver {host}", "medium",
+                z.zone, f"Delegation of {name} to missing nameserver {host}", "medium",
                 description=f"{name} is delegated to {host}, which does not exist. If the "
                             f"domain of {host} has lapsed, whoever registers it controls "
                             f"the {name} zone.",
@@ -797,7 +868,7 @@ def _dangling_ns(z: _Zone, name: str) -> tuple[list[Finding], bool]:
         return findings, False
     if statuses and all(s in _LAME for s in statuses.values()):
         findings.append(_candidate(
-            z, f"Lame delegation of {name}", "medium",
+            z.zone, f"Lame delegation of {name}", "medium",
             description=f"{name} is delegated to {', '.join(sorted(statuses))}, and no "
                         "nameserver in that set answers for it. A deleted hosted zone "
                         "looks like this (for example on Route 53 or Azure DNS); at some "
@@ -807,23 +878,34 @@ def _dangling_ns(z: _Zone, name: str) -> tuple[list[Finding], bool]:
     return findings, answered
 
 
-def _takeover(z: _Zone) -> CheckResult:
-    ordered = [z.zone, *sorted(z.names - {z.zone})]
-    checked, over = ordered[:z.policy.max_names], ordered[z.policy.max_names:]
+def _check_names(names: list[str],
+                 probes: tuple[Callable[[str], tuple[list[Finding], bool]], ...]
+                 ) -> tuple[list[Finding], list[str]]:
+    """Run every probe on every name. Returns the findings, and the lost
+    coverage if any name got no answer."""
     findings: list[Finding] = []
     unanswered: list[str] = []
-    for name in checked:
+    for name in names:
         answered = True
-        for probe in (_dangling_cname, _dangling_mx, _dangling_ns):
-            found, ok = probe(z, name)
+        for probe in probes:
+            found, ok = probe(name)
             findings += found
             answered = answered and ok
         if not answered:
             unanswered.append(name)
-    lost = []
-    if unanswered:
-        lost.append(f"{len(unanswered)} of {len(checked)} name(s) got no answer "
-                    f"(first: {unanswered[0]})")
+    if not unanswered:
+        return findings, []
+    return findings, [f"{len(unanswered)} of {len(names)} name(s) got no answer "
+                      f"(first: {unanswered[0]})"]
+
+
+def _takeover(z: _Zone) -> CheckResult:
+    ordered = [z.zone, *sorted(z.names - {z.zone})]
+    checked, over = ordered[:z.policy.max_names], ordered[z.policy.max_names:]
+    findings, lost = _check_names(checked, (
+        lambda n: _dangling_cname(z.client, z.zone, n),
+        lambda n: _dangling_mx(z.client, z.zone, n),
+        lambda n: _dangling_ns(z, n)))
     if over:
         lost.append(f"{len(over)} name(s) over dns.max_names={z.policy.max_names} "
                     "were not checked")
@@ -856,3 +938,8 @@ CHECKS: tuple[_Check, ...] = (
            "Check the resolver (dns.resolvers), then re-run `extscan recon`.",
            _takeover),
 )
+
+HOST_NAMES = _Check(
+    "host-names", False,
+    "Some host names of {subject} were not checked for dangling CNAME or MX records.",
+    "Check the resolver (dns.resolvers), then re-run `extscan discover <run> --resume`.")

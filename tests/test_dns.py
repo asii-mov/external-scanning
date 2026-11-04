@@ -556,6 +556,87 @@ class TestTakeoverCandidates(unittest.TestCase):
         self.assertIn("over dns.max_names=3", takeover.gap("recon").reason)
 
 
+HOST = "192.0.2.5"
+CLIENT_ZONE = [("client.test", "SOA", "ns1.client.test hostmaster.client.test 1 3600 600 86400 300"),
+               ("client.test", "NS", "ns1.client.test"),
+               ("ns1.client.test", "A", "127.0.0.1"),
+               ("client.test", "NSEC", "host5.client.test NS SOA NSEC"),
+               ("host5.client.test", "CNAME", "gone-app.herokuapp.com"),
+               ("host6.client.test", "MX", "10 mx.lapsed-mail.test"),
+               ("host7.client.test", "A", HOST)]
+ZONE_QUERIES = {"NS", "SOA", "AXFR", "NSEC", "NSEC3PARAM"}
+
+
+def audit_hosts(ns: FakeDns, hostnames: dict, scope: Scope | None = None, **policy):
+    return dns.audit_hosts(scope or lab_scope(), hostnames, ns.policy(**policy))
+
+
+class TestHostNames(unittest.TestCase):
+    def test_dangling_records_on_host_names_are_findings_on_that_address(self):
+        with FakeDns([*ZONE, *CLIENT_ZONE]) as ns:
+            [result] = audit_hosts(ns, {HOST: ["host5.client.test", "Host6.Client.Test.",
+                                               "host7.client.test"]})
+        self.assertTrue(result.covered)
+        self.assertEqual(result.component, "dns:host-names:192.0.2.5")
+        self.assertEqual(sorted((f.title, f.severity) for f in result.findings), [
+            ("Dangling CNAME host5.client.test -> gone-app.herokuapp.com", "medium"),
+            ("Dangling MX host6.client.test -> mx.lapsed-mail.test", "low"),
+        ])
+        for f in result.findings:
+            self.assertEqual((f.host, f.proto, f.source), (HOST, "dns", "extscan:dns"))
+            self.assertTrue(f.review_required, f.title)
+            self.assertEqual(f.confidence, "tentative")
+            self.assertIn("takeover-candidate", f.tags)
+
+    def test_the_zone_of_a_host_name_gets_no_zone_level_query(self):
+        with FakeDns([*ZONE, *CLIENT_ZONE], axfr=True) as ns:
+            audit_hosts(ns, {HOST: ["host5.client.test", "host6.client.test"]})
+        self.assertTrue(ns.queries)
+        self.assertEqual([q for q in ns.queries if q.qtype in ZONE_QUERIES], [])
+        self.assertNotIn("client.test", ns.asked())
+        self.assertTrue(all(q.rd for q in ns.queries))
+        self.assertEqual(sorted({(q.name, q.qtype) for q in ns.queries
+                                 if q.name.startswith("host")}),
+                         [("host5.client.test", "A"), ("host5.client.test", "MX"),
+                          ("host6.client.test", "A"), ("host6.client.test", "MX")])
+
+    def test_unanswered_names_are_a_gap_on_the_address(self):
+        with FakeDns(silent=True) as ns:
+            [result] = audit_hosts(ns, {HOST: ["host5.client.test"]})
+        gap = result.gap("discover:dns")
+        self.assertEqual((gap.stage, gap.component, gap.hosts),
+                         ("discover:dns", "dns:host-names:192.0.2.5", [HOST]))
+        self.assertIn("1 of 1 name(s) got no answer", gap.reason)
+
+    def test_address_outside_scope_is_refused_before_any_packet(self):
+        with FakeDns(CLIENT_ZONE) as ns, self.assertRaises(ScopeError):
+            audit_hosts(ns, {HOST: ["host7.client.test"], "198.51.100.7": ["host5.client.test"]})
+        self.assertEqual(ns.queries, [])
+
+    def test_dry_run_and_skip_send_nothing(self):
+        with FakeDns(CLIENT_ZONE) as ns:
+            planned = dns.audit_hosts(lab_scope(), {HOST: ["host5.client.test"], "192.0.2.6": []},
+                                      ns.policy(), dry_run=True)
+            skipped = audit_hosts(ns, {HOST: ["host5.client.test"]}, skip=["host-names"])
+        self.assertEqual(ns.queries, [])
+        self.assertEqual([(r.subject, r.planned) for r in planned], [(HOST, True)])
+        self.assertEqual(skipped, [])
+
+
+class TestNamesOutsideDomains(unittest.TestCase):
+    def test_lists_only_names_under_no_scope_domain(self):
+        finding = dns.names_outside_domains(lab_scope(), {
+            HOST: ["host5.client.test", "www.lab.test"], "192.0.2.6": ["Evillab.Test."]})
+        self.assertEqual((finding.severity, finding.host), ("info", ""))
+        self.assertEqual(finding.evidence.splitlines(),
+                         ["192.0.2.6  evillab.test", "192.0.2.5  host5.client.test"])
+        self.assertTrue(finding.review_required)
+        self.assertIn("scope.domains", finding.review_reason)
+
+    def test_nothing_when_every_name_is_under_a_scope_domain(self):
+        self.assertIsNone(dns.names_outside_domains(lab_scope(), {HOST: ["www.lab.test"]}))
+
+
 class TestAuditBoundaries(unittest.TestCase):
     def test_zone_outside_scope_is_refused_before_any_packet(self):
         with FakeDns() as ns, self.assertRaises(ScopeError):

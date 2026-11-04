@@ -12,9 +12,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from extscan.policy import Policy
-from extscan.scope import Authorization, Scope
+from extscan.scope import Authorization, Scope, ScopeError
 from extscan.tools import dns, net, nuclei
-from tests.test_dns import NSEC_ZONE, TAKEOVER_NAMES, TAKEOVER_ZONE, FakeDns, lab_scope
+from tests.test_dns import (
+    CLIENT_ZONE,
+    NSEC_ZONE,
+    TAKEOVER_NAMES,
+    TAKEOVER_ZONE,
+    FakeDns,
+    lab_scope,
+)
 
 SOURCE_DIR = Path(__file__).resolve().parent.parent / "extscan"
 SOURCE_FILES = sorted(SOURCE_DIR.rglob("*.py"))
@@ -282,6 +289,32 @@ class TestDnsChecksAreReadOnlyAndScoped(unittest.TestCase):
                 imported |= {f"{node.module}.{a.name}" for a in node.names}
         banned = ("urllib", "http", "requests", "httpx", "ssl", "extscan.tools.net")
         self.assertEqual(sorted(m for m in imported if m.startswith(banned)), [])
+
+    def test_a_host_name_never_unlocks_its_zone(self):
+        """The names of in-scope hosts pass only as A and MX through the
+        resolver. The auth lane and zone lookups still need scope.domains."""
+        name = "host5.client.test"
+        with FakeDns(CLIENT_ZONE) as ns:
+            client = dns._Client(lab_scope(), ns.policy(), frozenset({name}))
+            auth = dns._Authority("client.test", "ns1.client.test", "127.0.0.1")
+            refused = {
+                "NS of the name": lambda: client.lookup(name, "NS"),
+                "SOA of the name": lambda: client.lookup(name, "SOA"),
+                "a name below it": lambda: client.lookup(f"www.{name}", "A"),
+                "its parent zone": lambda: client.lookup("client.test", "A"),
+                "authorities of the name": lambda: client.authorities(name),
+                "authorities of its zone": lambda: client.authorities("client.test"),
+                "the auth lane": lambda: client.ask(auth, name, "A"),
+                "a transfer": lambda: client.ask(auth, "client.test", "AXFR"),
+            }
+            for what, call in refused.items():
+                with self.subTest(what), self.assertRaises(ScopeError):
+                    call()
+            self.assertEqual(ns.queries, [])
+            client.lookup(name, "A")
+            client.lookup(name, "MX")
+        self.assertEqual([(q.name, q.qtype, q.rd) for q in ns.queries],
+                         [(name, "A", True), (name, "MX", True)])
 
     def test_unknown_skip_check_is_rejected_before_any_packet(self):
         with FakeDns() as ns:
