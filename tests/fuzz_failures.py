@@ -190,6 +190,7 @@ class _Harness:
         self.policy.nmap.timeout_sec = TOOL_TIMEOUT
         self.policy.nuclei.timeout_sec = TOOL_TIMEOUT
         self.policy.http.timeout_sec = 1
+        self.policy.dns.skip = ["host-names"]
 
     def env(self, scenario: dict[str, ToolFailure]):
         path = self.tmp / "scenario.json"

@@ -209,8 +209,27 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
         if summary["udp"]:
             print(f"  {summary['udp']['services']} open/responding UDP port(s)")
 
+    _check_host_names(store, scope, policy, runner)
     store.mark_stage("discover", **{k: v for k, v in summary.items() if v})
     return summary
+
+
+def _check_host_names(store: Store, scope: Scope, policy: Policy, runner: Runner) -> None:
+    """Name-level DNS checks on the host names of live in-scope hosts, which
+    are known once the nmap passes are done. Their gaps live in
+    discover:dns, so `discover --resume` retries them."""
+    hostnames = {h.ip: h.hostnames for h in store.hosts()
+                 if h.state == "up" and h.hostnames and scope.contains(h.ip)}
+    if hostnames:
+        print("→ DNS checks on the names of in-scope hosts")
+    for result in dns.audit_hosts(scope, hostnames, policy.dns, dry_run=runner.dry_run):
+        _record_dns(store, "discover:dns", result)
+    if runner.dry_run:
+        return
+    note = dns.names_outside_domains(scope, hostnames)
+    kept = [f for f in store.findings()
+            if (f.source, f.title) != (dns.SOURCE, dns.OUTSIDE_DOMAINS_TITLE)]
+    store.replace_findings(kept + ([note] if note else []))
 
 
 def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:

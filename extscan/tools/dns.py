@@ -659,10 +659,11 @@ def names_outside_domains(scope: Scope, hostnames: dict[str, list[str]]) -> Find
         title=OUTSIDE_DOMAINS_TITLE, severity="info", host="", port=None, proto="dns",
         source=SOURCE, tags=["dns", HOST_NAMES.name],
         description=f"{len(outside)} host name(s) of in-scope addresses are not under any "
-                    "scope.domains entry. extscan checked each name itself for dangling "
-                    "CNAME and MX records. It did not look up the nameservers of the zones "
-                    "these names belong to, try a zone transfer there or walk NSEC "
-                    "records, because those zones are not in scope.",
+                    "scope.domains entry. The host-names check looks at each name itself "
+                    "for dangling CNAME and MX records. extscan does not look up the "
+                    "nameservers of the zones these names belong to, try a zone transfer "
+                    "there or walk their NSEC records, because those zones are not in "
+                    "scope.",
         evidence="\n".join(f"{address}  {name}" for name, address in outside)[:4000],
         review_required=True,
         review_reason="If any of these names belong to the client's own domains, add "

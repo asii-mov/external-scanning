@@ -16,13 +16,13 @@ from pathlib import Path
 from unittest import mock
 
 from extscan import pipeline, probes, runner
-from extscan.models import Service
+from extscan.models import Host, Service
 from extscan.policy import Policy
 from extscan.runner import Runner
 from extscan.scope import Scope
 from extscan.store import Store
-from extscan.tools import nmap, subdomains
-from tests.test_dns import ZONE, FakeDns
+from extscan.tools import dns, nmap, subdomains
+from tests.test_dns import CLIENT_ZONE, ZONE, FakeDns
 
 
 class _Stage(unittest.TestCase):
@@ -289,6 +289,73 @@ class TestDnsGaps(_Stage):
         self.assertIn("Dangling CNAME assets.lab.test -> lab-assets.s3.amazonaws.com",
                       titles)
         self.assertEqual(self.dns_gaps(), [])
+
+
+class TestHostNameGaps(_Stage):
+    """Host-name checks run at the end of discover; their gaps live in discover:dns."""
+
+    def discover(self, ns: FakeDns, *names: str, state: str = "up",
+                 runner: Runner | None = None):
+        self.store.save_hosts([Host(ip="127.0.0.1", hostnames=list(names), state=state),
+                               Host(ip="198.51.100.7", hostnames=["out.client.test"],
+                                    state="up")])
+        self.policy.dns = ns.policy(timeout_sec=0.2)
+        with contextlib.redirect_stdout(io.StringIO()):
+            pipeline.discover(self.store, self.scope, self.policy, runner or self.runner,
+                              tcp=False, udp=False)
+
+    def dns_gaps(self):
+        return [(d.stage, d.component, d.reason) for d in self.store.degradations()]
+
+    def notes(self):
+        return [f for f in self.store.findings() if f.title == dns.OUTSIDE_DOMAINS_TITLE]
+
+    def test_failure_then_success_clears_the_gap(self):
+        with FakeDns(silent=True) as ns:
+            self.discover(ns, "host5.client.test")
+        self.assertEqual([g[:2] for g in self.dns_gaps()],
+                         [("discover:dns", "dns:host-names:127.0.0.1")])
+        with FakeDns(CLIENT_ZONE) as ns:
+            self.discover(ns, "host5.client.test")
+        self.assertEqual(self.dns_gaps(), [])
+        [finding] = [f for f in self.store.findings() if f.title.startswith("Dangling")]
+        self.assertEqual((finding.title, finding.host),
+                         ("Dangling CNAME host5.client.test -> gone-app.herokuapp.com",
+                          "127.0.0.1"))
+        self.assertNotIn("out.client.test", ns.asked())
+
+    def test_changed_reason_replaces_the_gap(self):
+        with FakeDns(silent=True) as ns:
+            self.discover(ns, "host5.client.test")
+            self.discover(ns, "host6.client.test")
+        [(_, component, reason)] = self.dns_gaps()
+        self.assertEqual(component, "dns:host-names:127.0.0.1")
+        self.assertIn("2 of 2 name(s) got no answer", reason)
+
+    def test_dry_run_sends_nothing_and_clears_nothing(self):
+        with FakeDns(silent=True) as ns:
+            self.discover(ns, "host5.client.test")
+        before = self.dns_gaps()
+        with FakeDns(CLIENT_ZONE) as ns:
+            self.discover(ns, "host5.client.test", runner=Runner(self.store, dry_run=True))
+            self.assertEqual(ns.queries, [])
+        self.assertEqual(self.dns_gaps(), before)
+
+    def test_hosts_that_are_down_are_not_checked(self):
+        with FakeDns(CLIENT_ZONE) as ns:
+            self.discover(ns, "host5.client.test", state="down")
+            self.assertEqual(ns.queries, [])
+        self.assertEqual(self.notes(), [])
+
+    def test_one_outside_domains_note_that_follows_the_hosts(self):
+        self.scope.domains = ["lab.test"]
+        with FakeDns([*ZONE, *CLIENT_ZONE]) as ns:
+            self.discover(ns, "host5.client.test", "www.lab.test")
+            self.discover(ns, "host7.client.test")
+        [note] = self.notes()
+        self.assertEqual(note.evidence.splitlines(),
+                         ["127.0.0.1  host5.client.test", "127.0.0.1  host7.client.test"])
+        self.assertTrue(note.review_required)
 
 
 class TestUnprivilegedUdp(_Stage):
