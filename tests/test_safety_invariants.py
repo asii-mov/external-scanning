@@ -496,7 +496,8 @@ class TestAuthorisationCannotBeSkipped(unittest.TestCase):
 PINNED = {
     "probe": {"http_fingerprint": "active", "tls": "active", "snmp": "active",
               "exposure": "passive", "ssh": "passive", "iis": "loud", "sslscan": "loud",
-              "ssh_audit": "loud", "web_fingerprint": "active"},
+              "ssh_audit": "loud", "web_fingerprint": "active",
+              "waf_detect": "active"},
     "chase": {"openapi": "active", "graphql": "active", "git_exposure": "active",
               "web_paths": "active", "secret_file": "active", "api_endpoint": "active",
               "snmp_walk": "active", "tls_detail": "loud"},

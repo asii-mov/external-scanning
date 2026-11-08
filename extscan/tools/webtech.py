@@ -15,9 +15,9 @@ Detection is passive. It reads the root response the probe already fetched:
 headers, cookies, the meta generator, script sources, HTML and the URLs the
 redirect chain visited. Nothing here makes a request.
 
-Known limitation: `net.Response` keeps one value per header name, so when a
-server sets several cookies only the last `Set-Cookie` is visible. Cookie
-signatures are therefore supplementary evidence, never the only route to a
+Cookie signatures see every `Set-Cookie` value when the caller passes
+`net.Response.set_cookies`; with only the headers dict, just the last one is
+visible. They are supplementary evidence, never the only route to a
 detection for a product that matters.
 """
 
@@ -386,11 +386,14 @@ def _match(sig: Signature, headers: dict[str, str], body: str, cookies: list[str
 
 
 def detect(headers: dict[str, str], body: str, urls: list[str] | None = None,
-           parts: PageParts | None = None) -> list[Detection]:
-    """Match every signature against one response. Headers must be lower-cased."""
+           parts: PageParts | None = None,
+           set_cookies: list[str] | None = None) -> list[Detection]:
+    """Match every signature against one response. Headers must be lower-cased.
+    `set_cookies` is every Set-Cookie value (`net.Response.set_cookies`)."""
     body = (body or "")[:500_000]
     parts = parts or parse_page(body)
-    cookies = cookie_names(headers.get("set-cookie", ""))
+    cookies = cookie_names("\n".join(set_cookies) if set_cookies
+                           else headers.get("set-cookie", ""))
     urls = [u for u in (urls or []) if u]
     found: dict[str, Detection] = {}
     for sig in SIGNATURES:

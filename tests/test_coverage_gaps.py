@@ -183,6 +183,32 @@ class TestProbeFailure(_Stage):
         self.assertEqual(record["error"], "timed out after 1s")
 
 
+class TestWafBlock(_Stage):
+    """A WAF that blocks a probe makes its result unreliable, not clean."""
+
+    def setUp(self):
+        super().setUp()
+        from tests.test_waf import EdgeServer
+        self.edge = EdgeServer()
+        self.addCleanup(self.edge.close)
+        self.web = Service(host="127.0.0.1", port=self.edge.port, proto="tcp", name="http")
+
+    def test_blocked_probe_is_a_gap_and_retried_next_run(self):
+        self.edge.mode = "cloudflare_block"
+        after = self.probe(self.web, only=["http_fingerprint"])
+        self.assertEqual(self.gaps(), [("probe:http_fingerprint", "http_fingerprint",
+                                        ["127.0.0.1"])])
+        gap = self.store.degradations()[0]
+        self.assertEqual(gap.severity, "serious")
+        self.assertIn("Cloudflare", gap.reason)
+        self.assertNotIn("http_fingerprint", after.probed_by)
+
+        self.edge.mode = "plain"
+        after = self.probe(after, only=["http_fingerprint"])
+        self.assertEqual(self.gaps(), [])
+        self.assertEqual(after.probed_by, ["http_fingerprint"])
+
+
 class TestGapsClearWhenRetrySucceeds(_Stage):
     """A gap that `resume` later covers must leave the report, or it overstates loss."""
 

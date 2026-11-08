@@ -1,0 +1,285 @@
+{
+  "_note": "Representative CDN/WAF responses for tests/test_waf.py, written to match each vendor's documented or commonly observed response shape (header names, cookie names, block-page text). Identifiers are made up. Each entry: status, headers (lower-case), set_cookies, body, and what extscan should conclude: edge (provider names identified) and block (vendor, kind) or null.",
+  "responses": {
+    "cloudflare_ok": {
+      "status": 200,
+      "headers": {"server": "cloudflare", "cf-ray": "8a1b2c3d4e5f6a7b-LHR", "cf-cache-status": "DYNAMIC", "content-type": "text/html"},
+      "set_cookies": ["__cf_bm=abc123; path=/; expires=Sun, 08-Nov-26 12:30:00 GMT; HttpOnly; Secure; SameSite=None"],
+      "body": "<html><head><title>Shop</title></head><body>Welcome<script src=\"/cdn-cgi/challenge-platform/scripts/jsd/main.js\"></script></body></html>",
+      "edge": ["Cloudflare"], "block": null
+    },
+    "cloudflare_challenge": {
+      "status": 403,
+      "headers": {"server": "cloudflare", "cf-ray": "8a1b2c3d4e5f6a7c-LHR", "cf-mitigated": "challenge", "content-type": "text/html; charset=UTF-8"},
+      "set_cookies": [],
+      "body": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title></head><body><noscript>Enable JavaScript and cookies to continue</noscript><script src=\"/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1\"></script></body></html>",
+      "edge": ["Cloudflare"], "block": ["Cloudflare", "challenge"]
+    },
+    "cloudflare_legacy_challenge": {
+      "status": 503,
+      "headers": {"server": "cloudflare", "cf-ray": "8a1b2c3d4e5f6a7d-AMS", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><head><title>Just a moment...</title></head><body>Checking your browser before accessing example.test.</body></html>",
+      "edge": ["Cloudflare"], "block": ["Cloudflare", "challenge"]
+    },
+    "cloudflare_block": {
+      "status": 403,
+      "headers": {"server": "cloudflare", "cf-ray": "8a1b2c3d4e5f6a7e-FRA", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<!DOCTYPE html><html><head><title>Attention Required! | Cloudflare</title></head><body><div id=\"cf-error-details\"><h1>Sorry, you have been blocked</h1><span>Cloudflare Ray ID: <strong>8a1b2c3d4e5f6a7e</strong></span></div></body></html>",
+      "edge": ["Cloudflare"], "block": ["Cloudflare", "block"]
+    },
+    "cloudflare_1020_plain": {
+      "status": 403,
+      "headers": {"server": "cloudflare", "cf-ray": "8a1b2c3d4e5f6a7f-DFW", "content-type": "text/plain"},
+      "set_cookies": [],
+      "body": "error code: 1020",
+      "edge": ["Cloudflare"], "block": ["Cloudflare", "block"]
+    },
+    "cloudflare_rate_limit": {
+      "status": 429,
+      "headers": {"server": "cloudflare", "cf-ray": "8a1b2c3d4e5f6a80-SJC", "retry-after": "60"},
+      "set_cookies": [],
+      "body": "error code: 1015",
+      "edge": ["Cloudflare"], "block": ["Cloudflare", "rate-limit"]
+    },
+    "akamai_ok": {
+      "status": 200,
+      "headers": {"server": "AkamaiGHost", "x-akamai-transformed": "9 12345 0 pmb=mRUM,1", "content-type": "text/html"},
+      "set_cookies": ["ak_bmsc=0123ABCD~000000000000000000000000000000~YAAQ; Domain=.example.test; Path=/; Max-Age=7200; HttpOnly"],
+      "body": "<html><body>ok</body></html>",
+      "edge": ["Akamai"], "block": null
+    },
+    "akamai_access_denied": {
+      "status": 403,
+      "headers": {"server": "AkamaiGHost", "mime-version": "1.0", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don't have permission to access \"http&#58;&#47;&#47;www&#46;example&#46;test&#47;\" on this server.<P>\nReference&#32;&#35;18&#46;2d351ab8&#46;1731067200&#46;a4e16ab\n</BODY>\n</HTML>",
+      "edge": ["Akamai"], "block": ["Akamai", "block"]
+    },
+    "akamai_access_denied_decoded": {
+      "status": 403,
+      "headers": {"content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<HTML><HEAD><TITLE>Access Denied</TITLE></HEAD><BODY><H1>Access Denied</H1>You don't have permission to access \"http://www.example.test/\" on this server.<P>Reference #18.2d351ab8.1731067200.a4e16ab</BODY></HTML>",
+      "edge": [], "block": ["Akamai", "block"]
+    },
+    "cloudfront_ok": {
+      "status": 200,
+      "headers": {"server": "AmazonS3", "x-cache": "Hit from cloudfront", "via": "1.1 0123456789abcdef.cloudfront.net (CloudFront)", "x-amz-cf-pop": "LHR61-P1", "x-amz-cf-id": "AbCdEf0123456789==", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><body>static</body></html>",
+      "edge": ["Amazon CloudFront"], "block": null
+    },
+    "aws_waf_cloudfront_block": {
+      "status": 403,
+      "headers": {"server": "CloudFront", "x-cache": "Error from cloudfront", "via": "1.1 0123456789abcdef.cloudfront.net (CloudFront)", "x-amz-cf-id": "ZyXw9876543210==", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\"><HTML><HEAD><TITLE>ERROR: The request could not be satisfied</TITLE></HEAD><BODY><H1>403 ERROR</H1><H2>The request could not be satisfied.</H2><HR noshade size=\"1px\">Request blocked.\nWe can't connect to the server for this app or website at this time.<BR clear=\"all\"><HR noshade size=\"1px\"><PRE>Generated by cloudfront (CloudFront)\nRequest ID: ZyXw9876543210==</PRE></BODY></HTML>",
+      "edge": ["Amazon CloudFront"], "block": ["AWS WAF", "block"]
+    },
+    "aws_waf_alb_block": {
+      "status": 403,
+      "headers": {"server": "awselb/2.0", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n</body>\r\n</html>\r\n",
+      "edge": [], "block": ["AWS WAF", "block"]
+    },
+    "aws_waf_challenge": {
+      "status": 202,
+      "headers": {"x-amzn-waf-action": "challenge", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><head><script src=\"https://example.token.awswaf.com/challenge.js\"></script></head><body></body></html>",
+      "edge": ["AWS WAF"], "block": ["AWS WAF", "challenge"]
+    },
+    "aws_waf_token_cookie": {
+      "status": 200,
+      "headers": {"content-type": "text/html"},
+      "set_cookies": ["aws-waf-token=0123abcd:AAA=; Path=/; Secure"],
+      "body": "<html><body>ok</body></html>",
+      "edge": ["AWS WAF"], "block": null
+    },
+    "azure_front_door_ok": {
+      "status": 200,
+      "headers": {"x-azure-ref": "20261108T120000Z-abcdef0123456789", "x-cache": "TCP_MISS", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><body>ok</body></html>",
+      "edge": ["Azure Front Door"], "block": null
+    },
+    "azure_front_door_block": {
+      "status": 403,
+      "headers": {"x-azure-ref": "20261108T120001Z-abcdef0123456790", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><body><h2>The request is blocked.</h2><p>20261108T120001Z-abcdef0123456790</p></body></html>",
+      "edge": ["Azure Front Door"], "block": ["Azure Front Door", "block"]
+    },
+    "azure_app_gateway_block": {
+      "status": 403,
+      "headers": {"server": "Microsoft-Azure-Application-Gateway/v2", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><head><title>403 Forbidden</title></head><body><center><h1>403 Forbidden</h1></center><hr><center>Microsoft-Azure-Application-Gateway/v2</center></body></html>",
+      "edge": ["Azure Application Gateway"], "block": ["Azure Application Gateway", "block"]
+    },
+    "azure_cdn_ok": {
+      "status": 200,
+      "headers": {"x-msedge-ref": "Ref A: 0123 Ref B: LON21EDGE0101 Ref C: 2026-11-08T12:00:00Z", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "ok",
+      "edge": ["Azure CDN"], "block": null
+    },
+    "fastly_ok": {
+      "status": 200,
+      "headers": {"via": "1.1 varnish", "x-served-by": "cache-lhr7342-LHR", "x-cache": "HIT", "x-timer": "S1731067200.123456,VS0,VE1", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><body>ok</body></html>",
+      "edge": ["Fastly"], "block": null
+    },
+    "imperva_ok": {
+      "status": 200,
+      "headers": {"x-cdn": "Imperva", "x-iinfo": "12-34567890-0 0NNN RT(1731067200000 0) q(0 0 0 -1) r(1 1) U5", "content-type": "text/html"},
+      "set_cookies": ["visid_incap_123456=AbCdEf==; expires=Mon, 08 Nov 2027 12:00:00 GMT; HttpOnly; path=/; Domain=.example.test", "incap_ses_1234_123456=GhIjKl==; path=/; Domain=.example.test"],
+      "body": "<html><body>ok<script src=\"/_Incapsula_Resource?SWJIYLWA=719d34d31c8e3a6e6fffd425f7e032f3\"></script></body></html>",
+      "edge": ["Imperva Incapsula"], "block": null
+    },
+    "imperva_block": {
+      "status": 403,
+      "headers": {"x-cdn": "Incapsula", "x-iinfo": "5-12345678-0 0CNN RT(1731067200000 0) q(0 -1 -1 -1) r(0 -1)", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html style=\"height:100%\"><head><META NAME=\"ROBOTS\" CONTENT=\"NOINDEX, NOFOLLOW\"></head><body style=\"margin:0px;height:100%\"><iframe id=\"main-iframe\" src=\"/_Incapsula_Resource?CWUDNSAI=9&xinfo=5-12345678-0&incident_id=123000450012345678-987654321&edet=12&cinfo=04000000\" frameborder=0 width=\"100%\" height=\"100%\">Request unsuccessful. Incapsula incident ID: 123000450012345678-987654321</iframe></body></html>",
+      "edge": ["Imperva Incapsula"], "block": ["Imperva Incapsula", "block"]
+    },
+    "sucuri_ok": {
+      "status": 200,
+      "headers": {"server": "Sucuri/Cloudproxy", "x-sucuri-id": "11005", "x-sucuri-cache": "HIT", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><body>ok</body></html>",
+      "edge": ["Sucuri"], "block": null
+    },
+    "sucuri_block": {
+      "status": 403,
+      "headers": {"server": "Sucuri/Cloudproxy", "x-sucuri-id": "11005", "x-sucuri-block": "BLK001", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><head><title>Sucuri WebSite Firewall - Access Denied</title></head><body><h2>Access Denied - Sucuri Website Firewall</h2><p>If you are the site owner, contact cloudproxy@sucuri.net</p></body></html>",
+      "edge": ["Sucuri"], "block": ["Sucuri", "block"]
+    },
+    "f5_asm_ok": {
+      "status": 200,
+      "headers": {"content-type": "text/html"},
+      "set_cookies": ["TS01a2b3c4=01abcdef0123456789abcdef; Path=/"],
+      "body": "<html><body>ok</body></html>",
+      "edge": ["F5 BIG-IP ASM"], "block": null
+    },
+    "f5_asm_block": {
+      "status": 200,
+      "headers": {"content-type": "text/html", "cache-control": "no-cache", "connection": "close"},
+      "set_cookies": ["TS01a2b3c4=01abcdef0123456789abcdef; Path=/"],
+      "body": "<html><head><title>Request Rejected</title></head><body>The requested URL was rejected. Please consult with your administrator.<br><br>Your support ID is: 1234567890123456789<br><br><a href='javascript:history.back();'>[Go Back]</a></body></html>",
+      "edge": ["F5 BIG-IP ASM"], "block": ["F5 BIG-IP ASM", "block"]
+    },
+    "barracuda_ok": {
+      "status": 200,
+      "headers": {"content-type": "text/html"},
+      "set_cookies": ["barra_counter_session=123456789; path=/", "BNI__BARRACUDA_LB_COOKIE=0000000000000000; Path=/"],
+      "body": "<html><body>ok</body></html>",
+      "edge": ["Barracuda"], "block": null
+    },
+    "netscaler_ok": {
+      "status": 200,
+      "headers": {"via": "NS-CACHE-10.0: 1", "content-type": "text/html"},
+      "set_cookies": ["ns_af=AbCdEf; path=/", "citrix_ns_id=0123; path=/"],
+      "body": "ok",
+      "edge": ["Citrix NetScaler AppFirewall"], "block": null
+    },
+    "fortiweb_ok": {
+      "status": 200,
+      "headers": {"content-type": "text/html"},
+      "set_cookies": ["FORTIWAFSID=0123456789ABCDEF; path=/"],
+      "body": "ok",
+      "edge": ["Fortinet FortiWeb"], "block": null
+    },
+    "modsecurity_block": {
+      "status": 406,
+      "headers": {"server": "Apache", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><head><title>406 Not Acceptable</title></head><body><h1>Not Acceptable!</h1><p>An appropriate representation of the requested resource could not be found on this server. This error was generated by Mod_Security.</p></body></html>",
+      "edge": ["ModSecurity"], "block": ["ModSecurity", "block"]
+    },
+    "ddos_guard_challenge": {
+      "status": 403,
+      "headers": {"server": "ddos-guard", "content-type": "text/html"},
+      "set_cookies": ["__ddg1_=AbCdEf; Domain=.example.test; HttpOnly; Path=/"],
+      "body": "<html><head><title>DDoS-Guard</title></head><body>Checking your browser</body></html>",
+      "edge": ["DDoS-Guard"], "block": ["DDoS-Guard", "challenge"]
+    },
+    "vercel_ok": {
+      "status": 200,
+      "headers": {"server": "Vercel", "x-vercel-id": "lhr1::abcde-1731067200000-0123456789ab", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "ok",
+      "edge": ["Vercel"], "block": null
+    },
+    "netlify_ok": {
+      "status": 200,
+      "headers": {"server": "Netlify", "x-nf-request-id": "01JCDEFGHJKMNPQRSTVWXYZ012", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "ok",
+      "edge": ["Netlify"], "block": null
+    },
+    "keycdn_ok": {
+      "status": 200,
+      "headers": {"server": "keycdn-engine", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "ok",
+      "edge": ["KeyCDN"], "block": null
+    },
+    "generic_x_cdn": {
+      "status": 200,
+      "headers": {"x-cdn": "BunnyCDN", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "ok",
+      "edge": ["BunnyCDN"], "block": null
+    },
+    "generic_rate_limit": {
+      "status": 429,
+      "headers": {"server": "nginx", "retry-after": "30", "content-type": "text/plain"},
+      "set_cookies": [],
+      "body": "Too Many Requests",
+      "edge": [], "block": ["", "rate-limit"]
+    },
+    "maintenance_retry_after": {
+      "status": 503,
+      "headers": {"server": "nginx", "retry-after": "120", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<h1>Down for maintenance</h1>",
+      "edge": [], "block": ["", "rate-limit"]
+    },
+    "honest_forbidden": {
+      "status": 403,
+      "headers": {"x-powered-by": "Express", "content-type": "application/json"},
+      "set_cookies": [],
+      "body": "{\"error\":\"forbidden\"}",
+      "edge": [], "block": null
+    },
+    "honest_overloaded": {
+      "status": 503,
+      "headers": {"server": "nginx", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<html><body><h1>503 Service Temporarily Unavailable</h1></body></html>",
+      "edge": [], "block": null
+    },
+    "honest_apache_forbidden": {
+      "status": 403,
+      "headers": {"server": "Apache/2.4.62 (Debian)", "content-type": "text/html"},
+      "set_cookies": ["PHPSESSID=abc; path=/", "TSESSION=abc; path=/"],
+      "body": "<html><head><title>403 Forbidden</title></head><body><h1>Forbidden</h1><p>You don't have permission to access this resource. Access denied.</p></body></html>",
+      "edge": [], "block": null
+    },
+    "honest_not_found": {
+      "status": 404,
+      "headers": {"server": "nginx", "content-type": "text/html"},
+      "set_cookies": [],
+      "body": "<h1>Not Found</h1>",
+      "edge": [], "block": null
+    }
+  }
+}

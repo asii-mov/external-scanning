@@ -135,6 +135,7 @@ class Store:
             if prev:
                 s.probed_by = sorted(set(prev.probed_by) | set(s.probed_by))
                 s.scripts = {**prev.scripts, **s.scripts}
+                s.edge = s.edge or prev.edge
             merged[s.id] = s
         order = {"tcp": 0, "udp": 1}
         self._write(
@@ -148,6 +149,14 @@ class Store:
         for s in services:
             if s.id == service_id and probe not in s.probed_by:
                 s.probed_by.append(probe)
+        self._write("services.json", [s.to_dict() for s in services])
+
+    def set_service_edge(self, service_id: str, edge: str) -> None:
+        """Record the CDN/WAF in front of a service ("" clears it)."""
+        services = self.services()
+        for s in services:
+            if s.id == service_id:
+                s.edge = edge
         self._write("services.json", [s.to_dict() for s in services])
 
     def findings(self) -> list[Finding]:

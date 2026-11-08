@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 
 from extscan.policy import HttpPolicy
 from extscan.scope import Scope, ScopeError
+from extscan.tools import waf
 
 
 @dataclass
@@ -36,6 +37,8 @@ class Response:
     redirect_chain: list[str] = field(default_factory=list)
     error: str = ""
     truncated: bool = False
+    # Every Set-Cookie value; `headers` keeps only the last one.
+    set_cookies: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -80,10 +83,28 @@ def _opener(policy: HttpPolicy) -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(*handlers)
 
 
+def _set_cookies(headers) -> list[str]:
+    get_all = getattr(headers, "get_all", None)
+    return list(get_all("set-cookie") or []) if get_all else []
+
+
 def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
           data: bytes | None = None,
           extra_headers: dict[str, str] | None = None) -> Response:
-    """Fetch a URL, following redirects manually with a scope check per hop."""
+    """Fetch a URL, following redirects manually with a scope check per hop.
+
+    Each response is shown to `waf.observe`, so a probe or lead running under
+    `waf.watch()` learns when a WAF or rate limiter blocked it.
+    """
+    resp = _fetch(url, scope, policy, method=method, data=data,
+                  extra_headers=extra_headers)
+    waf.observe(resp)
+    return resp
+
+
+def _fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
+           data: bytes | None = None,
+           extra_headers: dict[str, str] | None = None) -> Response:
     chain: list[str] = []
     current = url
     opener = _opener(policy)
@@ -110,7 +131,7 @@ def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
                     url=current, status=resp.status, reason=resp.reason or "",
                     headers={k.lower(): v for k, v in resp.headers.items()},
                     body=raw[:policy.max_body_bytes], redirect_chain=chain,
-                    truncated=truncated,
+                    truncated=truncated, set_cookies=_set_cookies(resp.headers),
                 )
         except urllib.error.HTTPError as exc:
             headers = {k.lower(): v for k, v in (exc.headers or {}).items()}
@@ -126,7 +147,8 @@ def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
             except Exception:
                 body = b""
             return Response(url=current, status=exc.status, reason=exc.reason or "",
-                            headers=headers, body=body, redirect_chain=chain)
+                            headers=headers, body=body, redirect_chain=chain,
+                            set_cookies=_set_cookies(exc.headers))
         except (urllib.error.URLError, TimeoutError, ssl.SSLError, OSError) as exc:
             return Response(url=current, status=0, redirect_chain=chain,
                             error=f"{type(exc).__name__}: {exc}")

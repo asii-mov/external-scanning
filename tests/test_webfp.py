@@ -220,6 +220,14 @@ class TestSignatures(unittest.TestCase):
                          ["a", "b"])
         self.assertEqual(webtech.cookie_names(""), [])
 
+    def test_every_set_cookie_is_seen_not_just_the_last(self):
+        # The headers dict holds only the last Set-Cookie; set_cookies holds all.
+        headers = {"set-cookie": "tracking=1; path=/"}
+        every = ["BIGipServerpool_web=1677787402.20480.0000; path=/", "tracking=1; path=/"]
+        self.assertEqual(webtech.detect(headers, ""), [])
+        names = [d.name for d in webtech.detect(headers, "", set_cookies=every)]
+        self.assertTrue(any("BIG-IP" in n for n in names), names)
+
     def test_page_parts(self):
         parts = webtech.parse_page(page("wordpress.html"))
         self.assertIn("Just another WordPress site", parts.title)

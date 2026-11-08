@@ -378,7 +378,8 @@ def probe_web_fingerprint(svc: Service, scope: Scope,
     body = resp.text
     parts = webtech.parse_page(body)
     urls = [base, resp.url] + [hop.rsplit(" -> ", 1)[-1] for hop in resp.redirect_chain]
-    techs = webtech.detect(resp.headers, body, urls, parts)
+    techs = webtech.detect(resp.headers, body, urls, parts,
+                           set_cookies=getattr(resp, "set_cookies", None))
     page = page_fingerprint(body, svc.host)
 
     if policy.inter_request_delay:
