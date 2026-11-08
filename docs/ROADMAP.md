@@ -134,6 +134,10 @@ open".
 - **Databases** — pre-auth banner detail for MSSQL/MySQL/Postgres/Oracle
 - **Kubernetes** — anonymous access to the API server, kubelet read-only port
 - **Docker** — unauthenticated socket, registry catalogue listing
+- **SSH** — algorithm audit done (`ssh_audit` probe, via ssh-audit). Left:
+  host-key reuse across hosts (the fingerprints are in the summary finding),
+  and auth methods without nmap's `ssh-auth-methods` script, which is not in
+  the default `default,safe,vuln` selection
 **How:** one probe module each, same registry pattern as the existing ones.
 **Catch:** mostly the temptation to authenticate. Null-session SMB listing is
 read-only and fine; a credential guess is not.

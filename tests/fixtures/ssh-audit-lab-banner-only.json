@@ -1,0 +1,2 @@
+{"additional_notes": [], "banner": {"comments": null, "protocol": "2.0", "raw": "SSH-2.0-OpenSSH_7.4", "software": "OpenSSH_7.4"}, "cves": [], "recommendations": {}, "target": "127.0.0.2:2222"}
+[exception] error reading packet (empty)

@@ -212,6 +212,11 @@ TOOL_HINTS: dict[str, dict[str, str]] = {
         "debian": "uv sync --extra screenshots && uv run playwright install chromium",
         "macos": "uv sync --extra screenshots && uv run playwright install chromium",
     },
+    "ssh-audit": {
+        "purpose": "SSH algorithm audit (optional; a coverage gap on SSH services without it)",
+        "debian": "uv tool install ssh-audit==3.9.0",
+        "macos": "uv tool install ssh-audit==3.9.0",
+    },
 }
 
 

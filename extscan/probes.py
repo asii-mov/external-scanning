@@ -22,7 +22,7 @@ from .models import Finding, Lead, Service
 from .policy import Policy
 from .runner import Runner
 from .scope import Scope
-from .tools import iis, net, snmp, sslscan
+from .tools import iis, net, snmp, sshaudit, sslscan
 
 
 @dataclass
@@ -539,6 +539,25 @@ def sslscan_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[
                                 timeout=ctx.policy.sslscan.timeout_sec)
     if res.failure:
         raise RuntimeError(f"sslscan {res.failure}")
+    return findings, []
+
+
+def _is_ssh(s: Service) -> bool:
+    return s.proto == "tcp" and (s.port == 22 or "ssh" in s.name.lower())
+
+
+@register("ssh_audit", _is_ssh,
+          "SSH algorithm audit via ssh-audit, rate test skipped (a coverage gap when "
+          "not installed).")
+def ssh_audit_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
+    """Key-exchange, host-key, cipher and MAC audit; the `ssh` probe only has
+    the banner. Authentication methods come from nmap's ssh-auth-methods
+    output when that script ran, since ssh-audit does not report them."""
+    methods = sshaudit.parse_auth_methods(svc.scripts.get("ssh-auth-methods", ""))
+    _, findings, failure = sshaudit.run(ctx.runner, ctx.scope, ctx.policy.ssh_audit,
+                                        svc.host, svc.port, auth_methods=methods)
+    if failure:
+        raise RuntimeError(f"ssh-audit {failure}")
     return findings, []
 
 

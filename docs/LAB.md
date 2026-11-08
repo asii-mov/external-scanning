@@ -37,7 +37,7 @@ running on your machine shows up in the results.
 
 | Port | Imitates | nmap identifies it as | What extscan should report |
 |---|---|---|---|
-| 2222/tcp | OpenSSH 7.4 banner | `ssh OpenSSH 7.4` | SSH exposure review, vulners candidates |
+| 2222/tcp | OpenSSH 7.4 banner | `ssh OpenSSH 7.4` | SSH exposure review, vulners candidates. Banner only, so with ssh-audit installed the `ssh_audit` probe records a gap (`could not complete the key exchange`) |
 | 2375/tcp | Docker remote API, no auth | `docker Docker remote API` | **critical** Docker API (plaintext) exposure |
 | 3306/tcp | MySQL 5.7.33 handshake | `mysql MySQL 5.7.33-log` | **high** database exposed |
 | 6379/tcp | Redis 5.0.7, no `requirepass` | `redis Redis key-value store 5.0.7` | **critical** Redis exposure, `redis-info` |
