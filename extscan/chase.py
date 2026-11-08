@@ -22,6 +22,7 @@ from urllib.parse import urljoin, urlsplit
 from .models import Finding, Lead
 from .probes import ProbeContext
 from .runner import have
+from .safety import ACTIVE, LOUD, Label
 from .scope import ScopeError
 from .tools import net, snmp
 
@@ -648,6 +649,35 @@ HANDLERS: dict[str, Handler] = {
     "snmp_walk": chase_snmp_walk,
     "tls_detail": chase_tls_detail,
 }
+
+# One safety label per handler (see extscan/safety.py). A handler added to
+# HANDLERS without a label here stops the import, naming it.
+HANDLER_SAFETY: dict[str, Label] = {
+    "openapi": Label(ACTIVE, "GETs the page and up to ~12 well-known spec locations; "
+                             "never calls an operation"),
+    "graphql": Label(ACTIVE, "one POST of the introspection query"),
+    "git_exposure": Label(ACTIVE, "two GETs: .git/config and .git/HEAD"),
+    "web_paths": Label(ACTIVE, "one GET of the URL the lead names"),
+    "secret_file": Label(ACTIVE, "one GET of the file the lead names"),
+    "api_endpoint": Label(ACTIVE, "one GET of one endpoint declared unauthenticated"),
+    "snmp_walk": Label(ACTIVE, "bounded read-only walk of three tables, 25 rows each, "
+                               "with the community that already answered"),
+    "tls_detail": Label(LOUD, "testssl.sh --protocols, a TLS auditor's handshake battery"),
+}
+
+_unlabelled = sorted(set(HANDLERS) - set(HANDLER_SAFETY))
+if _unlabelled:
+    raise TypeError(f"chase handler(s) {_unlabelled} have no safety label: add them "
+                    "to HANDLER_SAFETY in extscan/chase.py")
+_stale = sorted(set(HANDLER_SAFETY) - set(HANDLERS))
+if _stale:
+    raise TypeError(f"HANDLER_SAFETY labels unknown chase handler(s) {_stale}")
+
+
+def handler_safety(kind: str):
+    """The handler's SafetyClass, or None for a lead kind with no handler."""
+    label = HANDLER_SAFETY.get(kind)
+    return label.safety if label else None
 
 
 def chase(ctx: ProbeContext, lead: Lead) -> ChaseResult:

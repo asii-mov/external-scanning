@@ -6,13 +6,25 @@ future change erodes one.
 """
 
 import ast
+import contextlib
+import io
+import json
+import shutil
+import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
+from extscan import chase as chase_mod
+from extscan import pipeline, probes, safety
+from extscan.models import Lead, Service
 from extscan.policy import Policy
+from extscan.runner import Runner
+from extscan.safety import CAP_REASON, SafetyClass
 from extscan.scope import Authorization, Scope, ScopeError
+from extscan.store import Store
 from extscan.tools import dns, net, nuclei
 from tests.test_dns import (
     CLIENT_ZONE,
@@ -425,6 +437,355 @@ class TestAuthorisationCannotBeSkipped(unittest.TestCase):
     def test_scope_load_requires_authorization(self):
         source = (SOURCE_DIR / "scope.py").read_text()
         self.assertIn("has no `authorization` block", source)
+
+
+# ---------------------------------------------------------------------------
+# Safety classes (extscan/safety.py): every check is labelled, nothing is
+# invasive, and the policy's max_safety cap skips what is above it as a gap.
+# ---------------------------------------------------------------------------
+
+# The class each existing check was given after reading what it sends. A
+# new check is not pinned here; lowering one of these is a safety change and
+# must be made here on purpose.
+PINNED = {
+    "probe": {"http_fingerprint": "active", "tls": "active", "snmp": "active",
+              "exposure": "passive", "ssh": "passive", "iis": "loud", "sslscan": "loud"},
+    "chase": {"openapi": "active", "graphql": "active", "git_exposure": "active",
+              "web_paths": "active", "secret_file": "active", "api_endpoint": "active",
+              "snmp_walk": "active", "tls_detail": "loud"},
+    "stage": {"recon:subdomains": "passive", "dns:host-names": "passive",
+              "dns:takeover": "active", "dns:axfr": "active", "dns:nsec-walk": "loud",
+              "discover:tcp": "active", "discover:udp": "active", "nmap:nse": "loud",
+              "nmap:os-detection": "loud", "probe:nuclei": "loud", "http:paths": "loud",
+              "screenshot": "active"},
+}
+
+# Names a passive probe must not touch: each one sends packets.
+_NETWORK_NAMES = {"net", "snmp", "iis", "sslscan", "runner", "fetch", "inspect_tls"}
+
+
+class TestEveryCheckHasASafetyLabel(unittest.TestCase):
+    def test_every_register_call_passes_safety(self):
+        """Read the source, so the failure names the function even if the
+        import-time check were ever loosened."""
+        tree = ast.parse((SOURCE_DIR / "probes.py").read_text())
+        unlabelled = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for deco in node.decorator_list:
+                if isinstance(deco, ast.Call) and call_name(deco) == "register" and \
+                        "safety" not in {kw.arg for kw in deco.keywords}:
+                    unlabelled.append(f"{node.name} (probes.py:{deco.lineno})")
+        self.assertEqual(unlabelled, [], f"@register without safety=: {unlabelled}")
+
+    def test_every_registered_probe_has_a_class(self):
+        self.assertTrue(probes.REGISTRY)
+        for p in probes.REGISTRY:
+            self.assertIsInstance(p.safety, SafetyClass, p.name)
+
+    def test_register_without_safety_fails_naming_the_probe(self):
+        before = list(probes.REGISTRY)
+        with self.assertRaisesRegex(TypeError, "'unlabelled_probe'.*safety="):
+            probes.register("unlabelled_probe", lambda s: True, "x")
+        with self.assertRaisesRegex(TypeError, "'stringly'"):
+            probes.register("stringly", lambda s: True, "x", safety="active")
+        self.assertEqual(probes.REGISTRY, before)
+
+    def test_every_chase_handler_has_a_class(self):
+        self.assertEqual(set(chase_mod.HANDLER_SAFETY), set(chase_mod.HANDLERS))
+        for kind, label in chase_mod.HANDLER_SAFETY.items():
+            self.assertIsInstance(label.safety, SafetyClass, kind)
+            self.assertTrue(label.why, kind)
+
+    def test_every_stage_has_a_class(self):
+        for key, label in safety.STAGES.items():
+            self.assertIsInstance(label.safety, SafetyClass, key)
+            self.assertTrue(label.why, key)
+        dns_checks = {c.name for c in (*dns.CHECKS, dns.HOST_NAMES)}
+        self.assertEqual(set(safety.DNS_CHECKS), dns_checks)
+        self.assertLessEqual(set(safety.DNS_CHECKS.values()), set(safety.STAGES))
+
+    def test_nothing_is_invasive(self):
+        rows = safety.table()
+        invasive = [(r["kind"], r["name"]) for r in rows if r["safety"] == "invasive"]
+        self.assertEqual(invasive, [])
+
+    def test_table_matches_the_registries(self):
+        rows = safety.table()
+        by_kind = {k: {r["name"]: r["safety"] for r in rows if r["kind"] == k}
+                   for k in ("stage", "probe", "chase")}
+        self.assertEqual(len(rows), sum(len(v) for v in by_kind.values()))
+        self.assertEqual(by_kind["probe"], {p.name: str(p.safety) for p in probes.REGISTRY})
+        self.assertEqual(by_kind["chase"], {k: str(v.safety) for k, v
+                                            in chase_mod.HANDLER_SAFETY.items()})
+        self.assertEqual(by_kind["stage"], {k: str(v.safety) for k, v
+                                            in safety.STAGES.items()})
+        self.assertEqual(len(by_kind["probe"]), len(probes.REGISTRY), "duplicate probe names")
+
+    def test_existing_checks_keep_their_pinned_class(self):
+        rows = {(r["kind"], r["name"]): r["safety"] for r in safety.table()}
+        for kind, pinned in PINNED.items():
+            for name, cls in pinned.items():
+                self.assertEqual(rows.get((kind, name)), cls, f"{kind} {name}")
+
+    def test_passive_probes_send_nothing(self):
+        import inspect
+        for p in probes.REGISTRY:
+            if p.safety is not SafetyClass.PASSIVE:
+                continue
+            tree = ast.parse(inspect.getsource(p.run).lstrip())
+            used = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | \
+                   {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+            self.assertEqual(used & _NETWORK_NAMES, set(), f"passive probe {p.name}")
+
+    def test_classes_are_ordered(self):
+        self.assertLess(SafetyClass.PASSIVE, SafetyClass.ACTIVE)
+        self.assertLess(SafetyClass.ACTIVE, SafetyClass.LOUD)
+        self.assertLess(SafetyClass.LOUD, SafetyClass.INVASIVE)
+        self.assertIs(SafetyClass.parse("Loud"), SafetyClass.LOUD)
+        with self.assertRaises(ValueError):
+            SafetyClass.parse("aggressive")
+
+
+class TestSafetyCapPolicy(unittest.TestCase):
+    def test_default_cap_is_loud_in_every_profile(self):
+        for name in ("quick", "standard", "thorough"):
+            self.assertIs(Policy.for_profile(name).safety_cap(), SafetyClass.LOUD, name)
+            self.assertFalse(Policy.for_profile(name).allow_invasive, name)
+
+    def test_max_safety_is_loaded_from_the_top_level(self):
+        """policy.py once ignored all but three top-level keys."""
+        self.assertIs(Policy.from_dict({"max_safety": "active"}).safety_cap(),
+                      SafetyClass.ACTIVE)
+        loaded = Policy.from_dict(Policy.from_dict({"max_safety": "PASSIVE"}).to_dict())
+        self.assertEqual(loaded.max_safety, "passive")
+
+    def test_example_low_noise_policy_caps_at_active(self):
+        path = SOURCE_DIR.parent / "examples" / "policy.active-only.json"
+        self.assertIs(Policy.load(path).safety_cap(), SafetyClass.ACTIVE)
+
+    def test_invasive_needs_the_explicit_opt_in(self):
+        with self.assertRaisesRegex(ValueError, "allow_invasive"):
+            Policy.from_dict({"max_safety": "invasive"})
+        with self.assertRaisesRegex(ValueError, "allow_invasive"):
+            Policy.from_dict({"max_safety": "invasive", "allow_invasive": "yes"})
+        p = Policy.from_dict({"max_safety": "invasive", "allow_invasive": True})
+        self.assertIs(p.safety_cap(), SafetyClass.INVASIVE)
+
+    def test_unknown_class_is_rejected(self):
+        with self.assertRaises(ValueError):
+            Policy.from_dict({"max_safety": "aggressive"})
+
+    def test_init_run_refuses_an_unconfirmed_invasive_cap(self):
+        policy = Policy()
+        policy.max_safety = "invasive"
+        scope = lab_scope()
+        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ValueError):
+            pipeline.init_run(tmp, scope, policy)
+
+
+class _CapStage(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        sp = self.tmp / "scope.json"
+        sp.write_text(json.dumps({
+            "engagement": "t", "client": "c",
+            "authorization": {"reference": "T", "authorized_by": "x"},
+            "targets": ["127.0.0.1/32"], "domains": ["example.test"],
+            "allow_private": True,
+        }))
+        self.scope = Scope.load(sp)
+        self.store = Store.create(self.tmp / "runs", "t", run_id="r")
+        self.store.write_meta({"run_id": "r"})
+        self.runner = Runner(self.store)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    @staticmethod
+    def policy(cap: str, **top) -> Policy:
+        return Policy.from_dict({"max_safety": cap, **top})
+
+    def cap_gaps(self):
+        return sorted((d.stage, d.component) for d in self.store.degradations()
+                      if d.reason.startswith(CAP_REASON))
+
+    def quiet(self):
+        return contextlib.redirect_stdout(io.StringIO())
+
+
+def _must_not_run(*_a, **_k):
+    raise AssertionError("a check above the safety cap ran")
+
+
+class TestCapSkipsProbes(_CapStage):
+    tls_svc = Service(host="127.0.0.1", port=8443, proto="tcp", name="https", tunnel="ssl")
+
+    def run_probe(self, cap, only):
+        with self.quiet():
+            pipeline.probe(self.store, self.scope, self.policy(cap), self.runner, only=only)
+        return self.store.services()[0]
+
+    def test_loud_probe_skipped_as_a_gap_and_retried_under_a_higher_cap(self):
+        self.store.save_services([self.tls_svc])
+        tls = next(p for p in probes.REGISTRY if p.name == "tls")
+        ssl = next(p for p in probes.REGISTRY if p.name == "sslscan")
+        with mock.patch.object(tls, "run", return_value=([], [])), \
+                mock.patch.object(ssl, "run", side_effect=_must_not_run):
+            svc = self.run_probe("active", ["tls", "sslscan"])
+        self.assertEqual(self.cap_gaps(), [("probe:sslscan", "sslscan")])
+        gap = self.store.degradations()[0]
+        self.assertIn("sslscan is loud, policy max_safety is active", gap.reason)
+        self.assertEqual(gap.hosts, ["127.0.0.1"])
+        self.assertIn('"max_safety": "loud"', gap.remedy)
+        self.assertEqual(svc.probed_by, ["tls"])
+
+        with mock.patch.object(ssl, "run", return_value=([], [])) as ran:
+            svc = self.run_probe("loud", ["tls", "sslscan"])
+        ran.assert_called_once()
+        self.assertEqual(self.cap_gaps(), [])
+        self.assertEqual(sorted(svc.probed_by), ["sslscan", "tls"])
+
+    def test_invasive_probe_is_refused_under_the_default_cap(self):
+        fake = probes.Probe(name="fake_invasive", matches=lambda s: True,
+                            run=mock.Mock(return_value=([], [])),
+                            safety=SafetyClass.INVASIVE, description="test only")
+        self.store.save_services([self.tls_svc])
+        with mock.patch.object(probes, "REGISTRY", [*probes.REGISTRY, fake]):
+            svc = self.run_probe("loud", ["fake_invasive"])
+            fake.run.assert_not_called()
+            self.assertEqual(self.cap_gaps(), [("probe:fake_invasive", "fake_invasive")])
+            self.assertEqual(svc.probed_by, [])
+            with self.quiet():
+                pipeline.probe(self.store, self.scope,
+                               self.policy("invasive", allow_invasive=True),
+                               self.runner, only=["fake_invasive"])
+            fake.run.assert_called_once()
+
+    def test_nuclei_skipped_as_a_serious_gap(self):
+        web = Service(host="127.0.0.1", port=9, proto="tcp", name="http")
+        self.store.save_services([web])
+        with mock.patch.object(pipeline.nuclei, "run", side_effect=_must_not_run):
+            svc = self.run_probe("active", ["nuclei"])
+        self.assertEqual(self.cap_gaps(), [("probe:nuclei", "nuclei")])
+        self.assertEqual(self.store.degradations()[0].severity, "serious")
+        self.assertNotIn("nuclei", svc.probed_by)
+        self.assertEqual(self.store.commands(), [])
+
+    def test_path_list_dropped_under_active_and_service_left_unmarked(self):
+        web = Service(host="127.0.0.1", port=9, proto="tcp", name="http")
+        self.store.save_services([web])
+        fetched = []
+
+        def fetch(url, *_a, **_k):
+            fetched.append(url)
+            return net.Response(url=url, status=404, reason="Not Found")
+
+        with mock.patch.object(probes.net, "fetch", side_effect=fetch):
+            svc = self.run_probe("active", ["http_fingerprint"])
+        self.assertEqual(fetched, [web.base_url()])
+        self.assertEqual(self.cap_gaps(), [("probe:http_fingerprint", "http:paths")])
+        self.assertNotIn("http_fingerprint", svc.probed_by)
+
+        fetched.clear()
+        with mock.patch.object(probes.net, "fetch", side_effect=fetch):
+            svc = self.run_probe("loud", ["http_fingerprint"])
+        self.assertEqual(len(fetched), 1 + len(Policy().http.paths))
+        self.assertEqual(self.cap_gaps(), [])
+        self.assertIn("http_fingerprint", svc.probed_by)
+
+
+class TestCapSkipsChaseAndStages(_CapStage):
+    def test_loud_lead_stays_open_with_a_gap(self):
+        self.store.add_leads([Lead(kind="tls_detail", host="127.0.0.1", port=443),
+                              Lead(kind="web_paths", host="127.0.0.1", port=80,
+                                   url="http://127.0.0.1/robots.txt")])
+        done = mock.Mock(return_value=chase_mod.ChaseResult([], [], note="ok"))
+        with mock.patch.dict(chase_mod.HANDLERS, {"tls_detail": _must_not_run,
+                                                  "web_paths": done}), self.quiet():
+            pipeline.chase_leads(self.store, self.scope, self.policy("active"), self.runner)
+        status = {ld.kind: ld.status for ld in self.store.leads()}
+        self.assertEqual(status, {"tls_detail": "open", "web_paths": "done"})
+        self.assertEqual(self.cap_gaps(), [("chase", "lead:tls_detail")])
+
+        with mock.patch.dict(chase_mod.HANDLERS, {"tls_detail": done}), self.quiet():
+            pipeline.chase_leads(self.store, self.scope, self.policy("loud"), self.runner)
+        self.assertEqual({ld.status for ld in self.store.leads()}, {"done"})
+        self.assertEqual(self.cap_gaps(), [])
+
+    def test_passive_cap_skips_discovery_without_running_nmap(self):
+        with mock.patch.object(pipeline.nmap, "run_tcp", side_effect=_must_not_run), \
+                mock.patch.object(pipeline.nmap, "run_udp", side_effect=_must_not_run), \
+                mock.patch.object(pipeline.nmap, "udp_requires_root", return_value=False), \
+                self.quiet():
+            pipeline.discover(self.store, self.scope, self.policy("passive"), self.runner)
+        self.assertEqual(self.cap_gaps(), [("discover:tcp", "discover:tcp"),
+                                           ("discover:udp", "discover:udp")])
+        self.assertTrue(all(d.severity == "serious" for d in self.store.degradations()))
+
+    def test_active_cap_drops_nse_and_os_detection_from_nmap(self):
+        self.runner = Runner(self.store, dry_run=True)
+        with mock.patch.object(pipeline.nmap, "_is_root", return_value=True), self.quiet():
+            pipeline.discover(self.store, self.scope, self.policy("active"), self.runner,
+                              udp=False)
+        argv = self.store.commands()[0]["argv"]
+        self.assertEqual(argv[:2], ["nmap", "-sS"])
+        self.assertNotIn("--script", argv)
+        self.assertNotIn("-O", argv)
+        self.assertEqual(self.cap_gaps(), [("discover", "nmap:nse"),
+                                           ("discover", "nmap:os-detection")])
+
+    def test_loud_cap_keeps_nmap_as_it_was(self):
+        self.runner = Runner(self.store, dry_run=True)
+        with mock.patch.object(pipeline.nmap, "_is_root", return_value=True), self.quiet():
+            pipeline.discover(self.store, self.scope, Policy(), self.runner, udp=False)
+        argv = self.store.commands()[0]["argv"]
+        self.assertIn("--script", argv)
+        self.assertIn("-O", argv)
+        self.assertEqual(self.cap_gaps(), [])
+
+    def test_active_cap_skips_the_nsec_walk(self):
+        with self.quiet():
+            policy = pipeline._dns_under_cap(self.store, self.policy("active"), "recon",
+                                             [c.name for c in dns.CHECKS], ["example.test"],
+                                             "`extscan recon <run>`", dry_run=False)
+        self.assertEqual(policy.dns.skip, ["nsec-walk"])
+        self.assertEqual(self.cap_gaps(), [("recon", "dns:nsec-walk")])
+        results = dns.audit_zone(self.scope, "example.test", [], policy.dns, dry_run=True)
+        self.assertNotIn("nsec-walk", {r.check for r in results})
+
+    def test_passive_cap_skips_dns_checks_that_reach_nameservers(self):
+        with mock.patch.object(pipeline.subdomains, "enumerate_domain",
+                               return_value=([], [])), \
+                mock.patch.object(pipeline.dns, "audit_zone", return_value=[]) as audit, \
+                self.quiet():
+            pipeline.recon(self.store, self.scope, self.policy("passive"), self.runner)
+        self.assertEqual(audit.call_args.args[3].skip, ["axfr", "nsec-walk", "takeover"])
+        self.assertEqual(self.cap_gaps(), [("recon", "dns:axfr"), ("recon", "dns:nsec-walk"),
+                                           ("recon", "dns:takeover")])
+
+    def test_passive_cap_skips_screenshots(self):
+        self.store.save_services([Service(host="127.0.0.1", port=9, proto="tcp",
+                                          name="http")])
+        with self.quiet():
+            out = pipeline.screenshot(self.store, self.scope, self.policy("passive"),
+                                      shooter_factory=_must_not_run)
+        self.assertTrue(out["capped"])
+        self.assertEqual(self.cap_gaps(), [("screenshot", "screenshot")])
+
+    def test_report_names_the_cap(self):
+        from extscan import report
+        from extscan.triage import triage
+        with mock.patch.object(pipeline.nmap, "run_tcp", side_effect=_must_not_run), \
+                self.quiet():
+            pipeline.discover(self.store, self.scope, self.policy("passive"), self.runner,
+                              udp=False)
+        md = report.render_markdown(self.scope, triage([], []), [], [],
+                                    {"policy": self.policy("passive").to_dict()}, [],
+                                    self.store.degradations())
+        self.assertIn("Safety cap: checks up to `passive` were allowed", md)
+        self.assertIn("1 check(s) above the cap were skipped", md)
 
 
 if __name__ == "__main__":

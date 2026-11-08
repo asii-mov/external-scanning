@@ -160,7 +160,8 @@ wide range). To choose the TCP ports on their own, pass `--tcp-ports` to
 common ports), or a list such as `22,80,8000-8100`. Override anything else
 with a policy file; see
 `examples/policy.gentle.json` for a rate-limited configuration suitable for
-fragile infrastructure.
+fragile infrastructure, and `examples/policy.active-only.json` for one capped
+at the `active` safety class (see [Safety classes](#safety-classes)).
 
 ## What it checks
 
@@ -185,9 +186,10 @@ fragile infrastructure.
 | `chase` → `git_exposure` | readable `.git` metadata |
 | `chase` → `snmp_walk` | interface and address tables, to show what the exposure actually discloses |
 
-`extscan probes` lists what is registered. Adding a service family means adding
-one function to `extscan/probes.py` with a match predicate — the pipeline does
-not change.
+`extscan probes` lists what is registered, with each probe's safety class;
+`extscan probes --all` adds the pipeline stages and chase handlers. Adding a
+service family means adding one function to `extscan/probes.py` with a match
+predicate and a `safety=` class — the pipeline does not change.
 
 ## When things go wrong
 
@@ -295,6 +297,39 @@ Deliberate, tested, and not configurable away:
 - **Full audit trail.** Every command, exit code and timing in
   `commands.jsonl`, summarised in the report so a client can reproduce any
   finding.
+- **Every check has a safety class, and nothing is invasive.** See below.
+  Tests fail if a probe, chase handler or stage has no class, or if any is
+  `invasive`.
+
+### Safety classes
+
+Every probe, chase handler and pipeline stage carries one of four ordered
+classes, after BBOT's module flags (`extscan/safety.py`):
+
+| Class | Means | Examples in extscan |
+|---|---|---|
+| `passive` | no packets to the target | certificate transparency, resolver lookups of host names, the `exposure` and `ssh` probes (they read nmap's output) |
+| `active` | ordinary, low-volume traffic a normal client sends | the nmap port sweep with `-sV`, the root-page GET, TLS handshakes, SNMP gets from the short community list, zone-transfer requests, one-GET chase handlers, screenshots |
+| `loud` | many requests or a recognisable scanning pattern; safe but noticed | nuclei, NSE scripts, nmap `-O`, the disclosure-path list, the `iis` probe, `sslscan`, testssl.sh, NSEC walking |
+| `invasive` | could change state or affect availability | nothing; the class exists so it can be refused |
+
+The policy's top-level `max_safety` caps them. The default, `loud`, runs
+everything extscan has. `"max_safety": "active"` drops nuclei, NSE scripts,
+OS detection, the path list, `iis`, `sslscan`, `tls_detail` and NSEC walks,
+for a client who wants a low-noise pass. `passive` sends nothing to the
+target. A check above the cap is never dropped silently: it is a coverage gap
+("skipped by safety cap"), the service or lead stays unmarked, and a later run
+with a higher cap does the work. NSE scripts and `-O` are the exception:
+nmap batches are checkpointed, so add them with a fresh `extscan discover
+<run>` rather than `--resume`, and the gap stays until then. The report's
+methodology names the cap. OS detection can also be turned off on its own
+with `nmap.os_detection: false`.
+
+`max_safety: "invasive"` is refused unless the policy also sets
+`"allow_invasive": true`. **Do not set it.** An invasive check can change the
+client's data or take a service down. extscan ships none, so today the opt-in
+only lets a locally added one run, and that needs the engagement's written
+permission for exactly that check.
 
 ## Reports
 

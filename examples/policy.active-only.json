@@ -1,0 +1,10 @@
+{
+  "profile": "standard",
+  "max_safety": "active",
+  "nmap": {
+    "timing": "-T3"
+  },
+  "http": {
+    "inter_request_delay": 0.2
+  }
+}

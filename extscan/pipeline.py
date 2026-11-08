@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import replace
 
-from . import __version__, vault
+from . import __version__, safety, vault
 from . import chase as chase_mod
 from . import probes as probes_mod
 from . import report as report_mod
@@ -39,6 +40,7 @@ def init_run(runs_dir: str, scope: Scope, policy: Policy,
              run_id: str | None = None) -> Store:
     """Create a run directory and record what we are about to do, and why."""
     scope.assert_window()
+    policy.safety_cap()             # an invalid or unconfirmed cap fails here, first
     store = Store.create(runs_dir, scope.engagement, run_id=run_id)
     store.write_meta({
         "run_id": store.run_id,
@@ -59,6 +61,35 @@ def _coverage_lost(store: Store, deg: Degradation) -> None:
     print(f"    {deg.impact}")
 
 
+def _refused(store: Store, policy: Policy, *, stage: str, component: str,
+             cls: safety.SafetyClass, impact: str, rerun: str,
+             hosts: list[str] | None = None, severity: str = "warning",
+             record: bool = True, clear: bool = True) -> bool:
+    """True when `cls` is above the policy's safety cap, and the caller must
+    skip the work; the gap is recorded (when `record`). Otherwise an earlier
+    cap gap for the same stage and component is cleared (when `clear`),
+    since the work is about to run."""
+    cap = policy.safety_cap()
+
+    def stale(d: Degradation) -> bool:
+        return d.stage == stage and d.component == component and safety.is_cap_gap(d)
+
+    if not safety.over_cap(cls, cap):
+        if clear:
+            store.remove_degradations(stale)
+        return False
+    if record:
+        gap = safety.cap_gap(stage=stage, component=component, cls=cls, cap=cap,
+                             impact=impact, rerun=rerun, hosts=hosts, severity=severity)
+        _coverage_lost(store, gap)
+        store.remove_degradations(lambda d: stale(d) and d.reason != gap.reason)
+    return True
+
+
+def _stage_refused(store: Store, policy: Policy, key: str, **kw) -> bool:
+    return _refused(store, policy, component=key, cls=safety.stage_safety(key), **kw)
+
+
 UDP_NEEDS_ROOT = "nmap -sU requires root and the run is unprivileged"
 NMAP_MISSING = str(ToolMissing("nmap"))
 
@@ -70,6 +101,33 @@ def _warn(store: Store, message: str) -> None:
         warnings.append(message)
     store.write_meta(meta)
     print(f"  ! {message}")
+
+
+def _nmap_under_cap(store: Store, policy: Policy, *, tcp: bool, udp: bool,
+                    resume: bool, dry_run: bool) -> Policy:
+    """The policy nmap runs with: NSE scripts and OS detection removed when
+    they are above the safety cap, each recorded as a gap. A resumed pass
+    keeps its earlier gap even when allowed now, because the batches that
+    finished before ran without them."""
+    n = policy.nmap
+    gated: list[tuple[str, dict, str]] = []
+    if (tcp or udp) and n.scripts:
+        gated.append(("nmap:nse", {"scripts": ""},
+                      f"NSE scripts ({n.scripts}) did not run, so script-derived "
+                      "detail and vulnerability checks are missing. Open ports and "
+                      "service versions were still discovered."))
+    if tcp and n.os_detection and nmap._is_root():
+        gated.append(("nmap:os-detection", {"os_detection": False},
+                      "OS fingerprinting (nmap -O) did not run, so hosts carry no "
+                      "operating-system guess."))
+    changes: dict = {}
+    for key, change, impact in gated:
+        if _stage_refused(store, policy, key, stage="discover", impact=impact,
+                          rerun="`extscan discover <run>` (without --resume, which "
+                                "keeps the batches already done)",
+                          clear=not (resume or dry_run)):
+            changes.update(change)
+    return replace(policy, nmap=replace(n, **changes)) if changes else policy
 
 
 def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
@@ -177,7 +235,23 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
              resume: bool = False) -> dict:
     scope.assert_window()
     do_udp = policy.nmap.do_udp if udp is None else udp
+    for kind in ("tcp", "udp"):
+        wanted = tcp if kind == "tcp" else do_udp
+        if wanted and _stage_refused(
+                store, policy, f"discover:{kind}", stage=f"discover:{kind}",
+                severity="serious", clear=not runner.dry_run,
+                hosts=[str(t) for t in scope.targets],
+                impact=f"No {kind.upper()} discovery was performed. Every {kind.upper()} "
+                       "finding is absent from this report because the safety cap "
+                       "refused the scan, not because nothing is exposed.",
+                rerun="`extscan discover <run> --resume`"):
+            if kind == "tcp":
+                tcp = False
+            else:
+                do_udp = False
     udp_blocked = do_udp and nmap.udp_requires_root()
+    policy = _nmap_under_cap(store, policy, tcp=tcp, udp=do_udp and not udp_blocked,
+                             resume=resume, dry_run=runner.dry_run)
     summary: dict = {"tcp": None, "udp": None}
     rerun = udp_rerun_command(store.path.name)
 
@@ -221,6 +295,9 @@ def _check_host_names(store: Store, scope: Scope, policy: Policy, runner: Runner
     hostnames = {h.ip: h.hostnames for h in store.hosts()
                  if h.state == "up" and h.hostnames and scope.contains(h.ip)}
     if hostnames:
+        policy = _dns_under_cap(store, policy, "discover:dns", ["host-names"],
+                                sorted(hostnames), "`extscan discover <run> --resume`",
+                                runner.dry_run)
         print("→ DNS checks on the names of in-scope hosts")
     for result in dns.audit_hosts(scope, hostnames, policy.dns, dry_run=runner.dry_run):
         _record_dns(store, "discover:dns", result)
@@ -230,6 +307,27 @@ def _check_host_names(store: Store, scope: Scope, policy: Policy, runner: Runner
     kept = [f for f in store.findings()
             if (f.source, f.title) != (dns.SOURCE, dns.OUTSIDE_DOMAINS_TITLE)]
     store.replace_findings(kept + ([note] if note else []))
+
+
+def _dns_under_cap(store: Store, policy: Policy, stage: str, checks: list[str],
+                   subjects: list[str], rerun: str, dry_run: bool) -> Policy:
+    """The policy with each DNS check above the safety cap added to
+    dns.skip, and recorded as a gap under `stage`."""
+    skip = list(policy.dns.skip)
+    for check in checks:
+        if check in skip:
+            continue
+        key = safety.DNS_CHECKS[check]
+        shown = ", ".join(subjects[:5]) + (f" and {len(subjects) - 5} more"
+                                           if len(subjects) > 5 else "")
+        if _stage_refused(store, policy, key, stage=stage, hosts=subjects, rerun=rerun,
+                          clear=not dry_run,
+                          impact=f"The DNS {check} check did not run for {shown} "
+                                 f"({safety.STAGES[key].why})."):
+            skip.append(check)
+    if skip == list(policy.dns.skip):
+        return policy
+    return replace(policy, dns=replace(policy.dns, skip=skip))
 
 
 def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
@@ -247,6 +345,15 @@ def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
 
     totals = {"domains": len(scope.domains), "names": 0,
               "in_scope": 0, "out_of_scope": 0, "sources_failed": 0, "dns_findings": 0}
+    if _stage_refused(store, policy, "recon:subdomains", stage="recon",
+                      hosts=list(scope.domains), rerun="`extscan recon <run>`",
+                      clear=not runner.dry_run,
+                      impact="No subdomain enumeration or DNS checks ran, so names "
+                             "under the scope's domains are missing from the inventory."):
+        return totals
+    policy = _dns_under_cap(store, policy, "recon",
+                            [c.name for c in dns.CHECKS], list(scope.domains),
+                            "`extscan recon <run>`", runner.dry_run)
 
     for domain in scope.domains:
         print(f"→ enumerating {domain} via {', '.join(policy.recon.sources)}")
@@ -331,6 +438,16 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
 
     web = [s for s in services if s.is_http]
     unchecked = [s for s in web if "nuclei" not in s.probed_by]
+    want_nuclei = bool(web) and not skip_nuclei and (only is None or "nuclei" in only)
+    if want_nuclei and _refused(
+            store, policy, stage="probe:nuclei", component="nuclei",
+            cls=safety.stage_safety("probe:nuclei"), severity="serious",
+            record=bool(unchecked), clear=not runner.dry_run,
+            hosts=sorted({w.host for w in unchecked}),
+            impact=f"Templated web checks were not run against {len(unchecked)} web "
+                   "service(s). Any nuclei finding is missing from this report.",
+            rerun="`extscan probe <run> --only nuclei`"):
+        want_nuclei = False
     if skip_nuclei and unchecked:
         _coverage_lost(store, Degradation(
             stage="probe:nuclei", component="nuclei",
@@ -340,7 +457,7 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
             severity="serious", hosts=sorted({w.host for w in unchecked}),
             remedy="`extscan probe <run> --only nuclei`, or `extscan resume <run>`.",
         ))
-    elif web and not skip_nuclei and (only is None or "nuclei" in only):
+    elif want_nuclei:
         print(f"→ nuclei against {len(web)} web service(s)")
         try:
             res, findings, leads = nuclei.run(runner, scope, policy, services)
@@ -365,14 +482,43 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
             for w in web:
                 store.mark_probed(w.id, "nuclei")
 
+    cap = policy.safety_cap()
     jobs: list[tuple[probes_mod.Probe, object]] = []
+    capped: dict[str, tuple[probes_mod.Probe, list]] = {}
     for svc in services:
         for p in probes_mod.probes_for(svc):
             if only is not None and p.name not in only:
                 continue
             if p.name in svc.probed_by and not force:
                 continue
+            if safety.over_cap(p.safety, cap):
+                capped.setdefault(p.name, (p, []))[1].append(svc)
+                continue
             jobs.append((p, svc))
+    for name, (p, svcs) in capped.items():
+        _refused(store, policy, stage=f"probe:{name}", component=name, cls=p.safety,
+                 hosts=[s.host for s in svcs], rerun=f"`extscan probe <run> --only {name}`",
+                 impact=f"The {name} probe did not run on {len(svcs)} service(s): "
+                        f"{p.description}")
+    for name in sorted({p.name for p, _svc in jobs}):
+        store.remove_degradations(lambda d, name=name: (
+            d.stage == f"probe:{name}" and d.component == name and safety.is_cap_gap(d)))
+
+    # The disclosure-path list inside http_fingerprint is louder than the
+    # probe's root GET, so the cap can take it out on its own. Those services
+    # stay unmarked, so a later run with a higher cap does the paths.
+    partial: set[str] = set()
+    fingerprinted = [svc for p, svc in jobs if p.name == "http_fingerprint"]
+    if policy.http.path_checks and fingerprinted and _stage_refused(
+            store, policy, "http:paths", stage="probe:http_fingerprint",
+            hosts=[s.host for s in fingerprinted],
+            rerun="`extscan probe <run> --only http_fingerprint`",
+            impact=f"The disclosure-path list (.git, .env, actuator, swagger, ...) was "
+                   f"not requested on {len(fingerprinted)} web service(s); only the "
+                   "root page was fingerprinted."):
+        ctx = ProbeContext(scope=scope, runner=runner, policy=replace(
+            policy, http=replace(policy.http, path_checks=False)))
+        partial.add("http_fingerprint")
 
     failed: set[tuple[str, str]] = set()
     if jobs:
@@ -406,7 +552,7 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
     store.remove_degradations(lambda d: any(
         d.stage == stage and d.reason.startswith(prefix) for stage, prefix in covered))
     for p, svc in jobs:
-        if (p.name, svc.id) not in failed:
+        if (p.name, svc.id) not in failed and p.name not in partial:
             store.mark_probed(svc.id, p.name)
 
     store.mark_stage("probe", findings=added_f, leads=added_l, probes_run=len(jobs))
@@ -444,6 +590,7 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
         if kinds:
             open_leads = [ld for ld in open_leads if ld.kind in kinds]
         open_leads = [ld for ld in open_leads if ld.depth <= policy.max_lead_depth]
+        open_leads = _leads_under_cap(store, policy, open_leads)
         if not open_leads:
             break
 
@@ -525,6 +672,26 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
             "abandoned": abandoned}
 
 
+def _leads_under_cap(store: Store, policy: Policy, leads: list[Lead]) -> list[Lead]:
+    """Drop the leads whose handler is above the safety cap, recording one gap
+    per lead kind. They stay open, so a run with a higher cap chases them."""
+    by_kind: dict[str, list[Lead]] = {}
+    for lead in leads:
+        by_kind.setdefault(lead.kind, []).append(lead)
+    kept: list[Lead] = []
+    for kind, group in by_kind.items():
+        cls = chase_mod.handler_safety(kind)
+        if cls is None or not _refused(
+                store, policy, stage="chase", component=f"lead:{kind}", cls=cls,
+                hosts=[ld.host for ld in group if ld.host],
+                rerun="`extscan chase <run>`",
+                impact=f"{len(group)} {kind} follow-up(s) were not chased "
+                       f"({chase_mod.HANDLER_SAFETY[kind].why}). They stay open in "
+                       "the review queue."):
+            kept += group
+    return kept
+
+
 SHOTS_UNAVAILABLE = "screenshot browser unavailable"
 SHOTS_FAILED = "screenshots failed for some web services"
 
@@ -551,6 +718,13 @@ def screenshot(store: Store, scope: Scope, policy: Policy, force: bool = False,
         print("  no web services to screenshot")
         store.mark_stage("screenshot", captured=0)
         return {"captured": 0}
+    if todo and _stage_refused(
+            store, policy, "screenshot", stage="screenshot", clear=not dry_run,
+            hosts=[s.service.split("/")[0] for s in todo],
+            rerun="`extscan screenshot <run>`",
+            impact=f"No screenshots of {len(todo)} web page(s). The report describes "
+                   "these services in text only."):
+        return {"captured": 0, "capped": True}
     print(f"→ screenshots: {len(todo)} page(s) to capture, "
           f"{len(planned) - len(todo)} already done")
     if dry_run:

@@ -62,7 +62,7 @@ def tcp_argv(scope: Scope, policy: Policy, out_base: str,
         argv += ["--min-rate", str(p.min_rate)]
     if p.skip_host_discovery:
         argv.append("-Pn")
-    if _is_root():
+    if _is_root() and p.os_detection:
         argv.append("-O")               # OS fingerprint; needs raw sockets
     argv += p.extra_args
     argv += _targets_for(scope, targets)

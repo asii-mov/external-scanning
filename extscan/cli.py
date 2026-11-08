@@ -13,7 +13,7 @@ import contextlib
 import json
 import sys
 
-from . import __version__, pipeline
+from . import __version__, pipeline, safety
 from .models import Finding, severity_rank
 from .policy import Policy, tcp_port_spec
 from .probes import REGISTRY
@@ -471,9 +471,21 @@ def cmd_providers(args) -> int:
 
 
 def cmd_probes(args) -> int:
-    data = [{"name": p.name, "description": p.description} for p in REGISTRY]
-    _emit(data, args.json, lambda rows: [
-        print(f"  {r['name']:<20} {r['description']}") for r in rows])
+    if getattr(args, "all", False):
+        data = safety.table()
+    else:
+        data = [{"name": p.name, "safety": str(p.safety), "description": p.description}
+                for p in REGISTRY]
+
+    def human(rows):
+        if getattr(args, "all", False):
+            print("  kind   " + f"{'name':<20} {'safety':<8} description")
+        for r in rows:
+            kind = f"{r['kind']:<6} " if "kind" in r else ""
+            print(f"  {kind}{r['name']:<20} {r['safety']:<8} {r['description']}")
+        print("\n  safety: passive < active < loud < invasive; the policy's "
+              "max_safety caps it (default loud)")
+    _emit(data, args.json, human)
     return 0
 
 
@@ -517,7 +529,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("doctor", help="check which external tools are installed")
     p.set_defaults(func=cmd_doctor)
 
-    p = sub.add_parser("probes", help="list registered probes")
+    p = sub.add_parser("probes", help="list registered probes and their safety class")
+    p.add_argument("--all", action="store_true",
+                   help="also list pipeline stages and chase handlers")
     p.set_defaults(func=cmd_probes)
 
     p = sub.add_parser("providers", help="show model provider availability")
