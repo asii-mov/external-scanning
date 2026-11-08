@@ -15,6 +15,10 @@ TEMPLATES_VERSION=10.2.7
 # GitHub archive tarballs are not guaranteed byte-stable. If this check fails
 # after GitHub changes its archiver, re-pin from a trusted download.
 TEMPLATES_SHA256=806f65af7808808144c555a424d253592ed5c0fb966b9595735004e2ae0e17f9
+# Optional SSH algorithm audit (the ssh_audit probe). MIT, pure Python, run as
+# a subprocess. The parser in extscan/tools/sshaudit.py targets this release.
+SSH_AUDIT_VERSION=3.9.0
+SSH_AUDIT_SHA256=3dad48d4678e0de31f6332cc7674f9d7dd1805f86babf3796f41c2fd879cb812
 
 BIN="$HOME/.local/bin"
 mkdir -p "$BIN"
@@ -50,6 +54,16 @@ if [ ! -f "$HOME/nuclei-templates/.extscan-v$TEMPLATES_VERSION" ]; then
   mkdir -p "$HOME/nuclei-templates"
   tar xzf "$tmp/t.tar.gz" -C "$HOME/nuclei-templates" --strip-components=1
   touch "$HOME/nuclei-templates/.extscan-v$TEMPLATES_VERSION"
+  rm -rf "$tmp"
+fi
+
+if ! uv tool list 2>/dev/null | grep -qx "ssh-audit v$SSH_AUDIT_VERSION"; then
+  tmp="$(mktemp -d)"
+  whl="ssh_audit-${SSH_AUDIT_VERSION}-py3-none-any.whl"
+  curl -sSLo "$tmp/$whl" \
+    "https://files.pythonhosted.org/packages/py3/s/ssh-audit/$whl"
+  echo "$SSH_AUDIT_SHA256  $tmp/$whl" | sha256sum -c -
+  uv tool install --force "$tmp/$whl"
   rm -rf "$tmp"
 fi
 

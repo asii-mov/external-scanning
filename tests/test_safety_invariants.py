@@ -13,7 +13,7 @@ from pathlib import Path
 
 from extscan.policy import Policy
 from extscan.scope import Authorization, Scope, ScopeError
-from extscan.tools import dns, net, nuclei
+from extscan.tools import dns, net, nuclei, sshaudit
 from tests.test_dns import (
     CLIENT_ZONE,
     NSEC_ZONE,
@@ -159,6 +159,52 @@ class TestDefaultPolicyIsNonDestructive(unittest.TestCase):
     def test_unknown_profile_rejected(self):
         with self.assertRaises(ValueError):
             Policy.for_profile("aggressive")
+
+
+class TestSshAuditNeverRunsRateOrDosTests(unittest.TestCase):
+    """ssh-audit runs a connection-rate test unless told not to, and `--dheat`
+    is a DoS. The first must always be skipped; the second never sent."""
+
+    DANGEROUS = ("--dheat", "--conn-rate-test")
+
+    def assert_safe(self, argv, label):
+        self.assertIn("--skip-rate-test", argv, label)
+        for arg in argv:
+            self.assertNotIn(arg.split("=", 1)[0], self.DANGEROUS, label)
+
+    def test_every_profile_skips_the_rate_test_and_never_sends_dheat(self):
+        for name in ("quick", "standard", "thorough"):
+            policy = Policy.for_profile(name)
+            for host in ("127.0.0.1", "::1", "ssh.example.test"):
+                self.assert_safe(sshaudit.argv(policy.ssh_audit, host, 22), name)
+
+    def test_allowed_extra_args_keep_the_invariant(self):
+        policy = Policy.from_dict({"ssh_audit": {"extra_args": ["-4"]}})
+        self.assert_safe(sshaudit.argv(policy.ssh_audit, "127.0.0.1", 2222), "-4")
+
+    def test_a_policy_cannot_add_dos_or_rate_flags(self):
+        for extra in (["--dheat", "10"], ["--dheat=10"], ["--conn-rate-test", "5"],
+                      ["--conn-rate-test=5:10"], ["-g", "2048-8192"], ["-T", "t.txt"],
+                      ["-c"], ["--threads", "64"], ["-4g", "1-2"], ["--dhe"]):
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                Policy.from_dict({"ssh_audit": {"extra_args": extra}})
+
+    def test_argv_refuses_flags_added_after_the_policy_loaded(self):
+        policy = Policy()
+        policy.ssh_audit.extra_args.append("--dheat=4")
+        with self.assertRaises(ValueError):
+            sshaudit.argv(policy.ssh_audit, "127.0.0.1", 22)
+
+    def test_safe_argv_check_rejects_a_hand_built_command(self):
+        with self.assertRaises(ValueError):
+            sshaudit.assert_safe_argv(["ssh-audit", "-j", "127.0.0.1:22"])
+        with self.assertRaises(ValueError):
+            sshaudit.assert_safe_argv(["ssh-audit", "--skip-rate-test", "--dheat", "1",
+                                       "127.0.0.1:22"])
+
+    def test_ssh_audit_run_asserts_host_scope(self):
+        source = (SOURCE_DIR / "tools" / "sshaudit.py").read_text()
+        self.assertIn("scope.assert_host", source)
 
 
 class TestNoSetOperationsInSnmp(unittest.TestCase):

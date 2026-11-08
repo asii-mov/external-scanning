@@ -133,6 +133,20 @@ class SslscanPolicy:
 
 
 @dataclass
+class SshAuditPolicy:
+    """ssh-audit settings. The argv always carries `--skip-rate-test` and
+    never `--dheat`; `extra_args` accepts only -4/-6 (see tools/sshaudit.py)."""
+
+    timeout_sec: int = 120          # whole run, per service
+    connect_timeout_sec: int = 5    # ssh-audit -t: connect and read timeout
+    extra_args: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        from .tools.sshaudit import check_extra_args
+        check_extra_args(self.extra_args)
+
+
+@dataclass
 class ScreenshotPolicy:
     """Browser captures of web services for the report vault.
 
@@ -218,6 +232,7 @@ class Policy:
     http: HttpPolicy = field(default_factory=HttpPolicy)
     snmp: SnmpPolicy = field(default_factory=SnmpPolicy)
     sslscan: SslscanPolicy = field(default_factory=SslscanPolicy)
+    ssh_audit: SshAuditPolicy = field(default_factory=SshAuditPolicy)
     recon: ReconPolicy = field(default_factory=ReconPolicy)
     screenshots: ScreenshotPolicy = field(default_factory=ScreenshotPolicy)
     dns: DnsPolicy = field(default_factory=DnsPolicy)
@@ -267,6 +282,7 @@ class Policy:
         for section, cls_ in (("nmap", NmapPolicy), ("nuclei", NucleiPolicy),
                               ("http", HttpPolicy), ("snmp", SnmpPolicy),
                               ("sslscan", SslscanPolicy),
+                              ("ssh_audit", SshAuditPolicy),
                               ("recon", ReconPolicy), ("screenshots", ScreenshotPolicy),
                               ("dns", DnsPolicy), ("llm", LLMPolicy)):
             if section in data:

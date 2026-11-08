@@ -447,7 +447,7 @@ class TestDoctorTools(unittest.TestCase):
     def test_lists_every_optional_tool_and_not_the_unused_httpx(self):
         tools = [t for t in runner.doctor() if not t.startswith("_")]
         self.assertEqual(tools, ["nmap", "nuclei", "sslscan", "testssl.sh", "snmpwalk",
-                                 "subfinder", "amass", "playwright"])
+                                 "subfinder", "amass", "playwright", "ssh-audit"])
 
     def test_playwright_is_found_as_a_python_module_not_on_path(self):
         with mock.patch.object(runner.importlib.util, "find_spec", return_value=None):

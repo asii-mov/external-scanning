@@ -60,6 +60,12 @@ The notes below are kept as the spec it was built to.
 
 ## Open
 
+- [ ] **The lab's SSH port is banner-only.** With ssh-audit installed, the
+      `ssh_audit` probe records a coverage gap on every lab run (`could not
+      complete the key exchange`), which is correct but means the lab never
+      exercises a completed audit. Tests use captured output from a real
+      OpenSSH 9.6 instead (`tests/fixtures/ssh-audit-*.json`). Either give the
+      lab a real handshake or document the gap as expected.
 - [ ] **Test the unprivileged-then-sudo UDP flow on a real host.** Only a
       dry-run unit test covers the UDP pass clearing the gap. The full root
       scan has run only in a container. Run a TCP-only scan as yourself,
