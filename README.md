@@ -175,7 +175,8 @@ fragile infrastructure.
 | `probe` → `exposure` | databases, management interfaces and legacy services that should not face the internet |
 | `probe` → `ssh` | banner and exposure review |
 | `probe` → `iis` | IIS/ASP.NET: `trace.axd`/`elmah.axd`, WebDAV verbs, 8.3 short-name oracle, verbose error pages, version headers, default content |
-| `probe` → `sslscan` | cipher-level TLS audit — RC4/3DES/export suites, CRIME, insecure renegotiation (needs `sslscan`) |
+| `probe` → `testssl` | the primary TLS audit, via `testssl.sh` on every TLS service and, with `--starttls`, on SMTP, IMAP, POP3, FTP, LDAP, PostgreSQL, MySQL, XMPP, NNTP, Sieve, LMTP and Telnet (matched on the nmap service name, port as fallback). Named vulnerabilities (Heartbleed, CCS, Ticketbleed, ROBOT, renegotiation, CRIME, BREACH, POODLE, TLS_FALLBACK_SCSV, SWEET32, FREAK, DROWN, LOGJAM, BEAST, LUCKY13, Winshock, RC4, STARTTLS injection), protocols, cipher strength, certificate and the overall grade, as a handful of findings per service. A STARTTLS service that offers no TLS is a finding. A check testssl.sh reports as WARN, or skips, is a coverage gap. Tune with the policy's `testssl` section (`timeout_sec`, `fast` to drop client simulation, `extra_args`) |
+| `probe` → `sslscan` | fallback cipher-level audit when `testssl.sh` is not installed — RC4/3DES/export suites, CRIME, insecure renegotiation (needs `sslscan`). Skipped when `testssl.sh` is present, since that covers all of it |
 | `recon` → subdomains | certificate transparency + `subfinder`/`amass`, resolved and split into in-scope (scannable) and out-of-scope (reported, never touched) |
 | `recon` → dns | per scope domain, built-in DNS client: zone transfer (AXFR) against each nameserver, NSEC zone walking (NSEC3 recognised, not cracked), and takeover candidates from dangling CNAME, MX and NS records and lame delegations. Report only. Tune or skip checks with the policy's `dns` section (`resolvers`, `skip`, bounds). `subzones: true` also transfers and walks each delegated sub-zone, up to `max_subzones` |
 | `chase` → `openapi` | finds the spec, enumerates operations, flags those declaring no authentication (writes especially), notes out-of-scope servers |
@@ -202,6 +203,7 @@ loud abort. Never a silent pass.
 | **nmap times out or is killed** | Partial XML is salvaged — completed hosts are recovered from the truncated file instead of the whole batch being lost. The gap names which hosts went unscanned. `-oA` output means `nmap --resume` also works. |
 | **Scope is large** | Discovery runs in batches of `nmap.chunk_size` hosts, each checkpointed. A timeout costs one batch; `extscan resume` skips what finished. |
 | **nmap/nuclei/sslscan not installed** | Recorded as a coverage gap naming what was not checked, and the run continues. `doctor` tells you up front. |
+| **testssl.sh not installed** | sslscan runs instead, and each TLS service gets a gap saying the named-vulnerability checks did not run (each STARTTLS service, that its TLS was not audited). A testssl.sh run that fails, times out or cannot connect is a gap and the service stays unmarked; checks inside a good run that end in WARN or are skipped are a separate `probe:testssl-checks` gap listing them. |
 | **nuclei or a probe fails** | A killed, timed-out or crashing tool is a coverage gap naming the services it did not finish, and those services stay unmarked so `extscan probe <run> --only <probe>` retries them. |
 | **UDP needs root** | A TCP-only notice before discovery starts, plus a *serious* coverage gap, because "no SNMP findings" and "SNMP was never checked" must never look alike. |
 | **Model endpoint is down** | Retried with jittered backoff, then a circuit breaker opens and stops trying. 100 leads against a dead endpoint cost ~6 HTTP attempts, not 200. Findings keep their deterministic evidence and get a human-review flag. |
@@ -269,6 +271,14 @@ Deliberate, tested, and not configurable away:
 - **Destructive nuclei templates excluded** (`dos`, `intrusive`, `fuzz`,
   `brute-force`), and out-of-band detection is off by default — public
   interactsh relays would see client traffic.
+- **testssl.sh never phones out.** `--phone-out` (CRL and OCSP requests to
+  the certificate issuer), `--grease`/`--full` (malformed ClientHellos that
+  hang fragile stacks), the multi-target and redirecting options (`--file`,
+  `--mx`, `--ip`, `--proxy`) and credential options are refused, in the
+  policy's `testssl.extra_args` too (`TESTSSL_EXCLUDED_ARGS` in
+  `extscan/policy.py`). testssl.sh runs with a minimal environment and
+  `PHONE_OUT=false`, so a variable in the operator's shell cannot turn them
+  back on.
 - **No system proxy.** `http_proxy` in the operator's shell would route client
   traffic through a third party and make results reflect the proxy, not the
   target.
@@ -355,8 +365,8 @@ the loop — the branching logic is not frozen into the tool.
 uv run python -m unittest discover -s tests -t .   # ~415 tests, ~10s, no network
 ```
 
-Fixture-driven, so no scanners are needed: captured nmap/sslscan XML and
-nuclei JSONL for the parsers, a fake SNMP agent over a real UDP socket for the
+Fixture-driven, so no scanners are needed: captured nmap/sslscan XML,
+nuclei JSONL and testssl.sh JSON (`tests/fixtures/testssl/`) for the parsers, a fake SNMP agent over a real UDP socket for the
 wire format, and local HTTP targets (one deliberately exposed, one IIS-flavoured,
 one correctly hardened) for the probe → chase → report path.
 
@@ -374,7 +384,8 @@ uv run python -m unittest tests.fuzz_failures -v
 `tests/fixtures/lab-run/` is a complete lab run with real nmap and nuclei
 output, for working on reporting without running scanners.
 `bash scripts/cloud-setup.sh` provisions a fresh Linux box (a cloud session,
-CI) with nmap, sslscan and pinned nuclei and templates.
+CI) with nmap, sslscan, pinned nuclei and templates, and a pinned testssl.sh
+clone.
 
 To exercise the real scanners too, `uv run python -m tests.lab` starts nine
 exposed services on `127.0.0.2` (HTTP, HTTPS, IIS, SSH, Redis, MySQL,

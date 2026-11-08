@@ -41,7 +41,7 @@ truth.
 | CLI entry point | `extscan/cli.py` |
 | Stages: discover, probe, chase, report | `extscan/pipeline.py` |
 | Per-service probes (one function per service family) | `extscan/probes.py` |
-| Tool adapters (nmap, nuclei, sslscan, SNMP, IIS, subdomains) | `extscan/tools/` |
+| Tool adapters (nmap, nuclei, testssl.sh, sslscan, SNMP, IIS, subdomains) | `extscan/tools/` |
 | Defaults, profiles, excluded NSE scripts and nuclei tags | `extscan/policy.py` |
 | Scope loading and per-request scope checks | `extscan/scope.py` |
 | Run directory state (`runs/<run-id>/`) | `extscan/store.py` |
@@ -61,7 +61,7 @@ truth.
 | Vault links, ordering, unredacted evidence, hostile text, screenshot stage | `tests/test_vault.py` |
 | Failure-state fuzzer (opt-in, several minutes) | `tests/fuzz_failures.py` |
 | Minimized fuzzer counterexamples, replayed every fuzz run | `tests/fuzz_corpus.json` |
-| Captured scanner output for parser tests | `tests/fixtures/*.xml`, `tests/fixtures/*.jsonl` |
+| Captured scanner output for parser tests | `tests/fixtures/*.xml`, `tests/fixtures/*.jsonl`, `tests/fixtures/testssl/` |
 | A complete lab run, for reporting work without scanners | `tests/fixtures/lab-run/` |
 | Local lab server (9 exposed services on 127.0.0.2) | `tests/lab.py` |
 | Deliberately exposed web target used by the lab and tests | `tests/targetapp.py` |

@@ -412,6 +412,71 @@ class TestScreenshotsStayInScope(unittest.TestCase):
         self.assertTrue(hop["final_url"].startswith(base))
 
 
+class TestTestsslArgvIsSafe(unittest.TestCase):
+    """testssl.sh must never phone out, run disruptive checks or leave scope."""
+
+    MUST_EXCLUDE = ("--phone-out", "-g", "--grease", "-9", "--full", "--file", "-iL",
+                    "--mx", "--ip", "--proxy", "--basicauth", "--mtls", "--reqheader")
+
+    def argvs(self, policy: Policy):
+        from extscan.tools import testssl
+        for proto in ["", *sorted(set(testssl.STARTTLS_BY_NAME.values()))]:
+            yield testssl.argv(policy, "203.0.113.10", 443, "/out.json", proto)
+
+    def assert_clean(self, cmd: list[str]):
+        flags = {a.split("=", 1)[0] for a in cmd}
+        self.assertEqual(flags & set(self.MUST_EXCLUDE), set(), cmd)
+        self.assertNotIn("--phone-out", " ".join(cmd))
+        self.assertEqual(cmd[-1], "203.0.113.10:443", "the in-scope URI must be last")
+
+    def test_excluded_list_covers_the_unsafe_flags(self):
+        from extscan.policy import TESTSSL_EXCLUDED_ARGS
+        for flag in self.MUST_EXCLUDE:
+            self.assertIn(flag, TESTSSL_EXCLUDED_ARGS)
+
+    def test_no_profile_or_mode_builds_an_unsafe_command(self):
+        for profile in ("quick", "standard", "thorough"):
+            for fast in (False, True):
+                policy = Policy.for_profile(profile)
+                policy.testssl.fast = fast
+                for cmd in self.argvs(policy):
+                    self.assert_clean(cmd)
+
+    def test_policy_extra_args_cannot_add_an_excluded_flag(self):
+        for flag in self.MUST_EXCLUDE:
+            for args in ([flag], [f"{flag}=x"], [f"--quiet {flag}"], ["--wide", flag, "v"]):
+                with self.subTest(args=args), self.assertRaises(ValueError):
+                    Policy.from_dict({"testssl": {"extra_args": args}})
+
+    def test_extra_args_set_after_loading_are_refused_at_argv(self):
+        from extscan.tools import testssl
+        policy = Policy()
+        policy.testssl.extra_args = ["--ids-friendly", "--phone-out"]
+        with self.assertRaises(ValueError):
+            testssl.argv(policy, "203.0.113.10", 443, "/out.json")
+
+    def test_allowed_extra_args_still_produce_a_clean_command(self):
+        policy = Policy.from_dict({"testssl": {"extra_args": ["--ids-friendly", "-6"]}})
+        for cmd in self.argvs(policy):
+            self.assert_clean(cmd)
+            self.assertIn("--ids-friendly", cmd)
+
+    def test_environment_cannot_turn_phone_out_on(self):
+        from unittest import mock
+
+        from extscan.tools import testssl
+        with mock.patch.dict("os.environ", {"PHONE_OUT": "true", "FNAME": "t.txt",
+                                            "BASICAUTH": "u:p", "MX_DOMAIN": "x"}):
+            env = testssl.child_env()
+        self.assertEqual(env["PHONE_OUT"], "false")
+        self.assertTrue(set(env) <= set(testssl.PASSTHROUGH_ENV) | {"PHONE_OUT"})
+
+    def test_testssl_runs_with_its_pinned_environment(self):
+        source = (SOURCE_DIR / "tools" / "testssl.py").read_text()
+        self.assertIn("env=child_env()", source)
+        self.assertIn("scope.assert_host", source)
+
+
 class TestAuthorisationCannotBeSkipped(unittest.TestCase):
     def test_init_run_checks_the_testing_window(self):
         source = (SOURCE_DIR / "pipeline.py").read_text()

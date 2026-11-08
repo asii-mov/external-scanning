@@ -20,9 +20,9 @@ from dataclasses import dataclass
 
 from .models import Finding, Lead, Service
 from .policy import Policy
-from .runner import Runner
+from .runner import Runner, have
 from .scope import Scope
-from .tools import iis, net, snmp, sslscan
+from .tools import iis, net, snmp, sslscan, testssl
 
 
 @dataclass
@@ -386,16 +386,10 @@ def tls_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead
             tags=["tls", "deprecated-protocol"],
         ))
 
-    untested = [k for k, v in info.protocols.items() if v is None]
-    if untested:
-        leads.append(Lead(
-            kind="tls_detail", host=svc.host, port=svc.port,
-            params={"untested": untested},
-            reason=f"Local OpenSSL could not test {', '.join(untested)}. Run a dedicated "
-                   "TLS auditor to settle it rather than reporting an untested version "
-                   "as absent.",
-            origin="extscan:tls",
-        ))
+    # Versions the local OpenSSL could not test (shown as "untested" above) are
+    # settled by the testssl probe, which runs on every TLS service, or are a
+    # coverage gap when testssl.sh is missing. This probe used to emit a
+    # `tls_detail` lead for them; chase still resolves those in older runs.
 
     if info.cert_pem:
         ctx.runner.store.write_raw(f"cert-{svc.host}-{svc.port}.pem", info.cert_pem)
@@ -534,12 +528,27 @@ def sslscan_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[
 
     Python's ssl module only offers what the local OpenSSL build supports, so
     it cannot prove a server accepts RC4. sslscan links its own crypto and can.
+
+    This is the fallback: when testssl.sh is installed, the `testssl` probe
+    covers everything sslscan reports (protocols, cipher suites, compression,
+    renegotiation, Heartbleed, certificate) and more, so sslscan is skipped
+    rather than run twice. A testssl.sh failure is its own coverage gap.
     """
+    if have(testssl.TOOL):
+        return [], []
     res, findings = sslscan.run(ctx.runner, ctx.scope, svc.host, svc.port,
                                 timeout=ctx.policy.sslscan.timeout_sec)
     if res.failure:
         raise RuntimeError(f"sslscan {res.failure}")
     return findings, []
+
+
+@register("testssl", testssl.matches,
+          "Primary TLS audit via testssl.sh: named vulnerabilities, ciphers, "
+          "certificate, grade, STARTTLS (a coverage gap when not installed).")
+def testssl_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
+    """testssl.sh on implicit-TLS and STARTTLS services; see extscan/tools/testssl.py."""
+    return testssl.audit(ctx.runner, ctx.scope, ctx.policy, svc), []
 
 
 def all_probe_names() -> list[str]:

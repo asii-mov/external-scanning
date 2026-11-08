@@ -132,6 +132,83 @@ class SslscanPolicy:
     timeout_sec: int = 300
 
 
+# testssl.sh options extscan never passes, with the reason. The adapter builds
+# the rest of the command itself; `extra_args` may add tuning flags, but none
+# of these, in either `--flag value` or `--flag=value` form.
+TESTSSL_EXCLUDED_ARGS: dict[str, str] = {
+    # Third parties: CRL downloads and OCSP queries to the issuer's servers.
+    "--phone-out": "contacts third-party CRL/OCSP servers about the target",
+    # Disruptive: deliberately malformed and oversized ClientHellos that
+    # fragile TLS stacks hang or crash on. --full includes --grease.
+    "-g": "implementation-bug probing (GREASE, size limits) can hang fragile stacks",
+    "--grease": "implementation-bug probing (GREASE, size limits) can hang fragile stacks",
+    "-9": "includes --grease",
+    "--full": "includes --grease",
+    # Scope: these test hosts other than the one in-scope URI extscan passes.
+    "--file": "mass testing reads targets from a file, bypassing the scope check",
+    "-iL": "mass testing reads targets from a file, bypassing the scope check",
+    "--mx": "tests a domain's MX hosts, which are not scope-checked",
+    "--ip": "connects to an address other than the scope-checked target",
+    "--proxy": "routes target traffic through another host",
+    # Credentials: no credential use, whether ours or the client's.
+    "--basicauth": "sends credentials",
+    "--mtls": "presents a client certificate",
+    "--reqheader": "custom headers can carry credentials",
+    # Coverage that would look clean: native mode gives false negatives
+    # without warning (its docs), and the adapter owns the protocol, the
+    # error handling and the JSON it parses.
+    "--ssl-native": "false negatives without a warning",
+    "-t": "the STARTTLS protocol is chosen from the service",
+    "--starttls": "the STARTTLS protocol is chosen from the service",
+    "--warnings": "pinned to batch",
+    "--severity": "would drop the OK results that prove a check ran",
+    "--jsonfile": "the adapter owns the JSON output",
+    "-oj": "the adapter owns the JSON output",
+    "--jsonfile-pretty": "the adapter owns the JSON output",
+    "-oJ": "the adapter owns the JSON output",
+    "--json": "the adapter owns the JSON output",
+    "--json-pretty": "the adapter owns the JSON output",
+    "-oA": "the adapter owns the JSON output",
+    "-oa": "the adapter owns the JSON output",
+    "--outFile": "the adapter owns the JSON output",
+    "--outfile": "the adapter owns the JSON output",
+    "--append": "would mix earlier results into this run's JSON",
+}
+
+
+def excluded_testssl_args(args: list[str]) -> list[str]:
+    """Return the flags in `args` that TESTSSL_EXCLUDED_ARGS forbids.
+
+    Each entry is also split on whitespace, so "--quiet --phone-out" passed
+    as one string is caught too.
+    """
+    return [tok.split("=", 1)[0] for a in args for tok in str(a).split()
+            if tok.split("=", 1)[0] in TESTSSL_EXCLUDED_ARGS]
+
+
+@dataclass
+class TestsslPolicy:
+    """testssl.sh, the primary TLS audit (sslscan is the fallback).
+
+    `fast` drops client simulation (about a hundred extra handshakes), which
+    is informational, and keeps every vulnerability check and the grade.
+    """
+
+    __test__ = False  # not a unittest class, despite the name
+
+    timeout_sec: int = 1200
+    connect_timeout_sec: int = 10
+    openssl_timeout_sec: int = 10
+    fast: bool = False
+    extra_args: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        bad = excluded_testssl_args(self.extra_args)
+        if bad:
+            raise ValueError("testssl extra_args not allowed: " + "; ".join(
+                f"{a} ({TESTSSL_EXCLUDED_ARGS[a]})" for a in bad))
+
+
 @dataclass
 class ScreenshotPolicy:
     """Browser captures of web services for the report vault.
@@ -218,6 +295,7 @@ class Policy:
     http: HttpPolicy = field(default_factory=HttpPolicy)
     snmp: SnmpPolicy = field(default_factory=SnmpPolicy)
     sslscan: SslscanPolicy = field(default_factory=SslscanPolicy)
+    testssl: TestsslPolicy = field(default_factory=TestsslPolicy)
     recon: ReconPolicy = field(default_factory=ReconPolicy)
     screenshots: ScreenshotPolicy = field(default_factory=ScreenshotPolicy)
     dns: DnsPolicy = field(default_factory=DnsPolicy)
@@ -266,7 +344,7 @@ class Policy:
             p = cls.for_profile(str(data["profile"]))
         for section, cls_ in (("nmap", NmapPolicy), ("nuclei", NucleiPolicy),
                               ("http", HttpPolicy), ("snmp", SnmpPolicy),
-                              ("sslscan", SslscanPolicy),
+                              ("sslscan", SslscanPolicy), ("testssl", TestsslPolicy),
                               ("recon", ReconPolicy), ("screenshots", ScreenshotPolicy),
                               ("dns", DnsPolicy), ("llm", LLMPolicy)):
             if section in data:

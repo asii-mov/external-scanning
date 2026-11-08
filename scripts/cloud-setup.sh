@@ -15,6 +15,10 @@ TEMPLATES_VERSION=10.2.7
 # GitHub archive tarballs are not guaranteed byte-stable. If this check fails
 # after GitHub changes its archiver, re-pin from a trusted download.
 TEMPLATES_SHA256=806f65af7808808144c555a424d253592ed5c0fb966b9595735004e2ae0e17f9
+# testssl.sh is GPL-2.0 and runs as an external program; it is cloned, never
+# vendored. The commit is the one the v3.2.5 tag points at.
+TESTSSL_VERSION=3.2.5
+TESTSSL_COMMIT=4f17be931a9d60f3f987975aea8221f1a8eaf7aa
 
 BIN="$HOME/.local/bin"
 mkdir -p "$BIN"
@@ -22,9 +26,14 @@ export PATH="$BIN:$PATH"
 SUDO=""
 [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && SUDO="sudo"
 
-if ! command -v nmap >/dev/null || ! command -v sslscan >/dev/null; then
+# testssl.sh needs hexdump (bsdextrautils), dig (dnsutils) and, for its
+# STARTTLS injection check, socat.
+if ! command -v nmap >/dev/null || ! command -v sslscan >/dev/null \
+    || ! command -v hexdump >/dev/null || ! command -v socat >/dev/null \
+    || ! command -v git >/dev/null; then
   $SUDO apt-get update -qq
-  $SUDO apt-get install -y -qq nmap sslscan openssl curl unzip
+  $SUDO apt-get install -y -qq nmap sslscan openssl curl unzip git \
+    bsdextrautils dnsutils socat
 fi
 
 if ! command -v uv >/dev/null; then
@@ -52,6 +61,19 @@ if [ ! -f "$HOME/nuclei-templates/.extscan-v$TEMPLATES_VERSION" ]; then
   touch "$HOME/nuclei-templates/.extscan-v$TEMPLATES_VERSION"
   rm -rf "$tmp"
 fi
+
+TESTSSL_DIR="$HOME/testssl.sh"
+if [ "$(git -C "$TESTSSL_DIR" rev-parse HEAD 2>/dev/null || true)" != "$TESTSSL_COMMIT" ]; then
+  rm -rf "$TESTSSL_DIR"
+  git clone --quiet --depth 1 --branch "v$TESTSSL_VERSION" \
+    https://github.com/testssl/testssl.sh "$TESTSSL_DIR"
+  if [ "$(git -C "$TESTSSL_DIR" rev-parse HEAD)" != "$TESTSSL_COMMIT" ]; then
+    echo "testssl.sh v$TESTSSL_VERSION is not commit $TESTSSL_COMMIT; refusing it" >&2
+    rm -rf "$TESTSSL_DIR"
+    exit 1
+  fi
+fi
+ln -sf "$TESTSSL_DIR/testssl.sh" "$BIN/testssl.sh"
 
 uv sync --locked
 uv run extscan doctor
