@@ -11,7 +11,7 @@ Claude's local notes.
 ## Setup
 
 ```bash
-bash scripts/cloud-setup.sh   # nmap, sslscan, uv, pinned nuclei + templates, uv sync
+bash scripts/cloud-setup.sh   # nmap, sslscan, uv, pinned nuclei + templates, ssh-audit, testssl.sh, uv sync
 ```
 
 Idempotent. On a machine that already has the tools, `uv sync` is enough.

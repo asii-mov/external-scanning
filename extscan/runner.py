@@ -92,7 +92,14 @@ class Runner:
         stdout_name: str | None = None,
         check: bool = False,
         input_text: str | None = None,
+        env: dict[str, str] | None = None,
     ) -> Result:
+        """Run argv. `env`, when given, is the child's whole environment.
+
+        Adapters pass one for tools that read safety-relevant settings from the
+        environment (testssl.sh's PHONE_OUT, for one), so an operator's shell
+        cannot change what the audited command does.
+        """
         argv = [str(a) for a in argv]
         if self.verbose or self.dry_run:
             print(f"  $ {' '.join(argv)}", flush=True)
@@ -115,6 +122,7 @@ class Runner:
                 errors="replace",
                 timeout=timeout,
                 input=input_text,
+                env=env,
                 shell=False,
             )
             rc, out, err = proc.returncode, proc.stdout, proc.stderr
@@ -186,8 +194,11 @@ TOOL_HINTS: dict[str, dict[str, str]] = {
         "macos": "brew install sslscan",
     },
     "testssl.sh": {
-        "purpose": "detailed TLS configuration audit (optional)",
-        "debian": "git clone --depth 1 https://github.com/testssl/testssl.sh",
+        "purpose": "primary TLS audit: named vulnerabilities, ciphers, certificate, grade "
+                   "and STARTTLS (optional; without it sslscan is the fallback and the "
+                   "named-vulnerability checks are a coverage gap)",
+        "debian": "bash scripts/cloud-setup.sh (pinned clone; needs bsdextrautils "
+                  "for hexdump, socat for the STARTTLS injection check)",
         "macos": "brew install testssl",
     },
     "snmpwalk": {

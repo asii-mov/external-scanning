@@ -30,6 +30,7 @@ else
       --scope examples/lab/scope.json --policy examples/lab/policy.json > /out/run.log 2>&1
     { echo "nmap: $(nmap --version | head -1)"
       echo "sslscan: $(sslscan --version 2>&1 | head -1)"
+      echo "testssl.sh: $(testssl.sh --version 2>&1 | grep -m1 -a "version")"
       echo "nuclei: $(nuclei -version 2>&1 | grep -i "engine version")"
     } | sed -e "s/\x1b\[[0-9;]*m//g" -e "s/\t//g" > /out/versions.txt
     chown -R '"$(id -u):$(id -g)"' /out'
@@ -44,7 +45,7 @@ for f in run.json hosts.json services.json findings.json leads.json degradations
   if [ -f "$run/$f" ]; then cp "$run/$f" "$dest/"; fi
 done
 for f in "$run"/raw/*.xml "$run"/raw/nuclei.jsonl "$run"/raw/nuclei-targets.txt \
-         "$run"/raw/openapi-*.txt; do
+         "$run"/raw/openapi-*.txt "$run"/raw/testssl-*.json; do
   if [ -f "$f" ]; then cp "$f" "$dest/raw/"; fi
 done
 

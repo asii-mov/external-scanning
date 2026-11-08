@@ -141,7 +141,8 @@ has no Akamai entry, as Akamai publishes none.
 open".
 - **SMB** — signing not required, SMBv1 enabled, null-session share listing
 - **RDP** — NLA not enforced, certificate detail, BlueKeep-era version checks
-- **FTP/SFTP** — anonymous access, banner, TLS support
+- **FTP/SFTP** — anonymous access, banner (TLS support is covered: the
+  `testssl` probe runs `--starttls ftp`)
 - **Databases** — pre-auth banner detail for MSSQL/MySQL/Postgres/Oracle
 - **Kubernetes** — anonymous access to the API server, kubelet read-only port
 - **Docker** — unauthenticated socket, registry catalogue listing

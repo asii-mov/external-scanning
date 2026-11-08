@@ -19,12 +19,18 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from .models import CommandRecord, Finding, Host, Lead, Service
 from .resilience import Degradation
+
+# Probes run in a thread pool, and a probe may record its own partial-coverage
+# gap while the main thread records another, so the read-modify-write of
+# degradations.json is serialised.
+_DEGRADATIONS_LOCK = threading.RLock()
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
@@ -207,19 +213,21 @@ class Store:
         return [Degradation.from_dict(d) for d in self._read("degradations.json", [])]
 
     def add_degradation(self, deg: Degradation) -> None:
-        existing = self.degradations()
-        key = (deg.stage, deg.component, deg.reason)
-        if any((d.stage, d.component, d.reason) == key for d in existing):
-            return
-        existing.append(deg)
-        self._write("degradations.json", [d.to_dict() for d in existing])
+        with _DEGRADATIONS_LOCK:
+            existing = self.degradations()
+            key = (deg.stage, deg.component, deg.reason)
+            if any((d.stage, d.component, d.reason) == key for d in existing):
+                return
+            existing.append(deg)
+            self._write("degradations.json", [d.to_dict() for d in existing])
 
     def remove_degradations(self, match: Callable[[Degradation], bool]) -> None:
         """Drop recorded gaps that later work has covered."""
-        existing = self.degradations()
-        kept = [d for d in existing if not match(d)]
-        if len(kept) != len(existing):
-            self._write("degradations.json", [d.to_dict() for d in kept])
+        with _DEGRADATIONS_LOCK:
+            existing = self.degradations()
+            kept = [d for d in existing if not match(d)]
+            if len(kept) != len(existing):
+                self._write("degradations.json", [d.to_dict() for d in kept])
 
     def checkpoint(self, stage: str, key: str) -> None:
         data = self._read("checkpoints.json", {})

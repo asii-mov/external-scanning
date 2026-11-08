@@ -19,12 +19,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlsplit
 
-from .models import Finding, Lead
+from .models import Finding, Lead, Service
 from .probes import ProbeContext
-from .runner import have
 from .safety import ACTIVE, LOUD, Label
 from .scope import ScopeError
-from .tools import net, snmp
+from .tools import net, snmp, testssl
 
 MAX_LISTED = 40
 
@@ -617,26 +616,27 @@ def chase_snmp_walk(ctx: ProbeContext, lead: Lead) -> ChaseResult:
 
 
 def chase_tls_detail(ctx: ProbeContext, lead: Lead) -> ChaseResult:
-    if not have("testssl.sh"):
-        return ChaseResult([], [], note=(
-            "testssl.sh not installed; protocol support could not be settled. "
-            "Install it or test manually before stating which TLS versions are absent."
-        ))
-    target = f"{lead.host}:{lead.port}"
-    out = ctx.runner.store.raw_path(f"testssl-{lead.host}-{lead.port}.json")
-    res = ctx.runner.run(
-        ["testssl.sh", "--jsonfile", str(out), "--protocols", "--quiet", target],
-        stage="chase:tls_detail", timeout=900, stdout_name=f"testssl-{lead.host}-{lead.port}",
-    )
-    return ChaseResult([Finding(
-        title=f"Detailed TLS protocol audit for {target}",
-        severity="info", host=lead.host, port=lead.port, source="testssl.sh",
-        description="External TLS auditor output; attached for review.",
-        evidence=(res.stdout or "")[-3000:] or f"see {out}",
-        review_required=True,
-        review_reason="Read the protocol/cipher table and report anything below TLS 1.2.",
-        tags=["tls"],
-    )], [], note=f"testssl.sh exit {res.returncode}")
+    """Settle TLS versions the local OpenSSL could not test.
+
+    Superseded by the `testssl` probe, which audits every TLS service, so the
+    tls probe no longer emits this lead. The handler stays for `tls_detail`
+    leads in older run directories: it closes them when the probe has already
+    run, and otherwise runs the same audit (raising, so the lead is marked
+    failed, when testssl.sh is missing).
+    """
+    store = ctx.runner.store
+    svc = next((s for s in store.services() if s.host == lead.host
+                and s.port == lead.port and s.proto == lead.proto), None)
+    if svc is not None and "testssl" in svc.probed_by:
+        return ChaseResult([], [], note="superseded: the testssl probe already "
+                                        "audited this service")
+    target = svc or Service(host=lead.host, port=lead.port or 443, proto="tcp",
+                            tunnel="ssl")
+    findings = testssl.audit(ctx.runner, ctx.scope, ctx.policy, target,
+                             stage="chase:tls_detail")
+    if svc is not None and not ctx.runner.dry_run:
+        store.mark_probed(svc.id, "testssl")
+    return ChaseResult(findings, [], note=f"testssl.sh audit: {len(findings)} finding(s)")
 
 
 HANDLERS: dict[str, Handler] = {

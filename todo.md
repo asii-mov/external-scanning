@@ -66,6 +66,14 @@ The notes below are kept as the spec it was built to.
       exercises a completed audit. Tests use captured output from a real
       OpenSSH 9.6 instead (`tests/fixtures/ssh-audit-*.json`). Either give the
       lab a real handshake or document the gap as expected.
+- [ ] **Put testssl.sh and a STARTTLS service in the lab.** The `testssl`
+      probe's fixtures (`tests/fixtures/testssl/`) were captured against the
+      lab's 8443 and MySQL, plus throwaway weak-TLS and STARTTLS SMTP
+      listeners on 127.0.0.2 that `tests/lab.py` does not start. Add a STARTTLS
+      SMTP listener to the lab (and to `docs/LAB.md`), then regenerate
+      `tests/fixtures/lab-run` with `bash scripts/capture-lab-run.sh`, which
+      now installs testssl.sh through `cloud-setup.sh`, so the committed lab
+      run shows the testssl findings.
 - [ ] **Test the unprivileged-then-sudo UDP flow on a real host.** Only a
       dry-run unit test covers the UDP pass clearing the gap. The full root
       scan has run only in a container. Run a TCP-only scan as yourself,
