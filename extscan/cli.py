@@ -12,8 +12,10 @@ import argparse
 import contextlib
 import json
 import sys
+from pathlib import Path
 
 from . import __version__, pipeline
+from . import diff as diff_mod
 from .models import Finding, severity_rank
 from .policy import Policy, tcp_port_spec
 from .probes import REGISTRY
@@ -482,6 +484,34 @@ TCP_PORTS_HELP = ("TCP ports to scan: all (1-65535), top (1-1024 plus common ser
                   "Default: the profile's list")
 
 
+def _open_ref(runs_dir: str, ref: str) -> Store:
+    """A run id under --runs-dir, `latest`, or a path to a run directory."""
+    path = Path(ref)
+    if (path / "run.json").is_file():
+        return Store(path)
+    return Store.open(runs_dir, ref)
+
+
+def cmd_diff(args) -> int:
+    """Compare two runs. A report, not a gate: exit 0 unless --fail-on-new."""
+    try:
+        old, new = _open_ref(args.runs_dir, args.old), _open_ref(args.runs_dir, args.new)
+    except ValueError as exc:
+        print(f"invalid run: {exc}", file=sys.stderr)
+        return 2
+    if old.path.resolve() == new.path.resolve():
+        print("diff needs two different runs", file=sys.stderr)
+        return 2
+    result = diff_mod.compare(old, new)
+    paths = diff_mod.write(new, result)
+    result["written"] = {"markdown": str(paths[0]), "json": str(paths[1])}
+    _emit(result, args.json, lambda d: print(diff_mod.console_summary(d, paths)))
+    s = result["summary"]
+    if args.fail_on_new and (s["findings_new"] or s["services_new"]):
+        return 1
+    return 0
+
+
 def _tcp_ports(value: str) -> str:
     try:
         return tcp_port_spec(value)
@@ -578,6 +608,14 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("report", help="triage and render the report and Obsidian vault")
     add_run_arg(p)
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("diff", help="compare two runs: new, closed and changed services "
+                                    "and findings, honouring coverage gaps")
+    p.add_argument("old", help="the earlier run: id, 'latest', or a run directory path")
+    p.add_argument("new", help="the later run: id, 'latest', or a run directory path")
+    p.add_argument("--fail-on-new", action="store_true",
+                   help="exit 1 when the new run has new findings or services")
+    p.set_defaults(func=cmd_diff)
 
     p = sub.add_parser("gaps", help="show coverage gaps (what did not get checked)")
     add_run_arg(p)

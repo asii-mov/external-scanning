@@ -145,6 +145,7 @@ extscan chase latest --rounds 2      # resolve the follow-ups
 extscan screenshot latest            # headless Chromium, every request scope-checked
 extscan report latest                # report.md, report.json, report/ (Obsidian vault)
 extscan gaps latest                  # what did NOT get checked
+extscan diff <old-run> latest        # what changed since the last test
 ```
 
 Interrupted? `extscan resume latest` continues from the last checkpoint.
@@ -331,6 +332,34 @@ link with `[[wikilinks]]`. Scanner text is escaped, so a hostile page title
 cannot embed notes or make Obsidian fetch a URL. Re-rendering replaces the
 notes extscan wrote and leaves your own notes and `.obsidian/` alone.
 
+### Comparing two runs
+
+`extscan diff <old-run> <new-run>` compares a retest with an earlier run. It
+lists new, closed and changed services (product or version), new, resolved
+and still-open findings, severity changes, and coverage gaps opened or
+closed. It writes `diff-<old-run>.md` and `diff-<old-run>.json` into the new
+run's directory and prints a short summary. A run is a run id, `latest`, or
+a path to a run directory. The exit code is 0, since this is a report rather
+than a gate; `--fail-on-new` exits 1 when anything is new.
+
+The coverage rule carries over. A finding missing from the new run is
+*resolved* only if the new run ran that check on that host and port without
+a coverage gap. Otherwise it is *not re-observed (coverage gap)*, with the
+reason. A missing service is *closed* only if discovery covered that host
+and port cleanly. Hosts outside either run's scope are listed apart and
+never claimed closed. A differing scope, policy or tool version is a warning
+at the top of the diff.
+
+Findings are matched on `issue_key`, not `id`. `id` hashes the title, and
+stays that way so existing run directories and vault links keep working.
+`issue_key` hashes host, port, protocol, tool and check, so a reworded title
+is still the same issue. The check is the nuclei template id or NSE script
+id. extscan's own probes, sslscan and the DNS checks have no check id of
+their own, so the check is the title with its volatile parts removed: host,
+port, URL scheme and authority, numbers, parenthesised detail and text after
+a colon. URL paths are kept. `issue_key` is written to `findings.json` and
+`report.json`, and computed on load for older runs.
+
 Findings are marked `tentative` when derived from a version banner or a
 specification rather than observed behaviour. Keep that distinction when
 writing up: one over-claimed finding costs more credibility than ten correct
@@ -391,8 +420,7 @@ optional `anthropic` extra installed.
 ## Further work
 
 `docs/ROADMAP.md` has a prioritised list of what else is worth adding, with
-the catch for each. The top of it: virtual-host enumeration and run-to-run
-diffing.
+the catch for each. The top of it: virtual-host enumeration.
 
 ## Legal
 

@@ -47,6 +47,7 @@ truth.
 | Run directory state (`runs/<run-id>/`) | `extscan/store.py` |
 | Retries, circuit breaker, coverage gaps (`Degradation`) | `extscan/resilience.py` |
 | Report rendering (`report.md`, `report.json`) | `extscan/report.py` |
+| Run comparison (`extscan diff`), coverage-aware | `extscan/diff.py` |
 | Obsidian vault: the pentest narrative, host and finding notes | `extscan/vault.py` |
 | Web screenshots (optional Playwright), per-request scope guard | `extscan/screenshots.py` |
 | Optional model-assisted analysis | `extscan/llm/` |
@@ -58,6 +59,7 @@ truth.
 | Unit and integration tests | `tests/test_*.py` |
 | Failed and missing tools must be gaps, never clean passes | `tests/test_coverage_gaps.py` |
 | Safety properties (no DoS, no credential testing, screenshots in scope) | `tests/test_safety_invariants.py` |
+| Run diff: issue keys, resolved vs not re-observed | `tests/test_diff.py` |
 | Vault links, ordering, unredacted evidence, hostile text, screenshot stage | `tests/test_vault.py` |
 | Failure-state fuzzer (opt-in, several minutes) | `tests/fuzz_failures.py` |
 | Minimized fuzzer counterexamples, replayed every fuzz run | `tests/fuzz_corpus.json` |

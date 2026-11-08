@@ -54,18 +54,24 @@ private key compromise is widest), which CAs are in use.
 work.
 **Catch:** none worth mentioning. This is the cheapest item on the list.
 
-### 5. Diffing against a previous run
+### 5. Diffing against a previous run (done: `extscan diff`)
 **Why:** external perimeters are re-tested quarterly. "What changed since
 last time" is the question the client actually asks, and currently answering
 it means comparing two PDFs by hand. A new open port on a host that was
 previously clean is more interesting than a finding that has been there for
 two years.
-**How:** `extscan diff <old-run> <new-run>` over the existing JSON — new/closed
-services, new/resolved findings, changed versions. The run directory format
-already supports it.
-**Catch:** finding IDs are derived from host/port/title, so a reworded title
-reads as "resolved + new". Either keep title wording stable or diff on a
-coarser key.
+**Done:** `extscan diff <old-run> <new-run>` lists new, closed and changed
+services, new, resolved and still-open findings, severity changes and
+coverage-gap changes, as `diff-<old>.md` and `.json` in the new run. A
+finding missing behind a coverage gap is "not re-observed", never resolved.
+Findings match on `issue_key` (host, port, protocol, tool, check), not the
+title-based `id`.
+**Left:** extscan's own probes have no check id, so their key uses the title
+with volatile parts removed; rewording one of those titles in code still
+reads as resolved + new. Give each probe finding an explicit check id. The
+diff cannot see nuclei tag or template changes between runs beyond a policy
+warning. Merging sources that share a key (the NSE, probe and nuclei Redis
+findings) is not done.
 
 ---
 

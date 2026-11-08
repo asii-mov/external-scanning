@@ -8,6 +8,7 @@ next (and to an agent reading the run directory) without a database.
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -127,10 +128,19 @@ class Finding:
     tags: list[str] = field(default_factory=list)
     created: float = field(default_factory=_now)
     id: str = ""
+    issue_key: str = ""
 
     def __post_init__(self) -> None:
         if not self.id:
             self.id = _stable_id("finding", self.host, self.port, self.proto, self.title, self.source)
+        if not self.issue_key:
+            self.issue_key = issue_key_for(self)
+
+    @property
+    def check_id(self) -> str:
+        """`tool:check`, the part of the issue key that names what was tested."""
+        tool, check = check_identifier(self.source, self.title, self.host)
+        return f"{tool}:{check}"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -138,6 +148,63 @@ class Finding:
     @classmethod
     def from_dict(cls, d: dict) -> Finding:
         return cls(**d)
+
+
+# Sources whose part after the colon is the tool's own check id: a nuclei
+# template id, or an NSE script id (nmap-tcp and nmap-udp are one tool).
+_CHECK_ID_TOOLS = ("nuclei", "nmap-tcp", "nmap-udp", "nmap")
+_URL_RE = re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s/?#]+([/?#]\S*)?", re.I)
+_PORT_RE = re.compile(r":\d{1,5}(?:/(?:tcp|udp))?\b")
+_PAREN_RE = re.compile(r"\s\([^()]*\)")
+
+
+def _title_skeleton(title: str, host: str) -> str:
+    """The stable part of a title, for sources with no check id of their own.
+
+    Drops what changes between runs without the issue changing: the host and
+    port (already in the key), a URL's scheme and authority (its path is
+    kept, because different paths are different issues), counts and version
+    numbers, parenthesised detail such as a verb list, and free text after a
+    colon such as a page title or a protocol list. A colon followed by a path is kept, so `Content review: /metrics`
+    and `Content review: /robots.txt` stay apart.
+    """
+    t = _URL_RE.sub(lambda m: m.group(1) or "/", title or "")
+    if host:
+        t = t.replace(f"[{host}]", " ").replace(host, " ")
+    t = _PORT_RE.sub(" ", t)
+    t = _PAREN_RE.sub(" ", t)
+    head, sep, tail = t.partition(": ")
+    if sep and not tail.lstrip().startswith("/"):
+        t = head
+    words = [w if w.startswith("/") else re.sub(r"\d+", "#", w)
+             for w in t.replace("`", "").lower().split()]
+    while words and words[-1] in {"on", "at", "for", "of", "-", ":"}:
+        words.pop()
+    return " ".join(words).rstrip(":") or "untitled"
+
+
+def check_identifier(source: str, title: str, host: str = "") -> tuple[str, str]:
+    """(tool, check) for a finding, the coarse identity of what was tested.
+
+    nuclei findings carry the template id (`nuclei:<template-id>`) and nmap
+    findings the NSE script id (`nmap-tcp:<script>`), so those are used as is.
+    extscan's own probes and chase handlers, sslscan, testssl.sh, DNS checks,
+    model and analyst findings have no check id beyond their source, and one
+    source emits several different issues, so the check is the title with its
+    volatile parts removed (see `_title_skeleton`).
+    """
+    tool, sep, check = (source or "").partition(":")
+    if sep and check and tool in _CHECK_ID_TOOLS:
+        return ("nmap" if tool.startswith("nmap") else tool), check
+    return source or "unknown", _title_skeleton(title, host)
+
+
+def issue_key_for(f: Finding) -> str:
+    """Stable key for "the same issue" across runs: host, port, protocol,
+    tool and check, but not the title wording or the severity. `id` stays
+    title-based, so existing run directories and vault links keep working."""
+    tool, check = check_identifier(f.source, f.title, f.host)
+    return _stable_id("issue", (f.host or "").lower(), f.proto, f.port, tool, check)
 
 
 @dataclass
