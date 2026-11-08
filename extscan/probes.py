@@ -16,13 +16,14 @@ import html
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .models import Finding, Lead, Service
 from .policy import Policy
+from .resilience import Degradation
 from .runner import Runner
 from .scope import Scope
-from .tools import iis, net, snmp, sslscan
+from .tools import iis, net, snmp, sslscan, waf
 
 
 @dataclass
@@ -31,6 +32,11 @@ class ProbeContext:
     policy: Policy
     runner: Runner
     llm: object | None = None
+    # Coverage notes from probes that ran successfully, and the CDN/WAF seen
+    # in front of each service id. The pipeline records both once the probe
+    # pool has finished, on its own thread, so probes never write the store.
+    gaps: list[Degradation] = field(default_factory=list)
+    edges: dict[str, str] = field(default_factory=dict)
 
 
 ProbeFn = Callable[[ProbeContext, Service], tuple[list[Finding], list[Lead]]]
@@ -261,6 +267,10 @@ def _check_paths(ctx: ProbeContext, svc: Service,
         url = base.rstrip("/") + path
         resp = net.fetch(url, ctx.scope, ctx.policy.http)
         if resp.status == 0:
+            continue
+        if waf.classify_block(resp):
+            # A WAF's 403 is not the application's access control. The block
+            # itself is recorded as a coverage gap by the pipeline's watch.
             continue
 
         sev, desc, lead_kind = _PATH_MEANING.get(path, ("info", f"{path} is reachable.", ""))
@@ -540,6 +550,46 @@ def sslscan_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[
     if res.failure:
         raise RuntimeError(f"sslscan {res.failure}")
     return findings, []
+
+
+@register("waf_detect", lambda s: s.is_http,
+          "Identify a CDN/WAF in front of a web service; a coverage note, never a finding of fault.")
+def waf_detect(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
+    """One ordinary GET of the root, read for CDN/WAF signatures.
+
+    Being behind an edge is not a vulnerability, so this records a coverage
+    gap saying the results describe the edge, plus an informational finding
+    carrying the evidence. If the GET itself is blocked, the pipeline's watch
+    turns that into a serious gap and leaves this probe to be retried.
+    """
+    resp = net.fetch(svc.base_url(), ctx.scope, ctx.policy.http)
+    cert = svc.scripts.get("ssl-cert", "")
+    if resp.status == 0:
+        # Nothing answered at the HTTP layer; only the address can tell us.
+        matches = waf.identify(cert_text=cert, ip=svc.host)
+    else:
+        matches = waf.identify_response(resp, cert_text=cert, ip=svc.host)
+    if resp.status or matches:
+        ctx.edges[svc.id] = waf.edge_label(matches)
+    if not matches:
+        return [], []
+
+    label = waf.edge_label(matches)
+    blocked = waf.classify_block(resp)
+    if not blocked:
+        ctx.gaps.append(waf.edge_gap("waf_detect", svc.id, svc.host, matches))
+    return [Finding(
+        title=f"{svc.host}:{svc.port} is served through {label}",
+        severity="info", host=svc.host, port=svc.port, proto=svc.proto,
+        source="extscan:waf",
+        description="A CDN or web application firewall sits in front of this service. "
+                    "Results for it describe the edge, which may filter, cache or "
+                    "rewrite requests, rather than the origin server behind it.",
+        evidence="\n".join([f"GET {svc.base_url()} -> {resp.status or resp.error[:120]}"]
+                           + [f"{m.name}: {m.evidence}" for m in matches]
+                           + ([f"request was {blocked.describe()}"] if blocked else [])),
+        tags=["waf", "cdn", "edge"],
+    )], []
 
 
 def all_probe_names() -> list[str]:

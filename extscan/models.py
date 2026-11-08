@@ -64,6 +64,9 @@ class Service:
     cpe: list[str] = field(default_factory=list)
     scripts: dict[str, str] = field(default_factory=dict)
     probed_by: list[str] = field(default_factory=list)
+    # The CDN/WAF seen in front of the service, e.g. "Cloudflare (CDN/WAF)".
+    # Empty when none was identified or the waf_detect probe has not run.
+    edge: str = ""
 
     @property
     def id(self) -> str:

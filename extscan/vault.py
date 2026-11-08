@@ -625,6 +625,9 @@ class _Vault:
             desc.append(f"It identifies as {_code(product)}.")
         elif svc.name:
             desc.append(f"nmap identified it as {_code(svc.name)}, with no version.")
+        if svc.edge:
+            desc.append(f"It is served through {_code(svc.edge)}, so what we saw is "
+                        "the edge rather than the origin.")
         if svc.probed_by:
             desc.append("We ran " + ", ".join(_code(p) for p in svc.probed_by)
                         + f" against it. Details are in {host_link(svc.host)}.")

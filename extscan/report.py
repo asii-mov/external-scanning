@@ -224,6 +224,8 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
         w("|---|---|---|---|---|---|")
         for s in services:
             product = " ".join(x for x in (s.product, s.version, s.extrainfo) if x)
+            if s.edge:
+                product = f"{product} (behind {s.edge})" if product else f"behind {s.edge}"
             w(f"| `{s.host}` | {s.port} | {s.proto} | {_esc(s.name) or '?'} "
               f"| {_esc(product) or '-'} | {', '.join(s.probed_by) or '-'} |")
         w("")
@@ -288,7 +290,9 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
     w("- All checks were read-only. No credentials were tested, no data was modified, "
       "and no exploitation was attempted. Findings marked *tentative* are "
       "version-derived or specification-derived and need confirmation.")
-    w("- Services behind a WAF, rate limiter or geo-filter may be under-reported.")
+    w("- Services behind a WAF, rate limiter or geo-filter may be under-reported. "
+      "Those identified, and any that blocked checks, are named in the service "
+      "inventory and the coverage gaps.")
     w("- UDP results are less reliable than TCP by nature: silence is ambiguous.")
     w("- Absence of a finding is not evidence of absence of a vulnerability.")
     w("")

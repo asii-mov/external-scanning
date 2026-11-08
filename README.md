@@ -176,6 +176,7 @@ fragile infrastructure.
 | `probe` → `ssh` | banner and exposure review |
 | `probe` → `iis` | IIS/ASP.NET: `trace.axd`/`elmah.axd`, WebDAV verbs, 8.3 short-name oracle, verbose error pages, version headers, default content |
 | `probe` → `sslscan` | cipher-level TLS audit — RC4/3DES/export suites, CRIME, insecure renegotiation (needs `sslscan`) |
+| `probe` → `waf_detect` | which CDN/WAF fronts each web service (Cloudflare, Akamai, CloudFront, AWS WAF, Azure Front Door, Fastly, Imperva, Sucuri, F5 ASM, Barracuda and others), from one ordinary GET's headers and cookies, nmap's `ssl-cert` text and a built-in, dated list of published edge ranges (`extscan/tools/waf.py`). Named in the service inventory and recorded as a coverage note: results describe the edge, not the origin |
 | `recon` → subdomains | certificate transparency + `subfinder`/`amass`, resolved and split into in-scope (scannable) and out-of-scope (reported, never touched) |
 | `recon` → dns | per scope domain, built-in DNS client: zone transfer (AXFR) against each nameserver, NSEC zone walking (NSEC3 recognised, not cracked), and takeover candidates from dangling CNAME, MX and NS records and lame delegations. Report only. Tune or skip checks with the policy's `dns` section (`resolvers`, `skip`, bounds). `subzones: true` also transfers and walks each delegated sub-zone, up to `max_subzones` |
 | `chase` → `openapi` | finds the spec, enumerates operations, flags those declaring no authentication (writes especially), notes out-of-scope servers |
@@ -203,6 +204,7 @@ loud abort. Never a silent pass.
 | **Scope is large** | Discovery runs in batches of `nmap.chunk_size` hosts, each checkpointed. A timeout costs one batch; `extscan resume` skips what finished. |
 | **nmap/nuclei/sslscan not installed** | Recorded as a coverage gap naming what was not checked, and the run continues. `doctor` tells you up front. |
 | **nuclei or a probe fails** | A killed, timed-out or crashing tool is a coverage gap naming the services it did not finish, and those services stay unmarked so `extscan probe <run> --only <probe>` retries them. |
+| **A WAF or rate limiter blocks a check** | Every response `net.fetch` returns is checked for challenge pages, vendor block pages (Cloudflare, Akamai reference numbers, Imperva incident IDs, AWS WAF, Sucuri, F5 ASM, ModSecurity, Azure), HTTP 429 and a 503 with `Retry-After`. A probe or lead that met one is a *serious* gap naming the service and the WAF, and stays unmarked (the lead stays open) so a retry after allowlisting covers it. Timeouts, resets and plain 403/503 never count: a slow server is not a WAF. |
 | **UDP needs root** | A TCP-only notice before discovery starts, plus a *serious* coverage gap, because "no SNMP findings" and "SNMP was never checked" must never look alike. |
 | **Model endpoint is down** | Retried with jittered backoff, then a circuit breaker opens and stops trying. 100 leads against a dead endpoint cost ~6 HTTP attempts, not 200. Findings keep their deterministic evidence and get a human-review flag. |
 | **Model returns garbage** | Not retried — it answered, just not usefully. Counted separately from an outage. |

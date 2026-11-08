@@ -31,7 +31,7 @@ from .resilience import (
 from .runner import Runner, ToolMissing, doctor, udp_rerun_command
 from .scope import Scope
 from .store import Store
-from .tools import dns, nmap, nuclei, subdomains
+from .tools import dns, nmap, nuclei, subdomains, waf
 from .triage import triage
 
 
@@ -384,6 +384,16 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 p, svc = futures[fut]
                 try:
                     findings, leads = fut.result()
+                except waf.Blocked as exc:
+                    # The probe ran but a WAF or rate limiter answered some of
+                    # it: keep what it found, record the gap, leave it unmarked.
+                    failed.add((p.name, svc.id))
+                    store.remove_degradations(lambda d, p=p, svc=svc: (
+                        d.stage == f"probe:{p.name}" and d.reason.startswith(f"{svc.id}: ")))
+                    _coverage_lost(store, waf.probe_gap(p.name, svc.id, svc.host, exc.blocks))
+                    all_findings += exc.findings
+                    all_leads += exc.leads
+                    continue
                 except Exception as exc:
                     failed.add((p.name, svc.id))
                     store.remove_degradations(lambda d, p=p, svc=svc: (
@@ -405,6 +415,10 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                if (p.name, svc.id) not in failed}
     store.remove_degradations(lambda d: any(
         d.stage == stage and d.reason.startswith(prefix) for stage, prefix in covered))
+    for service_id, edge in ctx.edges.items():
+        store.set_service_edge(service_id, edge)
+    for gap in ctx.gaps:
+        _coverage_lost(store, gap)
     for p, svc in jobs:
         if (p.name, svc.id) not in failed:
             store.mark_probed(svc.id, p.name)
@@ -415,7 +429,11 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
 
 
 def _run_one_probe(ctx: ProbeContext, p: probes_mod.Probe, svc):
-    return p.run(ctx, svc)
+    with waf.watch() as seen:
+        findings, leads = p.run(ctx, svc)
+    if seen:
+        raise waf.Blocked(seen.blocks, findings, leads)
+    return findings, leads
 
 
 def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
@@ -455,6 +473,9 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
                     note=f"abandoned after {lead.attempts} attempts: {lead.last_error[:200]}",
                 )
                 abandoned += 1
+                store.remove_degradations(lambda d, pre=f"lead {lead.id} ": (
+                    d.stage == "chase" and d.component == waf.CHASE_COMPONENT
+                    and d.reason.startswith(pre)))
                 store.add_degradation(Degradation(
                     stage="chase", component=f"lead:{lead.kind}",
                     reason=f"{lead.attempts} failed attempts; last error: {lead.last_error[:160]}",
@@ -467,13 +488,14 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
 
             attempt_no = lead.attempts + 1
             try:
-                result = retry(
-                    lambda ld=lead: chase_mod.chase(ctx, ld),
-                    retry_policy,
-                    on_retry=lambda n, exc, delay, ld=lead: print(
-                        f"    retry {n} for {ld.kind} after {type(exc).__name__}; "
-                        f"waiting {delay:.1f}s"),
-                )
+                with waf.watch() as seen:
+                    result = retry(
+                        lambda ld=lead: chase_mod.chase(ctx, ld),
+                        retry_policy,
+                        on_retry=lambda n, exc, delay, ld=lead: print(
+                            f"    retry {n} for {ld.kind} after {type(exc).__name__}; "
+                            f"waiting {delay:.1f}s"),
+                    )
             except CircuitOpen as exc:
                 store.update_lead(lead.id, attempts=attempt_no, last_error=str(exc)[:300])
                 store.add_degradation(Degradation(
@@ -504,6 +526,23 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
                       f"{str(exc)[:100]}")
                 aborter.check(context="lead chasing")
                 continue
+
+            gap_prefix = f"lead {lead.id} "
+            if seen:
+                # What a blocked follow-up saw is the block page, so its results
+                # are dropped and the lead stays open for a later attempt.
+                gap = waf.chase_gap(lead.id, lead.kind, lead.url or lead.host,
+                                    lead.host, seen.blocks)
+                store.update_lead(lead.id, status="open", attempts=attempt_no,
+                                  last_error=gap.reason[:300])
+                store.remove_degradations(lambda d, gap=gap, pre=gap_prefix: (
+                    d.stage == "chase" and d.component == waf.CHASE_COMPONENT
+                    and d.reason.startswith(pre) and d.reason != gap.reason))
+                _coverage_lost(store, gap)
+                continue
+            store.remove_degradations(lambda d, pre=gap_prefix: (
+                d.stage == "chase" and d.component == waf.CHASE_COMPONENT
+                and d.reason.startswith(pre)))
 
             handled += 1
             aborter.record(ok=True)

@@ -110,7 +110,7 @@ property that currently holds because we never authenticate would need
 re-examining, and a bug could lock out a client's user or modify data. Treat
 as a separate mode with its own authorisation field in the scope file.
 
-### 9. Rate-limit and WAF detection
+### 9. Rate-limit and WAF detection (mostly done: `waf_detect`, `extscan/tools/waf.py`)
 **Why:** a WAF silently dropping requests makes every other result unreliable,
 and right now we would report "no findings" for a service behind one. Knowing
 we were blocked is as important as any finding.
@@ -118,6 +118,17 @@ we were blocked is as important as any finding.
 block-page fingerprints; raise a coverage gap (the mechanism already exists)
 rather than a finding.
 **Catch:** needs care to avoid false positives on slow-but-honest servers.
+**Done:** passive CDN/WAF identification (headers, cookies, cert text, a
+dated built-in list of published Cloudflare, Fastly, Imperva and CloudFront
+ranges), shown in the service inventory with a warning-level "results
+describe the edge" gap. Challenge pages, vendor block pages, 429 and
+503+`Retry-After` seen by any probe or lead make a serious gap and leave the
+work for a retry. Timeouts and plain 403/503 never count.
+**Left:** response-time cliffs, deliberately not done: without a baseline
+they are the slow-server false positive this entry warns about. Nuclei runs
+as a subprocess, so blocks it meets are not seen (only the edge note covers
+it; see todo.md). The range list is refreshed by hand and
+has no Akamai entry, as Akamai publishes none.
 
 ### 10. Protocol-specific probes we do not cover
 **Why:** each is a real external exposure we currently only report as "port

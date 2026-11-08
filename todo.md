@@ -66,3 +66,11 @@ The notes below are kept as the spec it was built to.
       then the printed `sudo .../.venv/bin/extscan discover <run> --udp-only`.
       Check whether the sudo step leaves root-owned files in the run folder
       that later unprivileged stages can't overwrite.
+- [ ] **Check the WAF signatures against real edges.** The fixtures in
+      `tests/fixtures/waf-responses.json` are written from vendor
+      documentation, not captured, because the only target we may scan is
+      the lab. Capture real block pages on an authorised engagement and add
+      them. Nuclei's own requests are not watched for blocks (it is a
+      subprocess, and its `-max-host-error` skipping is silent too), so a
+      service behind a WAF gets only the "results describe the edge" note
+      for its nuclei coverage.
