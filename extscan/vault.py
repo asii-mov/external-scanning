@@ -37,6 +37,7 @@ from .report import SEV_LABEL, SEV_ORDER, _fence, _ts
 from .resilience import Degradation
 from .scope import Scope
 from .screenshots import Shot, finding_url
+from .tools import webfp
 from .triage import TriageResult, issue_key
 
 VAULT_DIR = "report"
@@ -521,7 +522,18 @@ class _Vault:
             for svc in svcs:
                 out += self._service_story(svc)
 
-        orphans = [f for f in self.findings
+        same_page = webfp.page_groups(self.findings)
+        if same_page:
+            section("Services serving the same page")
+            for g in same_page:
+                title = f" ({_text('; '.join(g.titles), 160)})" if g.titles else ""
+                kind = "the same page" if g.exact else "near-identical pages"
+                w(f"- {_plural(len(g.services), 'service')} serve {kind}{title}: "
+                  + ", ".join(_code(s) for s in g.services[:20])
+                  + (f" and {len(g.services) - 20} more" if len(g.services) > 20 else ""))
+            w("")
+
+        orphans =[f for f in self.findings
                    if _svc_key(f) not in self.svc_keys and f.source not in CHASE_SOURCES
                    and f.severity != "info"]
         if orphans:

@@ -66,3 +66,8 @@ The notes below are kept as the spec it was built to.
       then the printed `sudo .../.venv/bin/extscan discover <run> --udp-only`.
       Check whether the sudo step leaves root-owned files in the run folder
       that later unprivileged stages can't overwrite.
+- [ ] **See every `Set-Cookie` header.** `net.Response.headers` keeps one
+      value per name, so only the last cookie a server sets is visible to
+      the `web_fingerprint` cookie signatures (and to any future cookie-flag
+      check). Keep repeated headers in `net.fetch`, then drop the caveat in
+      `extscan/tools/webtech.py`.

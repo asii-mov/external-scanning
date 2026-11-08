@@ -19,6 +19,7 @@ from pathlib import Path
 from .models import Finding, Host, Service
 from .resilience import Degradation
 from .scope import Scope
+from .tools import webfp
 from .triage import TriageResult
 
 SEV_LABEL = {
@@ -226,6 +227,24 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
             product = " ".join(x for x in (s.product, s.version, s.extrainfo) if x)
             w(f"| `{s.host}` | {s.port} | {s.proto} | {_esc(s.name) or '?'} "
               f"| {_esc(product) or '-'} | {', '.join(s.probed_by) or '-'} |")
+        w("")
+
+    page_groups = webfp.page_groups(triaged.findings)
+    if page_groups:
+        w("### Services serving the same page")
+        w("")
+        w("Root pages that are identical once tokens, numbers and timestamps are "
+          "removed. A large group is usually a default or placeholder page, "
+          "which is one ownership question rather than many.")
+        w("")
+        w("| Services | Page title | Match | Where |")
+        w("|---|---|---|---|")
+        for g in page_groups:
+            shown = ", ".join(f"`{_esc(s)}`" for s in g.services[:12])
+            if len(g.services) > 12:
+                shown += f" (+{len(g.services) - 12} more)"
+            w(f"| {len(g.services)} | {_esc('; '.join(g.titles)[:160]) or '-'} "
+              f"| {'identical' if g.exact else 'near-identical'} | {shown} |")
         w("")
 
     hostnames = [h for h in hosts if h.hostnames or h.os_guess]

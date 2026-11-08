@@ -170,6 +170,7 @@ fragile infrastructure.
 | `discover` → dns | the host names nmap reported for each live in-scope address, checked one by one for dangling CNAME and MX records, with findings on that address. Names under no scope domain are listed in one info finding, so the reviewer can add the client's domains and get the zone checks. Skip with `dns.skip: ["host-names"]` |
 | `probe` → `nuclei` | templated web checks across every discovered HTTP service at once |
 | `probe` → `http_fingerprint` | root page, fingerprint and security headers, ~23 disclosure paths with soft-404 filtering |
+| `probe` → `web_fingerprint` | favicon hashes (Shodan-convention mmh3, plus MD5 and SHA-256) for `/favicon.ico` and a same-origin `<link rel=icon>`; technology detection from a hand-written signature set (`extscan/tools/webtech.py`: servers, frameworks, CMSs, DevOps consoles, edge appliances), with each edge appliance (FortiGate, GlobalProtect, Ivanti, NetScaler, BIG-IP, SonicWall, OWA and others) flagged for review; a normalised root-page fingerprint, so the report and vault list services serving the same page. Hashes are recorded for pivoting, never looked up |
 | `probe` → `tls` | certificate detail, expiry, self-signing, which TLS versions are actually offered |
 | `probe` → `snmp` | default/guessable community strings, read-only, built-in SNMP client |
 | `probe` → `exposure` | databases, management interfaces and legacy services that should not face the internet |
