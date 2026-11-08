@@ -22,7 +22,7 @@ from .models import Finding, Lead, Service
 from .policy import Policy
 from .runner import Runner
 from .scope import Scope
-from .tools import iis, net, snmp, sshaudit, sslscan
+from .tools import iis, net, snmp, sshaudit, sslscan, webfp
 
 
 @dataclass
@@ -559,6 +559,13 @@ def ssh_audit_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], lis
     if failure:
         raise RuntimeError(f"ssh-audit {failure}")
     return findings, []
+
+
+@register("web_fingerprint", lambda s: s.is_http,
+          "Favicon hashes (Shodan mmh3, MD5, SHA-256), technology and edge-appliance "
+          "detection, and a root-page fingerprint for grouping identical pages.")
+def web_fingerprint_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
+    return webfp.probe_web_fingerprint(svc, ctx.scope, ctx.policy.http)
 
 
 def all_probe_names() -> list[str]:

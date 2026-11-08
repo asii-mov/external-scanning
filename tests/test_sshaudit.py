@@ -307,7 +307,8 @@ class TestProbe(_Stage):
     def test_registered_after_the_banner_probe_with_the_same_matcher(self):
         names = probes.all_probe_names()
         self.assertIn("ssh", names)
-        self.assertEqual(names[-1], "ssh_audit")
+        self.assertIn("ssh_audit", names)
+        self.assertGreater(names.index("ssh_audit"), names.index("ssh"))
         ssh = next(p for p in probes.REGISTRY if p.name == "ssh")
         audit = next(p for p in probes.REGISTRY if p.name == "ssh_audit")
         for svc in (self.svc, Service(host="h", port=22, proto="tcp"),
