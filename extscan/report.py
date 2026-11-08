@@ -18,6 +18,7 @@ from pathlib import Path
 
 from .models import Finding, Host, Service
 from .resilience import Degradation
+from .safety import CAP_REASON
 from .scope import Scope
 from .tools import webfp
 from .triage import TriageResult
@@ -310,6 +311,13 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
     w("- Services behind a WAF, rate limiter or geo-filter may be under-reported.")
     w("- UDP results are less reliable than TCP by nature: silence is ambiguous.")
     w("- Absence of a finding is not evidence of absence of a vulnerability.")
+    cap = (meta.get("policy") or {}).get("max_safety")
+    if cap:
+        capped = [d for d in degradations or [] if d.reason.startswith(CAP_REASON)]
+        w(f"- Safety cap: checks up to `{_esc(str(cap))}` were allowed (passive < active "
+          "< loud < invasive; `extscan probes --all` lists each check's class)."
+          + (f" {len(capped)} check(s) above the cap were skipped and are listed "
+             "under Coverage gaps." if capped else ""))
     w("")
 
     if meta.get("tool_versions"):

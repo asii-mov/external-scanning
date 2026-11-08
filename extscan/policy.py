@@ -13,6 +13,8 @@ import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .safety import DEFAULT_CAP, SafetyClass
+
 TCP_TOP = "1-1024,1080,1194,1433,1521,2049,2082,2083,2375,2376,2483,2484,3000,3128,3268,3306,3389,4443,4444,4786,5000,5432,5555,5601,5672,5900,5984,5985,5986,6379,6443,7001,7002,8000,8008,8009,8080,8081,8088,8089,8161,8200,8443,8500,8834,8888,9000,9042,9090,9092,9200,9300,9443,10000,11211,15672,27017,27018,50000"
 
 TCP_QUICK = "21,22,23,25,53,80,110,135,139,143,443,445,993,995,1433,3306,3389,5432,5900,6379,8000,8080,8443,9200,27017"
@@ -51,6 +53,7 @@ class NmapPolicy:
     exclude_scripts: list[str] = field(default_factory=lambda: [
         "dos", "external", "http-slowloris-check"])
     skip_host_discovery: bool = False
+    os_detection: bool = True           # -O, when privileged; off under an active cap
     do_udp: bool = True
     extra_args: list[str] = field(default_factory=list)
     timeout_sec: int = 7200
@@ -242,6 +245,20 @@ class Policy:
     stop_on_tool_error: bool = False
     max_lead_attempts: int = 3
     max_workers: int = 8
+    # The loudest safety class (extscan/safety.py) allowed to run. Anything
+    # above it is skipped and recorded as a coverage gap. `invasive` also
+    # needs allow_invasive: true, and nothing in extscan is invasive today.
+    max_safety: str = str(DEFAULT_CAP)
+    allow_invasive: bool = False
+
+    def safety_cap(self) -> SafetyClass:
+        """The cap as a SafetyClass. Raises ValueError for an unknown class,
+        or for `invasive` without the explicit allow_invasive opt-in."""
+        cap = SafetyClass.parse(self.max_safety)
+        if cap is SafetyClass.INVASIVE and self.allow_invasive is not True:
+            raise ValueError('max_safety "invasive" also needs "allow_invasive": true '
+                             "-- invasive checks can change state or affect availability")
+        return cap
 
     @classmethod
     def for_profile(cls, name: str) -> Policy:
@@ -292,9 +309,11 @@ class Policy:
                     raise ValueError(f"unknown {section} policy key(s): {sorted(unknown)}")
                 current.update(data[section])
                 setattr(p, section, cls_(**current))
-        for key in ("max_lead_depth", "max_leads_per_run", "stop_on_tool_error"):
+        for key in ("max_lead_depth", "max_leads_per_run", "stop_on_tool_error",
+                    "max_safety", "allow_invasive"):
             if key in data:
                 setattr(p, key, data[key])
+        p.max_safety = str(p.safety_cap())
         return p
 
     def to_dict(self) -> dict:

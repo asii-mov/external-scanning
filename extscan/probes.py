@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from .models import Finding, Lead, Service
 from .policy import Policy
 from .runner import Runner
+from .safety import ACTIVE, LOUD, PASSIVE, SafetyClass
 from .scope import Scope
 from .tools import iis, net, snmp, sshaudit, sslscan, webfp
 
@@ -41,15 +42,31 @@ class Probe:
     name: str
     matches: Callable[[Service], bool]
     run: ProbeFn
+    safety: SafetyClass
     description: str = ""
 
 
 REGISTRY: list[Probe] = []
 
+_UNLABELLED = object()
 
-def register(name: str, matches: Callable[[Service], bool], description: str = ""):
+
+def register(name: str, matches: Callable[[Service], bool], description: str = "", *,
+             safety: SafetyClass = _UNLABELLED):  # type: ignore[assignment]
+    """Add a probe. `safety=` is required: see extscan/safety.py for the classes.
+
+    The sentinel is there only so a missing label fails naming the probe,
+    rather than with Python's anonymous missing-argument TypeError.
+    """
+    if safety is _UNLABELLED:
+        raise TypeError(f"probe {name!r} is registered without safety=: label it "
+                        "passive, active, loud or invasive (extscan/safety.py)")
+    if not isinstance(safety, SafetyClass):
+        raise TypeError(f"probe {name!r}: safety= must be a SafetyClass, got {safety!r}")
+
     def deco(fn: ProbeFn) -> ProbeFn:
-        REGISTRY.append(Probe(name=name, matches=matches, run=fn, description=description))
+        REGISTRY.append(Probe(name=name, matches=matches, run=fn, safety=safety,
+                              description=description))
         return fn
     return deco
 
@@ -87,7 +104,8 @@ def _title(body_text: str) -> str:
 
 
 @register("http_fingerprint", lambda s: s.is_http,
-          "Fetch the root page, record fingerprint headers and security headers.")
+          "Fetch the root page, record fingerprint headers and security headers.",
+          safety=ACTIVE)  # its path list is gated separately, as `http:paths` (loud)
 def http_fingerprint(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     findings: list[Finding] = []
     leads: list[Lead] = []
@@ -308,7 +326,7 @@ def _check_paths(ctx: ProbeContext, svc: Service,
 
 
 @register("tls", lambda s: s.proto == "tcp" and s.is_tls,
-          "Inspect certificate and offered protocol versions.")
+          "Inspect certificate and offered protocol versions.", safety=ACTIVE)
 def tls_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     findings: list[Finding] = []
     leads: list[Lead] = []
@@ -407,7 +425,8 @@ def _is_snmp(s: Service) -> bool:
     return s.proto == "udp" and (s.port in (161, 10161) or "snmp" in s.name.lower())
 
 
-@register("snmp", _is_snmp, "Try default/guessable SNMP community strings, read-only.")
+@register("snmp", _is_snmp, "Try default/guessable SNMP community strings, read-only.",
+          safety=ACTIVE)
 def snmp_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     ctx.scope.assert_host(svc.host, context="snmp probe")
     findings, leads, hits = snmp.check_community_strings(svc.host, ctx.policy, port=svc.port)
@@ -477,7 +496,8 @@ def _is_sensitive(s: Service) -> bool:
 
 
 @register("exposure", _is_sensitive,
-          "Flag management, database and legacy services reachable from the internet.")
+          "Flag management, database and legacy services reachable from the internet.",
+          safety=PASSIVE)
 def exposure_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     table = SENSITIVE_TCP if svc.proto == "tcp" else SENSITIVE_UDP
     label, sev, why = table[svc.port]
@@ -503,7 +523,7 @@ def exposure_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list
 
 
 @register("ssh", lambda s: s.proto == "tcp" and (s.port == 22 or "ssh" in s.name.lower()),
-          "Record the SSH banner and flag outdated server versions.")
+          "Record the SSH banner and flag outdated server versions.", safety=PASSIVE)
 def ssh_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     banner = " ".join(x for x in (svc.product, svc.version) if x).strip() or svc.name
     findings = [Finding(
@@ -522,13 +542,15 @@ def ssh_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead
 
 
 @register("iis", lambda s: s.is_http and iis.looks_like_iis(s),
-          "IIS/ASP.NET checks: diagnostic handlers, WebDAV, 8.3 names, error pages.")
+          "IIS/ASP.NET checks: diagnostic handlers, WebDAV, 8.3 names, error pages.",
+          safety=LOUD)
 def iis_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     return iis.probe_iis(svc, ctx.scope, ctx.policy.http)
 
 
 @register("sslscan", lambda s: s.proto == "tcp" and s.is_tls,
-          "Cipher-level TLS audit via sslscan (a coverage gap when not installed).")
+          "Cipher-level TLS audit via sslscan (a coverage gap when not installed).",
+          safety=LOUD)
 def sslscan_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     """Cipher enumeration, which the built-in TLS probe cannot do.
 
@@ -548,7 +570,8 @@ def _is_ssh(s: Service) -> bool:
 
 @register("ssh_audit", _is_ssh,
           "SSH algorithm audit via ssh-audit, rate test skipped (a coverage gap when "
-          "not installed).")
+          "not installed).",
+          safety=LOUD)
 def ssh_audit_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     """Key-exchange, host-key, cipher and MAC audit; the `ssh` probe only has
     the banner. Authentication methods come from nmap's ssh-auth-methods
@@ -563,7 +586,8 @@ def ssh_audit_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], lis
 
 @register("web_fingerprint", lambda s: s.is_http,
           "Favicon hashes (Shodan mmh3, MD5, SHA-256), technology and edge-appliance "
-          "detection, and a root-page fingerprint for grouping identical pages.")
+          "detection, and a root-page fingerprint for grouping identical pages.",
+          safety=ACTIVE)
 def web_fingerprint_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
     return webfp.probe_web_fingerprint(svc, ctx.scope, ctx.policy.http)
 
