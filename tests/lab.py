@@ -259,7 +259,8 @@ def start(host: str = DEFAULT_HOST) -> list:
     servers.append(_TLSHTTPServer((host, PORTS["https"]), TargetAppHandler, ctx))
 
     for srv in servers:
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05},
+                         daemon=True).start()
 
     agent = SNMPAgent(host, PORTS["snmp"], {"public": "Linux lab-router 4.19.0 #1 SMP x86_64"})
     agent.__enter__()

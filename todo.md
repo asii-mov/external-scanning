@@ -65,4 +65,16 @@ The notes below are kept as the spec it was built to.
       scan has run only in a container. Run a TCP-only scan as yourself,
       then the printed `sudo .../.venv/bin/extscan discover <run> --udp-only`.
       Check whether the sudo step leaves root-owned files in the run folder
-      that later unprivileged stages can't overwrite.
+      that later unprivileged stages can't overwrite. extscan now chowns
+      `state.db`, `run.json` and `commands.jsonl` back to the run
+      directory's owner when it runs as root, and prints the `chown` to run
+      if a later stage cannot write; that is tested only with a patched
+      uid. Files root creates under `raw/` are still root-owned.
+- [ ] **Fetch the real KEV, EPSS and CDN range feeds once.** `extscan
+      enrich` has only been run against local copies.
+- [ ] **Run `scripts/capture-lab-run.sh`** (Docker, root) to regenerate
+      `tests/fixtures/lab-run` with the current code. It now captures via
+      `extscan export`; that path has not been run end to end.
+- [ ] **Settle the two safety items in `reports/External scanning gap
+      analysis.md`:** the unaudited NSE `vuln` selection, and the quick
+      profile dropping info-level nuclei results without a coverage gap.

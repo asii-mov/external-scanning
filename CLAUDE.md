@@ -21,8 +21,13 @@ chromium`; without them the browser scope test skips.
 ## Commands
 
 ```bash
-uv run python -m unittest discover -s tests -t .    # ~415 tests, ~10s, no network
+uv run python -m unittest discover -s tests -t .    # ~730 tests, ~50s, no network
 uv run ruff check .
+uv run python -m evals.local                        # detection, false positives, request counts (~1s)
+uv run python -m evals.score [runs/<id>]            # scorecard for a lab run (default: the fixture)
+uv run python -m evals.bench                        # bookkeeping and SNMP budgets
+uv run python -m evals.discovery                    # one-phase against two-phase discovery, fake nmap
+uv run python -m evals.diff                         # planted run-to-run transitions
 uv run python -m unittest tests.fuzz_failures -v    # fuzzer, several minutes
 FUZZ_EXAMPLES=1 uv run python -m unittest tests.fuzz_failures   # corpus replay only, ~1 min
 uv run python -m tests.lab                          # lab on 127.0.0.2, Ctrl-C to stop
@@ -55,4 +60,20 @@ A full lab scan takes about 8 minutes with nuclei, or 70 seconds with
   `tests/test_safety_invariants.py`.
 - Stdlib only at runtime. Dev tools (ruff, pytest, hypothesis) go in the
   `dev` dependency group.
+- `--dry-run` sends nothing in any stage, and marks nothing as done
+  (checkpoints, stage records, probed services, leads). A stage that talks
+  to the network in-process has to check `runner.dry_run`.
+- A change to a probe, a parser or the skill is checked against `evals/`
+  (`evals/README.md`). A new check gets a `must_find` line; a false positive
+  gets a clean target that reproduces it.
+- Tests never reach the internet. `tests/__init__.py` sets
+  `EXTSCAN_OFFLINE=1`, which disables the `enrich` stage's feed downloads;
+  a test that exercises enrich uses local files.
+- A request to a name (virtual hosts) connects to the in-scope IP and sends
+  the name as Host header and SNI (`net.request_at`). Never let a name's DNS
+  decide where a connection goes.
+- Run state goes through `Store` (`extscan/store.py`, SQLite, no WAL
+  because root and the user both write a run). Never read or write state
+  files by path; `tests/fixtures/lab-run` stays in the old JSON layout on
+  purpose, as the legacy-compatibility test.
 - Open work is in `todo.md` and `docs/ROADMAP.md`.

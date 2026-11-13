@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import socket
+import time
 from dataclasses import dataclass
 
 from extscan.models import Finding, Lead
@@ -224,6 +225,54 @@ def snmp_get(host: str, community: str, oid: str, *, version: int = 2,
     return None
 
 
+SWEEP_SEND_GAP = 0.02
+
+
+def snmp_sweep(host: str, communities: list[str], versions: list[int], oid: str, *,
+               port: int = 161, timeout: float = 2.0, retries: int = 1,
+               ) -> dict[tuple[str, int], SnmpReply]:
+    """GET `oid` once per (community, version), all in flight together.
+
+    An agent stays silent on a community it does not accept, so asking one at
+    a time costs a full timeout per wrong guess: 11 communities, two versions
+    and one retry is 88 seconds on a host that answers none. Sent together
+    and matched by request id, the same questions cost one timeout per round.
+    Unanswered ones are re-sent `retries` times. The short gap between sends
+    keeps the burst inside the rate limit small agents apply.
+    """
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    pending = [(c, v) for c in communities for v in versions]
+    replies: dict[tuple[str, int], SnmpReply] = {}
+    with socket.socket(family, socket.SOCK_DGRAM) as sock:
+        for _attempt in range(retries + 1):
+            if not pending:
+                break
+            ids: dict[int, tuple[str, int]] = {}
+            try:
+                for community, version in pending:
+                    request_id = int.from_bytes(os.urandom(3), "big") + 1
+                    ids[request_id] = (community, version)
+                    sock.sendto(_build_request(community, oid, version, request_id),
+                                (host, port))
+                    time.sleep(SWEEP_SEND_GAP)
+                deadline = time.monotonic() + timeout
+                while len(replies) < len(communities) * len(versions):
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    sock.settimeout(remaining)
+                    data, _ = sock.recvfrom(65535)
+                    reply = _parse_reply(data)
+                    if reply is not None and reply.request_id in ids:
+                        replies[ids[reply.request_id]] = reply
+            except TimeoutError:
+                pass
+            except OSError:
+                break
+            pending = [key for key in pending if key not in replies]
+    return replies
+
+
 def snmp_walk(host: str, community: str, root: str, *, version: int = 2,
               port: int = 161, timeout: float = 2.0,
               max_items: int = 25) -> list[tuple[str, str]]:
@@ -253,10 +302,11 @@ def check_community_strings(host: str, policy: Policy, port: int = 161
     hits: list[str] = []
     details: dict[str, dict[str, str]] = {}
 
+    answered = snmp_sweep(host, p.communities, p.versions, OIDS["sysDescr"], port=port,
+                          timeout=p.timeout_sec, retries=p.retries)
     for community in p.communities:
         for version in p.versions:
-            reply = snmp_get(host, community, OIDS["sysDescr"], version=version,
-                             port=port, timeout=p.timeout_sec, retries=p.retries)
+            reply = answered.get((community, version))
             if reply is None:
                 continue
             if not reply.ok:

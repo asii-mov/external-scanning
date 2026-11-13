@@ -24,6 +24,10 @@ Run `20261103-225729-extscan-local-lab` (2026-11-03):
 
 ## What's here
 
+The state is in the JSON layout runs had before `state.db`. That is on
+purpose: this fixture is also the test that old runs still load, so do not
+convert it. `scripts/capture-lab-run.sh` regenerates it with `extscan export`.
+
 | File | Contents |
 |---|---|
 | `run.json` | run metadata, stage timestamps, policy |

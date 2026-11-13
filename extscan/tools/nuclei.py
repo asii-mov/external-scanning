@@ -14,6 +14,7 @@ Two things this module does beyond shelling out:
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from extscan.models import Finding, Lead, Service
@@ -50,7 +51,36 @@ def argv(policy: Policy, targets_file: str, jsonl_out: str) -> list[str]:
     return cmd
 
 
-def write_targets(runner: Runner, services: list[Service]) -> tuple[str, list[str]]:
+def batches(services: list[Service], size: int) -> list[list[Service]]:
+    """Split the web services into nuclei runs of at most `size` services.
+
+    One run over everything is all-or-nothing: on a large range it hits the
+    timeout and every service is left unchecked. In batches a timeout costs
+    one batch, and the rest are done and marked.
+    """
+    web = [s for s in services if s.is_http]
+    if size <= 0 or len(web) <= size:
+        return [web] if web else []
+    return [web[i:i + size] for i in range(0, len(web), size)]
+
+
+def batch_label(batch: list[Service], everything: bool) -> str:
+    """Name for one batch's files: "" (plain `nuclei.jsonl`) when the batch
+    is every web service in the run, as before batching existed. Otherwise a
+    name derived from its members, so re-running the same batch replaces its
+    own output and can never overwrite another batch's."""
+    if everything:
+        return ""
+    digest = hashlib.sha256("\n".join(sorted(s.id for s in batch)).encode()).hexdigest()
+    return digest[:10]
+
+
+def _name(stem: str, label: str, suffix: str = "") -> str:
+    return f"{stem}-{label}{suffix}" if label else f"{stem}{suffix}"
+
+
+def write_targets(runner: Runner, services: list[Service],
+                  label: str = "") -> tuple[str, list[str]]:
     """Write the URL list nuclei will read. Returns (path, urls)."""
     urls = [s.base_url() for s in services if s.is_http]
     seen, ordered = set(), []
@@ -58,8 +88,9 @@ def write_targets(runner: Runner, services: list[Service]) -> tuple[str, list[st
         if u not in seen:
             seen.add(u)
             ordered.append(u)
-    path = runner.store.raw_path("nuclei-targets.txt")
-    path.write_text("\n".join(ordered) + ("\n" if ordered else ""))
+    path = runner.store.raw_path(_name("nuclei-targets", label, ".txt"))
+    if not runner.dry_run:      # a plan leaves the last real run's list alone
+        path.write_text("\n".join(ordered) + ("\n" if ordered else ""))
     return str(path), ordered
 
 
@@ -173,6 +204,13 @@ def parse_jsonl(text: str, scope: Scope | None = None,
         if isinstance(refs, str):
             refs = [refs]
 
+        # nuclei states the CVE a template is for in info.classification.
+        classification = info.get("classification") or {}
+        cve_ids = classification.get("cve-id") if isinstance(classification, dict) else None
+        if isinstance(cve_ids, str):
+            cve_ids = cve_ids.split(",")
+        cves = [str(c).strip().upper() for c in (cve_ids or []) if str(c).strip()]
+
         extracted = rec.get("extracted-results") or rec.get("extracted_results") or []
         if isinstance(extracted, str):
             extracted = [extracted]
@@ -203,7 +241,7 @@ def parse_jsonl(text: str, scope: Scope | None = None,
             recommendation=str(info.get("remediation") or "").strip(),
             references=[str(r) for r in refs][:10],
             review_required=review_required, review_reason=review_reason,
-            tags=["nuclei", *(str(t) for t in tags)][:12],
+            tags=["nuclei", *(str(t) for t in tags)][:12], cves=cves,
         ))
 
         for needles, kind, reason in LEAD_TRIGGERS:
@@ -219,17 +257,24 @@ def parse_jsonl(text: str, scope: Scope | None = None,
 
 
 def run(runner: Runner, scope: Scope, policy: Policy,
-        services: list[Service]) -> tuple[Result | None, list[Finding], list[Lead]]:
-    """Run nuclei against every HTTP-ish service. No web services -> no-op."""
-    targets_file, urls = write_targets(runner, services)
+        services: list[Service],
+        label: str = "") -> tuple[Result | None, list[Finding], list[Lead]]:
+    """Run nuclei against the HTTP-ish services given. No web services -> no-op.
+
+    `label` names this batch's files (see `batch_label`): the targets list,
+    the JSONL output and the saved stdout all carry it.
+    """
+    targets_file, urls = write_targets(runner, services, label)
     if not urls:
         return None, [], []
     if not runner.dry_run:
         require("nuclei")
-    out_path = runner.store.raw_path("nuclei.jsonl")
+    out_path = runner.store.raw_path(_name("nuclei", label, ".jsonl"))
     cmd = argv(policy, targets_file, str(out_path))
     res = runner.run(cmd, stage="probe:nuclei", timeout=policy.nuclei.timeout_sec,
-                     stdout_name="nuclei")
+                     stdout_name=_name("nuclei", label))
+    if res.skipped:             # dry run: an old output file is not this run's result
+        return res, [], []
     text = out_path.read_text(errors="replace") if out_path.exists() else ""
     findings, leads = parse_jsonl(text, scope=scope)
     return res, findings, leads

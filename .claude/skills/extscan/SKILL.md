@@ -10,7 +10,11 @@ scope, writing the report. Your job is the part that needs judgement — reading
 what came back, deciding what deserves a closer look, and writing down
 conclusions a template cannot encode.
 
-Everything lives in a run directory as JSON. Read it, reason about it, act.
+Everything lives in a run directory. State is in a database (`state.db`),
+so read it through the CLI, not from files: `extscan status`, `hosts`,
+`services`, `findings`, `leads` and `gaps`, each with `--json`. `extscan
+export <run>` writes plain JSON copies if you need files; a copy is never
+the live state. Raw tool output is in `runs/<run>/raw/`.
 
 ## Before anything runs
 
@@ -31,7 +35,19 @@ difference between scanning 14 hosts and scanning someone else's network.
 ```bash
 extscan doctor                                   # what is installed
 extscan init --scope scope.json --profile standard
+extscan --dry-run discover latest                # the nmap commands, nothing sent
 ```
+
+`--dry-run` works on every stage and sends nothing: it prints the commands,
+probes and leads that would run. Use it on a new engagement before the real
+thing. `latest` stands for the newest run wherever a run id is expected.
+
+Picking up a run someone else started? `extscan status <run>` shows which
+stages finished and the counts, and `extscan gaps <run>` what was lost.
+
+On a scope with more hosts than one batch (32), discovery runs in two
+phases on its own: a port sweep of every address, then version detection
+only on hosts that had an open port. Nothing to configure.
 
 Profiles: `quick` (top ports, medium+ severity), `standard`, `thorough`
 (all 65535 TCP ports — hours on a wide range; confirm before choosing it).
@@ -50,9 +66,20 @@ extscan services <run> --json       # read what is open
 extscan probe <run>                 # nuclei + per-service probes
 extscan leads <run> --json          # read the follow-ups
 extscan chase <run> --rounds 2      # resolve them
+extscan screenshot <run>            # web services, for the report (optional extra)
+extscan enrich <run>                # KEV and EPSS ranking, CDN tags (public feeds, no client data)
 extscan gaps <run> --json           # what did NOT get checked
 extscan report <run>
 ```
+
+`--json` goes before or after the subcommand.
+
+Nuclei is most of the wall-clock (minutes per web service at the default
+rate limit). When you need a first look quickly, `extscan probe <run>
+--skip-nuclei` runs everything else and records nuclei as a coverage gap;
+`extscan probe <run> --only nuclei` clears it later. Don't raise
+`nuclei.rate_limit` or nmap timing to save time without asking: how hard to
+push a client's hosts is agreed with the client.
 
 **Check `extscan gaps` before you summarise anything.** It lists coverage
 losses — UDP skipped for want of root, nuclei missing, a batch that timed out,
@@ -61,8 +88,12 @@ reporting "no findings in X" when X was never checked is the worst mistake
 available here.
 
 **If a run was interrupted**, use `extscan resume <run>` rather than starting
-again. It skips completed host batches and re-queues leads that were left
-open.
+again. It skips completed host batches, nuclei batches and per-service
+probes, and re-queues leads that were left open.
+
+`nmap.parallel` in the policy runs several discovery batches at once
+(default 1). It multiplies the momentary load on the client's network by
+the same number, so raise it only when the client has agreed to the rate.
 
 `extscan run --scope scope.json` does all of it unattended. Prefer the separate
 stages when a human is available, because the gaps between them are where your
@@ -71,7 +102,72 @@ judgement is worth something.
 **UDP needs root.** `discover` warns and continues if it cannot run `-sU`. If
 you see that warning, say so explicitly — "no SNMP findings" and "SNMP was
 never checked" look identical in a report, and only one of them is honest. Ask
-whether to re-run with sudo.
+whether to re-run with sudo. If a stage after the sudo pass says it cannot
+write `state.db`, run the `chown` command it prints.
+
+## Reading findings without drowning in them
+
+`findings --json` returns every finding with its full evidence, which on a
+real run is hundreds of kilobytes. Read in two steps instead:
+
+```bash
+extscan findings <run> --severity medium     # one line each: severity, target, title, id
+extscan findings <run> --review-only         # the manual review queue's raw material
+extscan show <run> --finding <id>            # one finding in full, evidence included
+```
+
+Use `--json` on `hosts`, `services`, `leads`, `gaps` and `status`, which
+stay small.
+
+## What the gaps are telling you
+
+`extscan gaps` now reports several conditions that used to pass silently.
+Each changes what you may claim:
+
+- **"N of M addresses did not answer host discovery."** Those addresses
+  were never port-scanned. Many will be unused, but a host that drops ping
+  looks the same. On a small scope, offer `nmap.skip_host_discovery`; on a
+  large one, say how many addresses the results do not cover.
+- **nmap gave up on ports, or timed a host out.** Ports on the named hosts
+  may have been missed. Offer a re-run with higher `nmap.max_retries` or
+  `nmap.host_timeout`, or slower timing.
+- **UDP ports were `open|filtered`.** nmap got no answer, so the port may be
+  open or silently dropped. Never write "SNMP is exposed" from that state
+  alone; the SNMP check's own result is the evidence.
+- **"Path checks not trustworthy" on a web service.** A WAF or rate limit
+  cut the checks short. Findings made before the block stand; absence of
+  findings on that service means nothing. Slow down
+  (`http.inter_request_delay`) or ask the client to allow-list the scanner,
+  then `extscan probe <run> --only http_fingerprint`.
+- **An `enrich` gap.** Findings are not ranked by known exploitation, so a
+  missing KEV flag or EPSS score means nothing until it clears.
+
+## Findings that need a particular reading
+
+- **Virtual host findings (`extscan:vhost`).** A name tied to an in-scope
+  address returned a different site from the one seen by address. That
+  application has had none of the other checks. Report it; do not add the
+  name to scope and do not point any tool at it. Getting it tested is a
+  scope decision for the client.
+- **A host tagged with a network (Cloudflare, CloudFront, Fastly, Google).**
+  Its open ports and TLS setup may belong to a shared edge, not the client's
+  server. Say so before attributing them to the client.
+- **KEV and EPSS.** `KEV` means the CVE is in CISA's catalogue of
+  vulnerabilities exploited in the wild, and it moves the item up the review
+  queue. It does not confirm the finding: a version-matched CVE stays
+  tentative however widely it is exploited.
+
+## Comparing with the last assessment
+
+```bash
+extscan diff <old-run> <new-run>     # writes diff.md and diff.json into the new run
+```
+
+Five states. **Not re-checked** means still open as far as anyone knows:
+the new run did not look (the host left scope, discovery or the check had a
+gap, the stage never ran), and each item gives the reason. Only **gone**
+means the new run looked and did not find it. Never tell a client something
+was fixed from a "not re-checked" line.
 
 ## Reading discovery output
 
@@ -97,6 +193,13 @@ extscan chase <run> --lead <id>             # one specific lead
 
 Chase everything cheap. Think before chasing anything that will generate
 noticeable traffic on a production system.
+
+When you settle a lead yourself (you read the saved spec, or the user says
+to leave it), close it so it stops showing as open work:
+
+```bash
+extscan resolve <run> --lead <id> --status done --note "what you concluded"
+```
 
 **The leads cascade.** An `openapi` lead parses the spec and raises
 `api_endpoint` leads for operations the spec says need no authentication. Two
@@ -149,7 +252,8 @@ and say so. Specific cases:
 - **The model endpoint is down.** The circuit breaker stops further attempts
   after a few failures, so affected leads stay open and findings carry only
   deterministic evidence. Say which analyses did not happen, then either fix
-  the endpoint and `extscan chase <run> --resume`, or work those leads
+  the endpoint and run `extscan chase <run>` again (leads still open are
+  retried), or work those leads
   yourself by reading the saved artefacts in `runs/<run>/raw/` — you are a
   perfectly good substitute for the in-process model here.
 - **The run aborted with `RunAborted`.** Nearly everything was failing, which

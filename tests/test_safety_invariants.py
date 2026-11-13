@@ -73,9 +73,9 @@ class TestNoShellExecution(unittest.TestCase):
         """Explicit beats relying on the default, in this file more than most."""
         missing = []
         for path, node in iter_calls():
-            if call_name(node) != "run":
+            if call_name(node) not in ("run", "Popen"):
                 continue
-            # Only the subprocess.run calls, not Runner.run / probe.run.
+            # Only the subprocess calls, not Runner.run / probe.run.
             if not (isinstance(node.func, ast.Attribute)
                     and isinstance(node.func.value, ast.Name)
                     and node.func.value.id == "subprocess"):

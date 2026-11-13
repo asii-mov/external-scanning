@@ -12,17 +12,30 @@ the probe raises a finding flagged for human review instead.
 
 from __future__ import annotations
 
-import html
+import os
 import re
+import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .models import Finding, Lead, Service
 from .policy import Policy
 from .runner import Runner
 from .scope import Scope
-from .tools import iis, net, snmp, sslscan
+from .tools import iis, net, snmp, sslscan, vhost, waf
+
+
+@dataclass
+class ProbeGap:
+    """A probe's own statement that it did not fully cover a service."""
+
+    probe: str
+    service_id: str
+    host: str
+    reason: str
+    impact: str
+    remedy: str = ""
 
 
 @dataclass
@@ -31,6 +44,28 @@ class ProbeContext:
     policy: Policy
     runner: Runner
     llm: object | None = None
+    # Probes run on worker threads and return findings and leads. A probe that
+    # was throttled or cut short has a third thing to say: what it found is
+    # real, but the service is not covered. Raising would throw the findings
+    # away, so it reports here and the pipeline records the gap and leaves the
+    # service unmarked, to be retried on the next run.
+    gaps: list[ProbeGap] = field(default_factory=list)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _hostnames: dict[str, list[str]] | None = field(default=None, repr=False)
+
+    def report_gap(self, probe: str, svc: Service, reason: str, impact: str,
+                   remedy: str = "") -> None:
+        with self._lock:
+            self.gaps.append(ProbeGap(probe=probe, service_id=svc.id, host=svc.host,
+                                      reason=reason, impact=impact, remedy=remedy))
+
+    def hostnames_for(self, ip: str) -> list[str]:
+        """Names recorded for an address (reverse DNS, in-scope recon names)."""
+        with self._lock:
+            if self._hostnames is None:
+                # Read once: the hosts file does not change during a probe run.
+                self._hostnames = {h.ip: list(h.hostnames) for h in self.runner.store.hosts()}
+            return list(self._hostnames.get(ip, []))
 
 
 ProbeFn = Callable[[ProbeContext, Service], tuple[list[Finding], list[Lead]]]
@@ -58,8 +93,6 @@ def probes_for(service: Service) -> list[Probe]:
     return [p for p in REGISTRY if p.matches(service)]
 
 
-_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
-
 _BODY_HINTS: list[tuple[str, str, str]] = [
     ("swagger-ui", "openapi", "The page loads Swagger UI; locate and read the spec it renders."),
     ("swagger", "openapi", "Swagger references in the page body."),
@@ -81,9 +114,7 @@ VERBOSE_HEADERS = ["server", "x-powered-by", "x-aspnet-version", "x-aspnetmvc-ve
                    "x-generator", "x-drupal-cache", "x-runtime", "via"]
 
 
-def _title(body_text: str) -> str:
-    m = _TITLE_RE.search(body_text)
-    return html.unescape(m.group(1)).strip()[:200] if m else ""
+_title = net.page_title
 
 
 @register("http_fingerprint", lambda s: s.is_http,
@@ -107,7 +138,10 @@ def http_fingerprint(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], li
     title = _title(body_text)
     server = resp.headers.get("server", "")
 
-    disclosed = {h: resp.headers[h] for h in VERBOSE_HEADERS if h in resp.headers}
+    # `Server: nginx` names a product; only a value with a number in it
+    # discloses a version.
+    disclosed = {h: resp.headers[h] for h in VERBOSE_HEADERS if h in resp.headers
+                 and (h != "server" or any(c.isdigit() for c in resp.headers[h]))}
     evidence = [f"GET {base} -> {resp.status} {resp.reason}"]
     if resp.redirect_chain:
         evidence += ["redirects:"] + [f"  {hop}" for hop in resp.redirect_chain]
@@ -128,6 +162,22 @@ def http_fingerprint(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], li
                       "intended to be internet-facing, and who owns it.",
         tags=["http", "fingerprint"],
     ))
+
+    edge = waf.fingerprint(resp.headers)
+    if edge:
+        products = ", ".join(name for name, _ in edge)
+        findings.append(Finding(
+            title=f"{svc.host}:{svc.port} is behind {products}",
+            severity="info", host=svc.host, port=svc.port, proto=svc.proto,
+            source="extscan:edge",
+            description=f"Response headers from {base} name an edge product ({products}) "
+                        "in front of this service. Results for this service describe "
+                        "what that edge lets through as well as the origin behind it: "
+                        "it may filter or rate-limit scanner traffic, and the origin "
+                        "may be reachable directly at another address.",
+            evidence="\n".join(f"{name}: {why}" for name, why in edge)[:3000],
+            tags=["http", "edge"],
+        ))
 
     if disclosed:
         findings.append(Finding(
@@ -161,8 +211,13 @@ def http_fingerprint(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], li
                               reason=reason, origin="extscan:http_fingerprint"))
             break
 
-    if ctx.policy.http.path_checks:
-        findings_p, leads_p = _check_paths(ctx, svc, base)
+    blocked = waf.block_signal(resp)
+    if blocked:
+        # Already refused at the front door: asking for twenty more paths
+        # would only add to the count that got us throttled.
+        _report_blocked(ctx, svc, base, f"the root page answered {blocked}")
+    elif ctx.policy.http.path_checks:
+        findings_p, leads_p = _check_paths(ctx, svc, base, resp)
         findings += findings_p
         leads += leads_p
 
@@ -249,18 +304,87 @@ def _looks_like_real_hit(path: str, resp: net.Response) -> bool:
     return not any(s in text for s in ("not found", "404", "page does not exist"))
 
 
-def _check_paths(ctx: ProbeContext, svc: Service,
-                 base: str) -> tuple[list[Finding], list[Lead]]:
+_same_page = net.same_page
+
+
+# Requests in a row with no answer, after the root page did answer, before the
+# path checks stop. One lost request is the internet; three is a device that
+# has started dropping us.
+_MAX_CONSECUTIVE_FAILURES = 3
+
+# Statuses a WAF or rate limiter uses for its block page.
+_BLOCK_STATUSES = (403, 503)
+
+
+def _report_blocked(ctx: ProbeContext, svc: Service, base: str, why: str) -> None:
+    ctx.report_gap(
+        "http_fingerprint", svc,
+        reason=f"path checks not trustworthy: {why}",
+        impact=f"The checks for exposed files and endpoints on {base} were blocked, "
+               "throttled or cut short, so a file that is exposed there may be missing "
+               "from this report. This is not a clean result.",
+        remedy="Lower the request rate (`http.inter_request_delay`, `max_workers`) or "
+               "ask the client to allow-list the scanner's address, then "
+               "`extscan probe <run> --only http_fingerprint`.",
+    )
+
+
+def _no_answer(resp: net.Response) -> bool:
+    """A request that died on the wire, as opposed to one we declined to send."""
+    return resp.status == 0 and not resp.error.startswith(("scope refusal", "exceeded max"))
+
+
+def _check_paths(ctx: ProbeContext, svc: Service, base: str,
+                 root: net.Response) -> tuple[list[Finding], list[Lead]]:
     findings: list[Finding] = []
     leads: list[Lead] = []
     delay = ctx.policy.http.inter_request_delay
 
+    # What the server says for a path that cannot exist. A single-page app
+    # answers 200 with its index for everything, so a path that returns that
+    # same page is a soft 404, however its body reads.
+    nowhere = net.fetch(f"{base.rstrip('/')}/{os.urandom(6).hex()}-extscan",
+                        ctx.scope, ctx.policy.http)
+    catch_all = nowhere if nowhere.ok and nowhere.body else None
+    # The same idea for a block page: 403 or 503 for a path that cannot exist,
+    # on a server whose root page answered differently.
+    denied = nowhere if (nowhere.status in _BLOCK_STATUSES and not (
+        root.status == nowhere.status and _same_page(root, nowhere))) else None
+
+    blocked = waf.block_signal(nowhere)
+    if blocked:
+        blocked = f"a request for a path that cannot exist answered {blocked}"
+    unanswered: list[str] = []
+    run = 1 if _no_answer(nowhere) else 0
+    answered = denied_like = 0
+
     for path in ctx.policy.http.paths:
+        if blocked:
+            break
         if delay:
             time.sleep(delay)
         url = base.rstrip("/") + path
         resp = net.fetch(url, ctx.scope, ctx.policy.http)
         if resp.status == 0:
+            if _no_answer(resp):
+                unanswered.append(path)
+                run += 1
+                if run >= _MAX_CONSECUTIVE_FAILURES:
+                    blocked = (f"{run} requests in a row got no answer after the root "
+                               f"page had answered ({resp.error[:120]})")
+            continue
+        run = 0
+        signal = waf.block_signal(resp)
+        if signal:
+            blocked = f"{path} answered {signal} after {answered} path(s) had been checked"
+            break
+        answered += 1
+        if denied is not None and resp.status == denied.status and _same_page(resp, denied):
+            # Not "present but access-controlled": the server says this for
+            # everything.
+            denied_like += 1
+            continue
+        if catch_all is not None and resp.ok and _same_page(resp, catch_all):
             continue
 
         sev, desc, lead_kind = _PATH_MEANING.get(path, ("info", f"{path} is reachable.", ""))
@@ -303,6 +427,15 @@ def _check_paths(ctx: ProbeContext, svc: Service,
             leads.append(Lead(kind=lead_kind, host=svc.host, port=svc.port, url=url,
                               reason=f"{path} responded {resp.status}; establish what it exposes.",
                               origin="extscan:paths"))
+
+    if not blocked and denied is not None and answered >= 3 and denied_like == answered:
+        blocked = (f"all {answered} paths returned the same {denied.status} page as a "
+                   "path that cannot exist, which is what a block page looks like")
+    if not blocked and unanswered:
+        blocked = (f"{len(unanswered)} path(s) got no answer: "
+                   + ", ".join(unanswered[:8]))
+    if blocked:
+        _report_blocked(ctx, svc, base, blocked)
 
     return findings, leads
 
@@ -401,6 +534,40 @@ def tls_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead
         ctx.runner.store.write_raw(f"cert-{svc.host}-{svc.port}.pem", info.cert_pem)
 
     return findings, leads
+
+
+@register("vhosts", lambda s: s.proto == "tcp" and s.is_http,
+          "Ask each web service for the names tied to its address (Host header, SNI).")
+def vhost_probe(ctx: ProbeContext, svc: Service) -> tuple[list[Finding], list[Lead]]:
+    limit = ctx.policy.http.max_vhosts
+    if limit <= 0:
+        return [], []
+    sans: list[str] = []
+    if svc.is_tls:
+        sans = net.inspect_tls(svc.host, svc.port, ctx.scope,
+                               timeout=float(ctx.policy.http.timeout_sec),
+                               probe_protocols=False).sans
+    names, left_out = vhost.candidates(svc, ctx.hostnames_for(svc.host), sans, limit)
+    findings, cut_short = vhost.check(svc, ctx.scope, ctx.policy.http, names)
+
+    remedy = "`extscan probe <run> --only vhosts`"
+    if cut_short:
+        ctx.report_gap(
+            "vhosts", svc, reason=f"virtual-host check cut short: {cut_short}",
+            impact=f"Not every name tied to {svc.host} was tried against {svc.id}, so a "
+                   "site served there by name may be missing from this report.",
+            remedy="Lower the request rate (`http.inter_request_delay`, `max_workers`) "
+                   f"or ask the client to allow-list the scanner, then {remedy}.")
+    elif left_out:
+        ctx.report_gap(
+            "vhosts", svc,
+            reason=f"{left_out} candidate name(s) not tried (http.max_vhosts={limit})",
+            impact=f"{len(names)} of {len(names) + left_out} names tied to {svc.host} were "
+                   f"tried against {svc.id}. A site served under one of the others would "
+                   "not have been seen.",
+            remedy=f"Raise `http.max_vhosts` in the policy, then {remedy}.")
+    # No leads: a name found here is something to report, not a new target.
+    return findings, []
 
 
 def _is_snmp(s: Service) -> bool:

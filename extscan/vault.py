@@ -32,6 +32,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
+from . import enrich
 from .models import Finding, Host, Lead, Service, severity_rank
 from .report import SEV_LABEL, SEV_ORDER, _fence, _ts
 from .resilience import Degradation
@@ -156,6 +157,12 @@ def _plural(n: int, word: str, plural: str | None = None) -> str:
 
 def _sev(f: Finding) -> str:
     return SEV_LABEL.get(f.severity, f.severity.title())
+
+
+def _badge(f: Finding) -> str:
+    """` (KEV · EPSS 0.93)` after a severity, or nothing."""
+    label = enrich.badge(f)
+    return f" ({label})" if label else ""
 
 
 def _svc_key(f: Finding) -> tuple[str, int | None, str]:
@@ -408,7 +415,8 @@ class _Vault:
         return out
 
     def finding_block(self, f: Finding, also: list[Finding] | None = None) -> list[str]:
-        out = [f"**{_sev(f)}: {finding_link(f)}.** {_text(_first_sentences(f.description))}"]
+        out = [f"**{_sev(f)}{_badge(f)}: {finding_link(f)}.** "
+               f"{_text(_first_sentences(f.description))}"]
         if f.confidence == "tentative":
             out[0] += " _Tentative: needs confirmation._"
         if also:
@@ -558,13 +566,17 @@ class _Vault:
         w = out.append
         disc = [c for c in self.commands if str(c.get("stage", "")).startswith("discover")]
         tcp = [c for c in disc if "discover:tcp" in str(c.get("stage", ""))]
+        sweep = [c for c in disc if "discover:sweep" in str(c.get("stage", ""))]
         udp = [c for c in disc if "discover:udp" in str(c.get("stage", ""))]
         if disc:
             start = min(c.get("started", 0) for c in disc)
             end = max(c.get("started", 0) + c.get("duration", 0) for c in disc)
             kinds = "a TCP port scan" + (" and a UDP scan" if udp else "")
-            w(f"We started on {_when(start)} with {kinds} of the whole scope, using nmap "
-              f"with service-version detection. Discovery took {_dur(end - start)}.")
+            how = ("first sweeping every address for open ports, then running "
+                   "service-version detection on the hosts that had one"
+                   if sweep else "using nmap with service-version detection")
+            w(f"We started on {_when(start)} with {kinds} of the whole scope, {how}. "
+              f"Discovery took {_dur(end - start)}.")
         else:
             w("No discovery commands are recorded for this run, so the inventory below "
               "came from an earlier or imported run.")
@@ -576,7 +588,8 @@ class _Vault:
               + (f", see {_link(GAPS)}." if udp_gap else ".")
               + " Any SNMP, DNS or VPN exposure on UDP is not covered.")
         w("")
-        for label, cmds in (("TCP", tcp), ("UDP", udp)):
+        tcp_label = "TCP version-detection" if sweep else "TCP"
+        for label, cmds in (("TCP port sweep", sweep), (tcp_label, tcp), ("UDP", udp)):
             if cmds:
                 w(f"The {label} scan, as run:")
                 w("")
@@ -605,6 +618,15 @@ class _Vault:
             w(f"| {host_link(s.host)} | {s.port}/{s.proto} | {_text(s.name) or '?'} "
               f"| {_text(product) or '-'} | {cell if fs else '-'} |")
         w("")
+        tagged = [h for h in self.hosts if h.network]
+        if tagged:
+            w("Some of these addresses are in a CDN's or cloud provider's published "
+              "ranges, so what answered may be the provider's shared edge and not the "
+              "client's server: "
+              + ", ".join(f"{host_link(h.ip)} ({_text(enrich.host_network_label(h))})"
+                          for h in tagged[:40])
+              + (f" and {len(tagged) - 40} more." if len(tagged) > 40 else "."))
+            w("")
         return out
 
     def _service_story(self, svc: Service) -> list[str]:
@@ -683,7 +705,7 @@ class _Vault:
                 target = ld.url or f"{ld.host}:{ld.port or '-'}"
                 w(f"- {_code(ld.kind)} at {_code(target)}: {_text(ld.note) or 'done'}")
             if shown > 30:
-                w(f"- _... and {shown - 30} more in `leads.json`_")
+                w(f"- _... and {shown - 30} more: `extscan leads <run> --status all`_")
             w("")
 
         found = sorted((f for f in self.findings if f.source in CHASE_SOURCES),
@@ -744,6 +766,7 @@ class _Vault:
             "generator": "extscan", "type": "host", "ip": h.ip,
             "hostnames": [_alias(n) for n in h.hostnames],
             "os_guess": _alias(h.os_guess) if h.os_guess else None,
+            "network": _alias(h.network) if h.network else None,
             "services": len(svcs), "findings": len(fs),
             **{s: sev.get(s, 0) for s in SEV_ORDER},
             "tags": ["extscan/host"],
@@ -758,6 +781,11 @@ class _Vault:
         if h.os_guess:
             w("")
             w(f"OS guess: {_text(h.os_guess)}")
+        if h.network:
+            w("")
+            w(f"> [!warning] Address in {_text(enrich.host_network_label(h))} ranges")
+            w("> The ports and services below may be the provider's shared edge, not the "
+              "client's own server. Other tenants can share this address.")
         w("")
         w("## Services")
         w("")
@@ -803,6 +831,8 @@ class _Vault:
             "severity": f.severity, "host": f.host, "port": f.port, "proto": f.proto,
             "source": f.source, "confidence": f.confidence,
             "review_required": f.review_required, "labels": [_alias(t) for t in f.tags],
+            "cves": [_alias(c) for c in f.cves] if f.cves else None,
+            "kev": True if f.kev else None, "epss": f.epss,
             "tags": ["extscan/finding", f"severity/{f.severity}",
                      *sorted({t for t in map(_tag, f.tags) if t})],
         }), ""]
@@ -810,7 +840,7 @@ class _Vault:
         w(f"# {_text(f.title, 300)}")
         w("")
         target = f"{f.host}:{f.port}/{f.proto}" if f.port else f.host
-        w(f"**Severity:** {_sev(f)}"
+        w(f"**Severity:** {_sev(f)}{_badge(f)}"
           + (" (tentative, needs confirmation)" if f.confidence == "tentative" else "")
           + f" · **Host:** {host_link(f.host) if f.host else '-'}"
           + f" · **Service:** {_code(target)} · **Detected by:** {_code(f.source)}")
@@ -819,6 +849,12 @@ class _Vault:
             w("> [!todo] Requires manual review")
             w(f"> {_text(f.review_reason) or 'See the review queue.'} "
               f"Listed in {_link(REVIEW)}.")
+            w("")
+        if f.cves:
+            w("## Known exploitation")
+            w("")
+            for line in enrich.cve_lines(f):
+                w(f"- {_text(line, 1500)}")
             w("")
         if f.description:
             w("## What we saw")
@@ -874,14 +910,23 @@ class _Vault:
           "auditor must answer. Work top to bottom.")
         w("")
         by_id = {f.id: f for f in self.findings}
-        w("| # | Severity | Item | Target | An auditor must decide |")
-        w("|---|---|---|---|---|")
+        if any(item.kev for item in self.triaged.review_queue):
+            w("Items marked **KEV** concern a CVE that CISA lists as exploited in the "
+              "wild. They come before items one severity level higher.")
+            w("")
+        w("| # | Severity | Exploited | Item | Target | An auditor must decide |")
+        w("|---|---|---|---|---|---|")
         for item in self.triaged.review_queue:
             f = next((by_id[i] for i in item.finding_ids if i in by_id), None)
             label = finding_link(f) if f else _text(item.title)
             if len(item.finding_ids) > 1:
                 label += f" (+{len(item.finding_ids) - 1} related)"
+            marks = ["**KEV**" + (" (version match)" if item.version_match else "")] \
+                if item.kev else []
+            if item.epss is not None:
+                marks.append(f"EPSS {item.epss:.2f}")
             w(f"| {item.priority} | {SEV_LABEL.get(item.severity, item.severity)} "
+              f"| {', '.join(marks) or '-'} "
               f"| {label} | {_code(item.target)} | {_text(item.question)} |")
         w("")
         grouped = [i for i in self.triaged.review_queue if len(i.finding_ids) > 1]
@@ -931,8 +976,11 @@ class _Vault:
         stages = self.meta.get("stages", {})
         w("## Stages")
         w("")
-        for name in ("recon", "discover", "probe", "chase", "screenshot", "report"):
-            if name in stages:
+        for name in ("recon", "discover", "probe", "chase", "screenshot", "enrich", "report"):
+            if name in stages and stages[name].get("disabled") and name == "enrich":
+                w(f"- `{name}`: **switched off**, so findings are not ranked by known "
+                  "exploitation and hosts are not checked against CDN ranges")
+            elif name in stages:
                 w(f"- `{name}`: completed {_when(stages[name].get('completed'))}")
             elif name not in ("recon", "report"):
                 w(f"- `{name}`: **not run**")
@@ -958,7 +1006,11 @@ class _Vault:
         w("3. **Chase.** Follow-up leads from the probes: API specifications, GraphQL, "
           "readable files, SNMP walks.")
         w("4. **Screenshot.** Headless Chromium, every request scope-checked.")
-        w("5. **Report.** Triage, then this vault. Evidence is reproduced as captured, "
+        w("5. **Enrich.** Findings with CVE ids are looked up in CISA's Known Exploited "
+          "Vulnerabilities catalogue and in EPSS, which orders the review queue and "
+          "never changes a severity. Hosts are checked against published CDN ranges. "
+          + enrich.EPSS_ATTRIBUTION)
+        w("6. **Report.** Triage, then this vault. Evidence is reproduced as captured, "
           "secrets included, for a reviewer to judge before anything is delivered.")
         w("")
         for warning in self.meta.get("warnings", []):

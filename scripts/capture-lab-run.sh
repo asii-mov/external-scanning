@@ -37,10 +37,20 @@ else
   cp "$work/out/versions.txt" "$work/out/run.log" "$run/"
 fi
 
+# The run keeps its state in state.db. The fixture is the exported JSON
+# instead: it reads and diffs as text in git, and because that is the layout
+# runs had before the database, the fixture stays the test that old runs
+# still load. (A run captured before state.db existed has the JSON files in
+# place, and export copies them out the same way.)
+state="$(mktemp -d)"
+(cd "$repo" && uv run extscan --runs-dir "$(dirname "$run")" export "$(basename "$run")" \
+  --out "$state" > /dev/null)
+
 find "$dest" -mindepth 1 -maxdepth 1 ! -name README.md -exec rm -rf {} +
 mkdir -p "$dest/raw"
-for f in run.json hosts.json services.json findings.json leads.json degradations.json \
-         checkpoints.json commands.jsonl report.md report.json versions.txt run.log; do
+cp "$state"/*.json "$state"/commands.jsonl "$dest/"
+rm -rf "$state"
+for f in report.md report.json versions.txt run.log; do
   if [ -f "$run/$f" ]; then cp "$run/$f" "$dest/"; fi
 done
 for f in "$run"/raw/*.xml "$run"/raw/nuclei.jsonl "$run"/raw/nuclei-targets.txt \

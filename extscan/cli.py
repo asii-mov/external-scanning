@@ -12,8 +12,12 @@ import argparse
 import contextlib
 import json
 import sys
+from pathlib import Path
 
 from . import __version__, pipeline
+from . import diff as diff_mod
+from . import enrich as enrich_mod
+from . import screenshots as shots_mod
 from .models import Finding, severity_rank
 from .policy import Policy, tcp_port_spec
 from .probes import REGISTRY
@@ -227,11 +231,65 @@ def cmd_report(args) -> int:
 
 def cmd_screenshot(args) -> int:
     store = _open(args)
+    if args.list:
+        return _list_screenshots(store, args)
     scope = _scope_for(store, args)
     policy = _policy_for(store, args)
     result = pipeline.screenshot(store, scope, policy, force=args.force,
                                  dry_run=args.dry_run)
     _emit({"screenshot": result}, args.json, lambda d: None)
+    return 0
+
+
+def _list_screenshots(store: Store, args) -> int:
+    """What the screenshot stage recorded. Captures nothing."""
+    data = [s.to_dict() for s in shots_mod.load(store)]
+
+    def human(rows):
+        if not rows:
+            print("No screenshots recorded.")
+            return
+        for s in rows:
+            print(f"  [{s['status']}] {s['url']}"
+                  + (f"  -> {s['file']}" if s["status"] == "captured" else "")
+                  + (f"  ({s['error']})" if s["error"] else ""))
+
+    _emit(data, args.json, human)
+    return 0
+
+
+def cmd_enrich(args) -> int:
+    """Look findings up in CISA KEV and EPSS, and hosts in CDN ranges."""
+    store = _open(args)
+    scope = _scope_for(store, args)
+    policy = _policy_for(store, args)
+    result = pipeline.enrich(store, scope, policy, _runner(store, args))
+    _emit({"enrich": result, "counts": store.counts()}, args.json, lambda d: None)
+    return 0
+
+
+def _open_run(args, ref: str) -> Store:
+    """A run id under --runs-dir, 'latest', or a path to a run directory."""
+    if (Path(ref) / "run.json").is_file():
+        return Store(ref)
+    return Store.open(args.runs_dir, ref)
+
+
+def cmd_diff(args) -> int:
+    """Compare two runs: what is new, changed, gone, and what the newer run
+    never looked at again."""
+    old, new = _open_run(args, args.old), _open_run(args, args.new)
+    result = diff_mod.diff_runs(old, new)
+    if not args.no_write:
+        paths = diff_mod.write_diff(new.path, result)
+        result["paths"] = {k: str(v) for k, v in paths.items()}
+
+    def human(d):
+        print(diff_mod.render_text(d))
+        for path in d.get("paths", {}).values():
+            print(f"written: {path}")
+
+    _emit(result, args.json, human)
     return 0
 
 
@@ -243,6 +301,9 @@ def cmd_status(args) -> int:
         "profile": meta.get("profile"), "stages": meta.get("stages", {}),
         "warnings": meta.get("warnings", []), "counts": store.counts(),
         "scope": meta.get("scope", {}),
+        # Batches done per stage; `extscan export` has the keys themselves.
+        "checkpoints": {stage: len(keys) for stage, keys in store.all_checkpoints().items()},
+        "layout": store.layout,
     }
 
     def human(d):
@@ -252,6 +313,43 @@ def cmd_status(args) -> int:
         for w in d["warnings"]:
             print(f"  ! {w}")
         print("\n" + json.dumps(d["counts"], indent=2))
+
+    _emit(data, args.json, human)
+    return 0
+
+
+def cmd_hosts(args) -> int:
+    store = _open(args)
+    data = [h.to_dict() for h in store.hosts()]
+
+    def human(rows):
+        if not rows:
+            print("No hosts.")
+            return
+        print(f"{'HOST':<40} {'STATE':<8} {'NETWORK':<12} NAMES")
+        for h in rows:
+            print(f"{h['ip']:<40} {h['state']:<8} {(h['network'] or '-'):<12} "
+                  f"{', '.join(h['hostnames'])}")
+
+    _emit(data, args.json, human)
+    return 0
+
+
+def cmd_export(args) -> int:
+    """Write the run's state as plain JSON files, for reading with other tools."""
+    store = _open(args)
+    try:
+        written = store.export(args.out)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    data = {"run_id": store.run_id, "out": str(written[0].parent),
+            "files": [p.name for p in written]}
+
+    def human(d):
+        print(f"Exported {d['run_id']} to {d['out']}:")
+        print("  " + ", ".join(d["files"]))
+        print("These are copies. The run's live state stays in state.db.")
 
     _emit(data, args.json, human)
     return 0
@@ -287,7 +385,9 @@ def cmd_findings(args) -> int:
         findings = [f for f in findings if severity_rank(f.severity) >= floor]
     if args.review_only:
         findings = [f for f in findings if f.review_required]
-    findings.sort(key=lambda f: (-severity_rank(f.severity), f.host, f.port or 0))
+    # Within a severity: known-exploited first, then by EPSS.
+    findings.sort(key=lambda f: (-severity_rank(f.severity), not f.kev, -(f.epss or 0.0),
+                                 f.host, f.port or 0))
     data = [f.to_dict() for f in findings]
 
     def human(rows):
@@ -297,8 +397,11 @@ def cmd_findings(args) -> int:
         for f in rows:
             target = f"{f['host']}:{f['port']}" if f["port"] else f["host"]
             flag = " [REVIEW]" if f["review_required"] else ""
-            print(f"  {f['severity'].upper():<8} {target:<22} {f['title']}{flag}")
-            print(f"           id={f['id']}  src={f['source']}")
+            mark = enrich_mod.badge(Finding.from_dict(f))
+            print(f"  {f['severity'].upper():<8} {target:<22} {f['title']}{flag}"
+                  + (f" [{mark}]" if mark else ""))
+            print(f"           id={f['id']}  src={f['source']}"
+                  + (f"  cve={','.join(f['cves'][:4])}" if f.get("cves") else ""))
 
     _emit(data, args.json, human)
     return 0
@@ -311,7 +414,9 @@ def cmd_show(args) -> int:
             _emit(f.to_dict(), args.json, lambda d: print(
                 f"{d['severity'].upper()}  {d['title']}\n"
                 f"target: {d['host']}:{d['port']}/{d['proto']}\n"
-                f"source: {d['source']}\n\n{d['description']}\n"
+                f"source: {d['source']}\n"
+                + "".join(f"{line}\n" for line in enrich_mod.cve_lines(Finding.from_dict(d)))
+                + f"\n{d['description']}\n"
                 + (f"\nREVIEW: {d['review_reason']}\n" if d["review_required"] else "")
                 + f"\n--- evidence ---\n{d['evidence']}\n"
                 + (f"\n--- recommendation ---\n{d['recommendation']}\n"
@@ -394,7 +499,7 @@ def cmd_resume(args) -> int:
 
     print(f"Resuming {store.run_id}")
     print(f"  completed stages: {', '.join(meta.get('stages', {})) or 'none'}")
-    for stage in ("discover:tcp", "discover:udp"):
+    for stage in ("discover:sweep", "discover:tcp", "discover:udp"):
         done = store.checkpoints(stage)
         if done:
             print(f"  {stage}: {len(done)} batch(es) already done")
@@ -406,6 +511,7 @@ def cmd_resume(args) -> int:
                                         rounds=args.rounds,
                                         llm=_llm_for(store, policy, args))
     out["screenshot"] = pipeline.screenshot(store, scope, policy, dry_run=runner.dry_run)
+    out["enrich"] = pipeline.enrich(store, scope, policy, runner)
     out["report"] = pipeline.make_report(store, scope, runner)
 
     def human(d):
@@ -498,15 +604,29 @@ def build_parser() -> argparse.ArgumentParser:
                "See examples/scope.example.json.",
     )
     ap.add_argument("--version", action="version", version=f"extscan {__version__}")
-    ap.add_argument("--runs-dir", default=DEFAULT_RUNS_DIR,
-                    help=f"where run directories live (default: {DEFAULT_RUNS_DIR})")
-    ap.add_argument("--json", action="store_true", help="machine-readable output")
-    ap.add_argument("--verbose", action="store_true", help="echo every command executed")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="print the commands that would run, send no packets")
-    ap.add_argument("--no-llm", action="store_true",
-                    help="skip model-assisted analysis even if enabled in policy")
+
+    def add_global_args(p, **default):
+        p.add_argument("--runs-dir", **(default or {"default": DEFAULT_RUNS_DIR}),
+                       help=f"where run directories live (default: {DEFAULT_RUNS_DIR})")
+        p.add_argument("--json", action="store_true", **default,
+                       help="machine-readable output")
+        p.add_argument("--verbose", action="store_true", **default,
+                       help="echo every command executed")
+        p.add_argument("--dry-run", action="store_true", **default,
+                       help="print the commands that would run, send no packets")
+        p.add_argument("--no-llm", action="store_true", **default,
+                       help="skip model-assisted analysis even if enabled in policy")
+
+    # The global flags work on either side of the subcommand: `extscan --json
+    # gaps <run>` and `extscan gaps <run> --json`. After the subcommand they
+    # default to SUPPRESS, so an absent flag never overwrites one given before.
+    add_global_args(ap)
+    common = argparse.ArgumentParser(add_help=False)
+    add_global_args(common, default=argparse.SUPPRESS)
     sub = ap.add_subparsers(dest="command", required=True)
+
+    def add_cmd(name, **kwargs):
+        return sub.add_parser(name, parents=[common], **kwargs)
 
     def add_run_arg(p):
         p.add_argument("run", help="run id, or 'latest'")
@@ -514,18 +634,18 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--policy", help="override the policy file")
         p.add_argument("--profile", help="override the profile (quick|standard|thorough)")
 
-    p = sub.add_parser("doctor", help="check which external tools are installed")
+    p = add_cmd("doctor", help="check which external tools are installed")
     p.set_defaults(func=cmd_doctor)
 
-    p = sub.add_parser("probes", help="list registered probes")
+    p = add_cmd("probes", help="list registered probes")
     p.set_defaults(func=cmd_probes)
 
-    p = sub.add_parser("providers", help="show model provider availability")
+    p = add_cmd("providers", help="show model provider availability")
     p.add_argument("--policy", help="policy file to read llm settings from")
     p.add_argument("--profile", help="profile to base settings on")
     p.set_defaults(func=cmd_providers)
 
-    p = sub.add_parser("init", help="create a run from a scope file")
+    p = add_cmd("init", help="create a run from a scope file")
     p.add_argument("--scope", required=True, help="path to the scope/authorisation file")
     p.add_argument("--policy", help="optional policy JSON overlay")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])
@@ -534,11 +654,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--id", help="explicit run id")
     p.set_defaults(func=cmd_init)
 
-    p = sub.add_parser("recon", help="subdomains and DNS checks for the scope's domains")
+    p = add_cmd("recon", help="subdomains and DNS checks for the scope's domains")
     add_run_arg(p)
     p.set_defaults(func=cmd_recon)
 
-    p = sub.add_parser("discover", help="nmap TCP and UDP discovery")
+    p = add_cmd("discover", help="nmap TCP and UDP discovery")
     add_run_arg(p)
     p.add_argument("--tcp-only", action="store_true")
     p.add_argument("--udp-only", action="store_true")
@@ -546,7 +666,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="skip host batches already completed in this run")
     p.set_defaults(func=cmd_discover)
 
-    p = sub.add_parser("probe", help="run service-matched probes (incl. nuclei)")
+    p = add_cmd("probe", help="run service-matched probes (incl. nuclei)")
     add_run_arg(p)
     p.add_argument("--only", action="append", metavar="PROBE",
                    help="restrict to a probe name (repeatable); 'nuclei' selects nuclei")
@@ -554,13 +674,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip-nuclei", action="store_true")
     p.set_defaults(func=cmd_probe)
 
-    p = sub.add_parser("leads", help="list follow-ups")
+    p = add_cmd("leads", help="list follow-ups")
     add_run_arg(p)
     p.add_argument("--status", default="open",
                    choices=["open", "done", "skipped", "failed", "all"])
     p.set_defaults(func=cmd_leads)
 
-    p = sub.add_parser("chase", help="resolve follow-up leads")
+    p = add_cmd("chase", help="resolve follow-up leads")
     add_run_arg(p)
     p.add_argument("--lead", action="append", metavar="ID",
                    help="chase only this lead id (repeatable)")
@@ -570,34 +690,61 @@ def build_parser() -> argparse.ArgumentParser:
                    help="how many times to re-queue newly raised leads")
     p.set_defaults(func=cmd_chase)
 
-    p = sub.add_parser("screenshot", help="screenshot web services for the report vault")
+    p = add_cmd("screenshot", help="screenshot web services for the report vault")
     add_run_arg(p)
     p.add_argument("--force", action="store_true", help="recapture pages already captured")
+    p.add_argument("--list", action="store_true",
+                   help="show the screenshots on record (use with --json); capture nothing")
     p.set_defaults(func=cmd_screenshot)
 
-    p = sub.add_parser("report", help="triage and render the report and Obsidian vault")
+    p = add_cmd("enrich", help="rank findings by known exploitation (CISA KEV, EPSS) "
+                               "and tag hosts in CDN ranges")
+    add_run_arg(p)
+    p.set_defaults(func=cmd_enrich)
+
+    p = add_cmd("diff", help="compare two runs, separating 'gone' from 'not re-checked'")
+    p.add_argument("old", help="the earlier run: id, 'latest', or a run directory")
+    p.add_argument("new", help="the later run; diff.md and diff.json are written into it")
+    p.add_argument("--no-write", action="store_true",
+                   help="print only; do not write diff.md and diff.json")
+    p.set_defaults(func=cmd_diff)
+
+    p = add_cmd("report", help="triage and render the report and Obsidian vault")
     add_run_arg(p)
     p.set_defaults(func=cmd_report)
 
-    p = sub.add_parser("gaps", help="show coverage gaps (what did not get checked)")
+    p = add_cmd("gaps", help="show coverage gaps (what did not get checked)")
     add_run_arg(p)
     p.set_defaults(func=cmd_gaps)
 
-    p = sub.add_parser("resume", help="continue an interrupted run")
+    p = add_cmd("resume", help="continue an interrupted run")
     add_run_arg(p)
     p.add_argument("--rounds", type=int, default=2)
     p.set_defaults(func=cmd_resume)
 
-    p = sub.add_parser("status", help="show run state")
+    p = add_cmd("status", help="show run state")
     add_run_arg(p)
     p.set_defaults(func=cmd_status)
 
-    p = sub.add_parser("services", help="list discovered services")
+    p = add_cmd("hosts", help="list discovered hosts")
+    add_run_arg(p)
+    p.set_defaults(func=cmd_hosts)
+
+    p = add_cmd("export", help="write the run's state as plain JSON files")
+    add_run_arg(p)
+    p.add_argument("--out", metavar="DIR",
+                   help="where to write (default: <run>/export). hosts.json, services.json, "
+                        "findings.json, leads.json, degradations.json, checkpoints.json, "
+                        "batches.json, screenshots.json, and copies of run.json and "
+                        "commands.jsonl")
+    p.set_defaults(func=cmd_export)
+
+    p = add_cmd("services", help="list discovered services")
     add_run_arg(p)
     p.add_argument("--web-only", action="store_true")
     p.set_defaults(func=cmd_services)
 
-    p = sub.add_parser("findings", help="list findings")
+    p = add_cmd("findings", help="list findings")
     add_run_arg(p)
     p.add_argument("--severity", choices=["info", "low", "medium", "high", "critical"],
                    help="minimum severity")
@@ -605,12 +752,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="only items flagged for manual review")
     p.set_defaults(func=cmd_findings)
 
-    p = sub.add_parser("show", help="show one finding in full")
+    p = add_cmd("show", help="show one finding in full")
     add_run_arg(p)
     p.add_argument("--finding", required=True, metavar="ID")
     p.set_defaults(func=cmd_show)
 
-    p = sub.add_parser("note", help="record a finding from your own analysis")
+    p = add_cmd("note", help="record a finding from your own analysis")
     add_run_arg(p)
     p.add_argument("--title", required=True)
     p.add_argument("--severity", default="info",
@@ -630,7 +777,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--review-reason", default="")
     p.set_defaults(func=cmd_note)
 
-    p = sub.add_parser("resolve", help="mark a lead resolved by hand")
+    p = add_cmd("resolve", help="mark a lead resolved by hand")
     add_run_arg(p)
     p.add_argument("--lead", required=True, metavar="ID")
     p.add_argument("--status", default="done",
@@ -638,7 +785,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--note", default="")
     p.set_defaults(func=cmd_resolve)
 
-    p = sub.add_parser("run", help="init + recon + discover + probe + chase + screenshot + report")
+    p = add_cmd("run", help="init + recon + discover + probe + chase + screenshot + "
+                            "enrich + report")
     p.add_argument("--scope", required=True)
     p.add_argument("--policy")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])
@@ -660,6 +808,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except FileNotFoundError as exc:
         print(f"not found: {exc}", file=sys.stderr)
+        return 2
+    except PermissionError as exc:
+        print(f"permission denied: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
         print("\ninterrupted; run state is on disk and can be resumed", file=sys.stderr)

@@ -1,8 +1,9 @@
 """Core data model for a scanning engagement.
 
 Everything the pipeline produces is one of these five records. They are plain
-dataclasses that round-trip through JSON so each stage can hand state to the
-next (and to an agent reading the run directory) without a database.
+dataclasses that round-trip through JSON: that is how the run store keeps
+them (`extscan/store.py`) and how the CLI's `--json` output and `extscan
+export` show them.
 """
 
 from __future__ import annotations
@@ -39,6 +40,10 @@ class Host:
     state: str = "unknown"
     os_guess: str | None = None
     discovered_by: str = ""
+    # Set by the enrich stage when the address sits in a published CDN or
+    # cloud range ("cloudflare", "cloudfront", ...). Empty means no match, or
+    # not looked up. Scanning never branches on it.
+    network: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -46,6 +51,13 @@ class Host:
     @classmethod
     def from_dict(cls, d: dict) -> Host:
         return cls(**d)
+
+
+# Key in `Service.scripts` under which extscan records what it found on a port
+# nmap could not name: "http", "https" or "tls" (`extscan/tools/webid.py`).
+# It lives in `scripts` because the store carries scripts over when discovery
+# runs again and replaces the rest of the record with nmap's view.
+WEB_IDENTIFY_KEY = "extscan-web-identify"
 
 
 @dataclass
@@ -71,7 +83,7 @@ class Service:
 
     @property
     def is_tls(self) -> bool:
-        if self.tunnel == "ssl":
+        if self.tunnel == "ssl" or self.scripts.get(WEB_IDENTIFY_KEY) in ("https", "tls"):
             return True
         name = self.name.lower()
         return name.endswith("https") or name in {"ssl", "tls"} or self.port in {443, 8443, 9443}
@@ -81,6 +93,8 @@ class Service:
         """True for anything that looks like it speaks HTTP(S)."""
         name = self.name.lower()
         if name in {"http", "https", "http-alt", "https-alt", "http-proxy", "ssl/http"}:
+            return True
+        if self.scripts.get(WEB_IDENTIFY_KEY) in ("http", "https"):
             return True
         if "http" in name:
             return True
@@ -127,6 +141,17 @@ class Finding:
     tags: list[str] = field(default_factory=list)
     created: float = field(default_factory=_now)
     id: str = ""
+    # CVE ids this finding is about, and what the enrich stage learned about
+    # them. None of these feed the id, so enriching a run never renames a
+    # finding, and runs written before the fields existed load with the
+    # defaults.
+    cves: list[str] = field(default_factory=list)
+    kev: bool = False                 # at least one CVE is in CISA's KEV catalogue
+    # One entry per KEV-listed CVE: cve, date_added, due_date, ransomware, name.
+    kev_detail: list[dict] = field(default_factory=list)
+    epss: float | None = None         # highest EPSS score among the CVEs
+    epss_percentile: float | None = None
+    epss_cve: str = ""                # the CVE that score belongs to
 
     def __post_init__(self) -> None:
         if not self.id:

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 TCP_TOP = "1-1024,1080,1194,1433,1521,2049,2082,2083,2375,2376,2483,2484,3000,3128,3268,3306,3389,4443,4444,4786,5000,5432,5555,5601,5672,5900,5984,5985,5986,6379,6443,7001,7002,8000,8008,8009,8080,8081,8088,8089,8161,8200,8443,8500,8834,8888,9000,9042,9090,9092,9200,9300,9443,10000,11211,15672,27017,27018,50000"
@@ -55,10 +55,34 @@ class NmapPolicy:
     extra_args: list[str] = field(default_factory=list)
     timeout_sec: int = 7200
     chunk_size: int = 32
+    # Host-discovery probes, as nmap flags. nmap's own default is far
+    # narrower (unprivileged: a connect to 80 and 443 only), so a host that
+    # drops ping and listens elsewhere would be treated as absent. Root sends
+    # all of these; an unprivileged run sends only the -PS ones, because the
+    # others need raw sockets. `skip_host_discovery` (-Pn) overrides the list.
+    discovery_probes: list[str] = field(default_factory=lambda: [
+        "-PE", "-PP",
+        "-PS21,22,23,25,53,80,110,135,139,143,443,445,993,995,1433,3306,3389,"
+        "5432,5900,8000,8080,8443",
+        "-PA80,443", "-PU53,161"])
+    # Two-phase TCP discovery: sweep the scope for open ports (no version
+    # detection, no scripts) in batches of `sweep_chunk_size`, then run the
+    # full scan only on hosts that had an open port. "auto" uses it when the
+    # scope has more hosts than `chunk_size`; "always" and "never" force it.
+    sweep: str = "auto"
+    sweep_chunk_size: int = 256
+    # How many nmap batches run at once (sweep, fingerprint and UDP batches
+    # alike). 1 is one after another. More finishes a large range sooner and
+    # multiplies the traffic the client's network sees at any moment by the
+    # same factor, so it stays 1 unless the engagement allows more.
+    parallel: int = 1
 
 
 @dataclass
 class NucleiPolicy:
+    # Web services per nuclei invocation. Each batch is checkpointed, so a
+    # timeout costs one batch and a re-run does only what is left.
+    batch_size: int = 25
     severities: list[str] = field(default_factory=lambda: ["info", "low", "medium", "high", "critical"])
     exclude_tags: list[str] = field(default_factory=lambda: [
         "dos", "intrusive", "fuzz", "brute-force",
@@ -113,6 +137,9 @@ class HttpPolicy:
     paths: list[str] = field(default_factory=lambda: list(DISCLOSURE_PATHS))
     inter_request_delay: float = 0.0
     use_system_proxy: bool = False
+    # Names tried per web service by the virtual-host check (certificate SANs
+    # and recorded hostnames). 0 turns the check off.
+    max_vhosts: int = 25
 
 
 @dataclass
@@ -176,6 +203,43 @@ class DnsPolicy:
     max_subzones: int = 20
 
 
+KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+EPSS_URL = "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz"
+
+# Published edge ranges with stable machine-readable URLs. Azure (a dated
+# weekly file) and Akamai (nothing published) have none, so they are absent;
+# a provider added here by hand is parsed as "every CIDR in the document".
+EDGE_RANGE_URLS = {
+    "cloudflare": ["https://www.cloudflare.com/ips-v4/", "https://www.cloudflare.com/ips-v6/"],
+    "cloudfront": ["https://ip-ranges.amazonaws.com/ip-ranges.json"],
+    "fastly": ["https://api.fastly.com/public-ip-list"],
+    "google": ["https://www.gstatic.com/ipranges/goog.json"],
+    "google-cloud": ["https://www.gstatic.com/ipranges/cloud.json"],
+}
+
+
+@dataclass
+class EnrichPolicy:
+    """Public feeds fetched by the enrich stage: CISA KEV, EPSS, CDN ranges.
+
+    Nothing about the client is sent, the requests are plain downloads. They
+    are still egress from the scanning box, so the stage can be turned off,
+    and the downloads are cached and shared between runs.
+    """
+
+    enabled: bool = True
+    kev_url: str = KEV_URL
+    epss_url: str = EPSS_URL
+    tag_networks: bool = True
+    range_urls: dict[str, list[str]] = field(
+        default_factory=lambda: {k: list(v) for k, v in EDGE_RANGE_URLS.items()})
+    timeout_sec: int = 30
+    # "" puts the cache next to the run directories (<runs-dir>/.feed-cache),
+    # so every run of an engagement shares one download a day.
+    cache_dir: str = ""
+    cache_max_age_hours: float = 24.0
+
+
 @dataclass
 class LLMPolicy:
     """Model-assisted analysis settings.
@@ -221,6 +285,7 @@ class Policy:
     recon: ReconPolicy = field(default_factory=ReconPolicy)
     screenshots: ScreenshotPolicy = field(default_factory=ScreenshotPolicy)
     dns: DnsPolicy = field(default_factory=DnsPolicy)
+    enrich: EnrichPolicy = field(default_factory=EnrichPolicy)
     llm: LLMPolicy = field(default_factory=LLMPolicy)
     max_lead_depth: int = 3
     max_leads_per_run: int = 500
@@ -268,7 +333,8 @@ class Policy:
                               ("http", HttpPolicy), ("snmp", SnmpPolicy),
                               ("sslscan", SslscanPolicy),
                               ("recon", ReconPolicy), ("screenshots", ScreenshotPolicy),
-                              ("dns", DnsPolicy), ("llm", LLMPolicy)):
+                              ("dns", DnsPolicy), ("enrich", EnrichPolicy),
+                              ("llm", LLMPolicy)):
             if section in data:
                 current = asdict(getattr(p, section))
                 unknown = set(data[section]) - set(current)
@@ -276,7 +342,11 @@ class Policy:
                     raise ValueError(f"unknown {section} policy key(s): {sorted(unknown)}")
                 current.update(data[section])
                 setattr(p, section, cls_(**current))
-        for key in ("max_lead_depth", "max_leads_per_run", "stop_on_tool_error"):
+        unknown = set(data) - {f.name for f in fields(cls)}
+        if unknown:
+            raise ValueError(f"unknown policy key(s): {sorted(unknown)}")
+        for key in ("max_lead_depth", "max_leads_per_run", "stop_on_tool_error",
+                    "max_lead_attempts", "max_workers"):
             if key in data:
                 setattr(p, key, data[key])
         return p

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlsplit
@@ -136,7 +137,7 @@ def chase_openapi(ctx: ProbeContext, lead: Lead) -> ChaseResult:
 
     spec_url, resp = found
     ctx.runner.store.write_raw(f"openapi-{urlsplit(spec_url).netloc}-"
-                               f"{abs(hash(spec_url)) % 10**6}.txt", resp.body)
+                               f"{zlib.crc32(spec_url.encode()) % 10**6:06d}.txt", resp.body)
 
     host = urlsplit(spec_url).hostname or lead.host
     port = lead.port

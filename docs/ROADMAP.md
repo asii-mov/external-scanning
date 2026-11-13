@@ -24,7 +24,7 @@ thumbnail grid in the report.
 hardened jump box will not have. Make it an optional extra like the LLM layer,
 and keep the grid out of the JSON report (base64 images bloat it).
 
-### 2. Virtual-host and SNI enumeration
+### 2. Virtual-host and SNI enumeration (done: the `vhosts` probe)
 **Why:** one IP commonly serves a dozen sites, and scanning by IP finds only
 the default vhost. This is the most frequent cause of "the scan missed the
 application entirely". The TLS certificate SANs we already collect are a free
@@ -54,7 +54,7 @@ private key compromise is widest), which CAs are in use.
 work.
 **Catch:** none worth mentioning. This is the cheapest item on the list.
 
-### 5. Diffing against a previous run
+### 5. Diffing against a previous run (done: `extscan diff`)
 **Why:** external perimeters are re-tested quarterly. "What changed since
 last time" is the question the client actually asks, and currently answering
 it means comparing two PDFs by hand. A new open port on a host that was
@@ -110,7 +110,7 @@ property that currently holds because we never authenticate would need
 re-examining, and a bug could lock out a client's user or modify data. Treat
 as a separate mode with its own authorisation field in the scope file.
 
-### 9. Rate-limit and WAF detection
+### 9. Rate-limit and WAF detection (done, passive: `http_fingerprint`)
 **Why:** a WAF silently dropping requests makes every other result unreliable,
 and right now we would report "no findings" for a service behind one. Knowing
 we were blocked is as important as any finding.

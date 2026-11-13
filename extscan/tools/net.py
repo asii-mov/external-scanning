@@ -14,6 +14,12 @@ the auditor's scanner to make that request.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
+import difflib
+import html
+import http.client
+import ipaddress
+import re
 import socket
 import ssl
 import subprocess
@@ -36,6 +42,9 @@ class Response:
     redirect_chain: list[str] = field(default_factory=list)
     error: str = ""
     truncated: bool = False
+    # Where a raw request (`request_at`) stopped: "scope", "connect", "tls"
+    # or "http". Empty when a response was parsed.
+    failed_at: str = ""
 
     @property
     def ok(self) -> bool:
@@ -55,6 +64,37 @@ class Response:
     @property
     def content_type(self) -> str:
         return self.headers.get("content-type", "").split(";")[0].strip().lower()
+
+
+def _header_map(message) -> dict[str, str]:
+    """Lower-cased headers, repeated ones joined.
+
+    A plain dict keeps only the last `Set-Cookie`, and the cookie that names
+    the load balancer is often not the last one.
+    """
+    out: dict[str, str] = {}
+    for k, v in (message.items() if message is not None else []):
+        k = k.lower()
+        out[k] = f"{out[k]}, {v}" if k in out else v
+    return out
+
+
+_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+
+
+def page_title(body_text: str) -> str:
+    m = _TITLE_RE.search(body_text)
+    return html.unescape(m.group(1)).strip()[:200] if m else ""
+
+
+def same_page(a: Response, b: Response) -> bool:
+    """True when two responses are the same page, give or take a token."""
+    if a.body == b.body:
+        return True
+    if a.content_type != b.content_type:
+        return False
+    return difflib.SequenceMatcher(None, a.body[:4000], b.body[:4000],
+                                   autojunk=False).ratio() > 0.95
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -108,12 +148,12 @@ def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
                 truncated = len(raw) > policy.max_body_bytes
                 return Response(
                     url=current, status=resp.status, reason=resp.reason or "",
-                    headers={k.lower(): v for k, v in resp.headers.items()},
+                    headers=_header_map(resp.headers),
                     body=raw[:policy.max_body_bytes], redirect_chain=chain,
                     truncated=truncated,
                 )
         except urllib.error.HTTPError as exc:
-            headers = {k.lower(): v for k, v in (exc.headers or {}).items()}
+            headers = _header_map(exc.headers)
             if exc.status in (301, 302, 303, 307, 308) and headers.get("location"):
                 target = urllib.parse.urljoin(current, headers["location"])
                 chain.append(f"{current} -> {exc.status} -> {target}")
@@ -133,6 +173,135 @@ def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
 
     return Response(url=current, status=0, redirect_chain=chain,
                     error=f"exceeded max_redirects ({policy.max_redirects})")
+
+
+_LABEL_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
+
+
+def valid_hostname(name: str) -> str:
+    """Return `name` normalised if it is a plain DNS hostname, else "".
+
+    Names reach the vhost check from certificates and DNS answers, which the
+    target controls, and they go into a `Host` header and the TLS SNI. So the
+    rule is strict: ASCII letters, digits and hyphens in dot-separated labels
+    (punycode passes, raw unicode does not), at least two labels, no
+    wildcard, no IP literal, nothing that could split a header line.
+    """
+    if not isinstance(name, str):
+        return ""
+    normal = name.strip().lower()
+    if normal.endswith("."):
+        normal = normal[:-1]
+    if not normal or len(normal) > 253:
+        return ""
+    labels = normal.split(".")
+    if len(labels) < 2 or not all(_LABEL_RE.match(lb) for lb in labels):
+        return ""
+    if labels[-1].isdigit():
+        return ""          # 10.0.0.1, or anything else that parses as an address
+    return normal
+
+
+def host_header(ip: str, port: int, tls: bool) -> str:
+    hostpart = f"[{ip}]" if ":" in ip else ip
+    return hostpart if port == (443 if tls else 80) else f"{hostpart}:{port}"
+
+
+def request_at(ip: str, port: int, scope: Scope, policy: HttpPolicy, *, tls: bool,
+               host: str = "", path: str = "/") -> Response:
+    """One GET to a literal in-scope IP, with a chosen `Host` header and SNI.
+
+    `fetch` hands urllib a URL and urllib resolves the host, so asking for a
+    virtual host by name would connect to wherever DNS says that name lives.
+    Here the socket always goes to `ip`, which is scope-checked, and the name
+    only travels inside the request (Host header, and SNI when `tls`). No
+    proxy is involved and redirects are not followed: the `Location` is left
+    in the headers for the caller to report.
+
+    Never raises for network trouble. `failed_at` on the result says how far
+    the exchange got, which is how a caller tells "port did not accept the
+    connection" from "accepted, but does not speak TLS / HTTP".
+    """
+    label = f"{ip}:{port}"
+    url = f"{'https' if tls else 'http'}://{host_header(ip, port, tls)}{path}"
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        return Response(url=url, status=0, failed_at="scope",
+                        error=f"scope refusal: {ip!r} is not an IP address; raw requests "
+                              "connect to in-scope addresses only")
+    try:
+        scope.assert_host(ip, context=f"raw http request to {label}")
+    except ScopeError as exc:
+        return Response(url=url, status=0, error=f"scope refusal: {exc}", failed_at="scope")
+
+    name = ""
+    if host:
+        name = valid_hostname(host)
+        if not name:
+            return Response(url=url, status=0, failed_at="scope",
+                            error=f"refusing Host header {host[:80]!r}: not a plain hostname")
+    if not path.startswith("/") or any(c in path for c in "\r\n "):
+        return Response(url=url, status=0, failed_at="scope", error=f"bad path {path[:80]!r}")
+
+    timeout = float(policy.timeout_sec)
+    family = socket.AF_INET6 if ":" in ip else socket.AF_INET
+    sock: socket.socket = socket.socket(family, socket.SOCK_STREAM)
+    try:
+        sock.settimeout(timeout)
+        try:
+            sock.connect((ip, port))
+        except (OSError, TimeoutError) as exc:
+            return Response(url=url, status=0, failed_at="connect",
+                            error=f"{type(exc).__name__}: {exc}")
+        if tls:
+            try:
+                sock = _unverified_context().wrap_socket(sock, server_hostname=name or None)
+            except (OSError, ssl.SSLError, TimeoutError) as exc:
+                return Response(url=url, status=0, failed_at="tls",
+                                error=f"{type(exc).__name__}: {exc}")
+        request = (f"GET {path} HTTP/1.1\r\n"
+                   f"Host: {name or host_header(ip, port, tls)}\r\n"
+                   f"User-Agent: {policy.user_agent}\r\n"
+                   "Accept: */*\r\nConnection: close\r\n\r\n")
+        try:
+            sock.sendall(request.encode("latin-1", "replace"))
+            parsed = http.client.HTTPResponse(sock, method="GET")
+            parsed.begin()
+        except (http.client.HTTPException, OSError, ssl.SSLError, TimeoutError,
+                ValueError) as exc:
+            return Response(url=url, status=0, failed_at="http",
+                            error=f"{type(exc).__name__}: {exc}")
+        # The status line is the answer. A body that stalls or is cut short
+        # does not turn an HTTP server into a non-HTTP one.
+        raw = b""
+        with contextlib.suppress(http.client.HTTPException, OSError, ssl.SSLError,
+                                 TimeoutError, ValueError):
+            raw = parsed.read(policy.max_body_bytes + 1)
+        parsed.close()
+        return Response(url=url, status=parsed.status, reason=parsed.reason or "",
+                        headers=_header_map(parsed.headers),
+                        body=raw[:policy.max_body_bytes],
+                        truncated=len(raw) > policy.max_body_bytes)
+    finally:
+        with contextlib.suppress(OSError):
+            sock.close()
+
+
+def without_name(resp: Response, name: str) -> Response:
+    """A copy with `name` blanked out of the body and the Location header.
+
+    A server that echoes the requested host ("Welcome to <host>", or a
+    redirect to https://<host>/) gives a different page for every name
+    without being a different site.
+    """
+    if not name:
+        return resp
+    needle = re.compile(re.escape(name.encode()), re.I)
+    headers = dict(resp.headers)
+    if "location" in headers:
+        headers["location"] = re.sub(re.escape(name), "{host}", headers["location"], flags=re.I)
+    return dataclasses.replace(resp, body=needle.sub(b"{host}", resp.body), headers=headers)
 
 
 @dataclass

@@ -1,0 +1,28 @@
+{
+  "about": "Ground truth for evals/local.py: what its targets plant, and the cost ceiling for finding it. Titles are regular expressions; source is a prefix; target defaults to exposed (tests/targetapp.py). must_gap lists services that must end as a coverage gap at that stage, with the probe left unmarked.",
+  "must_find": [
+    {"id": "env-exposed", "source": "extscan:paths", "title": "^Exposed /\\.env ", "severity": "high"},
+    {"id": "env-credentials", "source": "extscan:secret_file", "title": "^Credential-bearing file readable", "severity": "critical"},
+    {"id": "spec-exposed", "source": "extscan:paths", "title": "^Exposed /swagger\\.json ", "severity": "medium"},
+    {"id": "spec-parsed", "source": "extscan:openapi", "title": "^Exposed API specification: ACME Billing API \\(9 operations\\)", "severity": "medium"},
+    {"id": "unauth-writes", "source": "extscan:openapi", "title": "^5 API operation\\(s\\) declare no authentication, including 2 that modify data", "severity": "high"},
+    {"id": "off-scope-server", "source": "extscan:openapi", "title": "references hosts outside the engagement scope", "severity": "info"},
+    {"id": "admin-endpoint-open", "source": "extscan:api", "title": "^Unauthenticated API endpoint confirmed reachable: .*/api/admin/users$", "severity": "high"},
+    {"id": "health-endpoint-open", "source": "extscan:api", "title": "^Unauthenticated API endpoint confirmed reachable: .*/api/health$", "severity": "medium"},
+    {"id": "spec-overstates-exposure", "source": "extscan:api", "title": "^API endpoint enforces authentication despite spec", "severity": "info"},
+    {"id": "graphql-introspection", "source": "extscan:graphql", "title": "^GraphQL introspection enabled", "severity": "medium"},
+    {"id": "metrics-exposed", "source": "extscan:paths", "title": "^Exposed /metrics ", "severity": "medium"},
+    {"id": "version-headers", "source": "extscan:http", "title": "^Version-disclosing HTTP headers", "severity": "low"},
+    {"id": "unnamed-port-identified", "target": "unnamed", "source": "extscan:http", "title": "^HTTP service: Build dashboard ", "severity": "info"},
+    {"id": "unnamed-port-env", "target": "unnamed", "source": "extscan:paths", "title": "^Exposed /\\.env ", "severity": "high"},
+    {"id": "vhost-by-name", "target": "vhosts", "source": "extscan:vhost", "title": "^Virtual host billing\\.corp\\.example on .* serves a different site$", "severity": "info"}
+  ],
+  "must_gap": [
+    {"id": "throttled-is-a-gap", "target": "throttled", "stage": "probe:http_fingerprint"}
+  ],
+  "budgets": {
+    "about": "Requests each target may receive, and wall-clock seconds for the whole eval. Raise one only with a reason: every request here is a request against a client's host on an engagement. Each target also gets 4 virtual-host requests (by address, a random name, and the two recorded names); unnamed adds 2 for identification; throttled turns to 429 after 8 requests, so its budget checks that the probes stop asking.",
+    "requests": {"exposed": 45, "unnamed": 40, "hardened": 30, "spa": 30, "vhosts": 32, "wildcard": 32, "throttled": 12},
+    "seconds": 15
+  }
+}

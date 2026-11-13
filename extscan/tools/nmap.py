@@ -10,6 +10,7 @@ service/version/script detail survives intact.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
 import xml.etree.ElementTree as ET
@@ -38,9 +39,75 @@ def _script_selection(scripts: str, exclude: list[str]) -> str:
     return f"({scripts.replace(',', ' or ')}) and not ({' or '.join(exclude)})"
 
 
+_PROBE_RE = re.compile(r"-P[A-Za-z][0-9,-]*")
+
+
+def discovery_args(policy: Policy, root: bool | None = None) -> list[str]:
+    """Host-discovery flags for one nmap run.
+
+    -Pn wins when the policy asks for it. Otherwise root sends every probe in
+    `nmap.discovery_probes`; an unprivileged run keeps only the -PS ones,
+    which nmap does with connect(). The rest need raw sockets, and nmap
+    refuses to start if it is handed them without root.
+    """
+    p = policy.nmap
+    if p.skip_host_discovery:
+        return ["-Pn"]
+    for flag in p.discovery_probes:
+        if not _PROBE_RE.fullmatch(flag) or flag == "-Pn":
+            raise ValueError(f"nmap.discovery_probes: {flag!r} is not a host-discovery "
+                             "probe such as -PE or -PS22,80,443")
+    root = _is_root() if root is None else root
+    return [f for f in p.discovery_probes if root or f.startswith("-PS")]
+
+
+def port_spec(ports) -> str:
+    """Port numbers as a compact nmap `-p` value: 22,80-82,443."""
+    out: list[str] = []
+    start = prev = None
+    for port in sorted(set(ports)):
+        if prev is not None and port == prev + 1:
+            prev = port
+            continue
+        if start is not None:
+            out.append(str(start) if start == prev else f"{start}-{prev}")
+        start = prev = port
+    if start is not None:
+        out.append(str(start) if start == prev else f"{start}-{prev}")
+    return ",".join(out)
+
+
+def sweep_argv(scope: Scope, policy: Policy, out_base: str,
+               targets: list[str] | None = None) -> list[str]:
+    """Phase one of two-phase discovery: which TCP ports are open, nothing more.
+
+    Same ports, discovery probes, retries and timing as the full scan, so the
+    sweep sees what the full scan would. No -sV and no scripts, which is
+    where a full scan spends its time, and -n because names are looked up in
+    phase two.
+    """
+    p = policy.nmap
+    argv = ["nmap", "-sS" if _is_root() else "-sT", "-n",
+            "-p", p.tcp_ports, p.timing,
+            "--max-retries", str(p.max_retries),
+            "--host-timeout", p.host_timeout,
+            "--open", "-oA", out_base]
+    if p.min_rate:
+        argv += ["--min-rate", str(p.min_rate)]
+    argv += discovery_args(policy)
+    argv += p.extra_args
+    argv += _targets_for(scope, targets)
+    return argv
+
+
 def tcp_argv(scope: Scope, policy: Policy, out_base: str,
-             targets: list[str] | None = None) -> list[str]:
+             targets: list[str] | None = None,
+             ports: str | None = None, assume_up: bool = False) -> list[str]:
     """Build the TCP discovery command.
+
+    `ports` and `assume_up` are for phase two of a two-phase scan: the sweep
+    already found these hosts up and these ports open, so the full scan goes
+    straight to them with -Pn.
 
     SYN scan when privileged (faster, lighter on the target); connect scan
     otherwise, so an unprivileged run still works.
@@ -54,14 +121,13 @@ def tcp_argv(scope: Scope, policy: Policy, out_base: str,
             "--version-intensity", str(p.version_intensity)]
     if p.scripts:
         argv += ["--script", _script_selection(p.scripts, p.exclude_scripts)]
-    argv += ["-p", p.tcp_ports, p.timing,
+    argv += ["-p", ports or p.tcp_ports, p.timing,
              "--max-retries", str(p.max_retries),
              "--host-timeout", p.host_timeout,
              "--open", "-oA", out_base]
     if p.min_rate:
         argv += ["--min-rate", str(p.min_rate)]
-    if p.skip_host_discovery:
-        argv.append("-Pn")
+    argv += ["-Pn"] if assume_up else discovery_args(policy)
     if _is_root():
         argv.append("-O")               # OS fingerprint; needs raw sockets
     argv += p.extra_args
@@ -79,8 +145,7 @@ def udp_argv(scope: Scope, policy: Policy, out_base: str,
             "--open", "-oA", out_base]
     if p.scripts:
         argv += ["--script", _script_selection("default,safe", p.exclude_scripts)]
-    if p.skip_host_discovery:
-        argv.append("-Pn")
+    argv += discovery_args(policy)
     argv += _targets_for(scope, targets)
     return argv
 
@@ -197,9 +262,15 @@ def parse_xml(xml_text: str, scope: Scope | None = None,
             proto = pnode.get("protocol", "tcp")
 
             snode = pnode.find("service")
+            name = snode.get("name", "") if snode is not None else ""
+            if name and snode.get("method") == "table" and not name.endswith("?"):
+                # nmap got no answer and looked the port up in its services
+                # table. Its text output marks that guess with a "?", and so
+                # do we, so nothing downstream takes it for an identification.
+                name += "?"
             svc = Service(
                 host=addr, port=port, proto=proto, state=port_state,
-                name=(snode.get("name", "") if snode is not None else ""),
+                name=name,
                 product=(snode.get("product", "") if snode is not None else ""),
                 version=(snode.get("version", "") if snode is not None else ""),
                 extrainfo=(snode.get("extrainfo", "") if snode is not None else ""),
@@ -237,6 +308,21 @@ _REVIEW_SCRIPTS = {
 }
 
 
+# http-* scripts whose output is housekeeping. They stay in the report as
+# info findings, but there is nothing in them for an auditor to decide, and
+# on the lab they were a quarter of the manual review queue.
+_NO_DECISION_SCRIPTS = {
+    "http-date", "http-fetch", "http-headers", "http-useragent-tester",
+    "http-mobileversion-checker", "http-referer-checker", "http-server-header",
+    "http-favicon", "http-generator", "http-chrono",
+}
+
+
+# A script reporting that it found nothing ("false", "Couldn't find any
+# comments.") leaves no question for the reviewer either.
+_NOTHING_FOUND_RE = re.compile(r"(false|couldn't find any [^\n]*)$", re.I)
+
+
 def _findings_from_scripts(svc: Service, source: str) -> list[Finding]:
     out: list[Finding] = []
     for sid, text in svc.scripts.items():
@@ -259,7 +345,9 @@ def _findings_from_scripts(svc: Service, source: str) -> list[Finding]:
             continue
 
         sev, desc = _SCRIPT_SEVERITY.get(sid, ("info", f"nmap script `{sid}` output."))
-        needs_review = sid in _REVIEW_SCRIPTS or sid.startswith("http-")
+        needs_review = (sid in _REVIEW_SCRIPTS or (
+            sid.startswith("http-") and sid not in _NO_DECISION_SCRIPTS)
+        ) and not _NOTHING_FOUND_RE.match(text.strip())
         out.append(Finding(
             title=f"{sid} on {svc.host}:{svc.port}/{svc.proto}",
             severity=sev, host=svc.host, port=svc.port, proto=svc.proto,
@@ -309,6 +397,77 @@ def salvage_partial_xml(xml_text: str) -> tuple[str, bool]:
     return repaired + "</nmaprun>", True
 
 
+def host_counts(xml_text: str) -> dict[str, int] | None:
+    """nmap's own tally of the run: {"up", "down", "total"}.
+
+    This is the only place the XML says how many addresses did not answer
+    host discovery. With --open a down host never gets a `<host>` element.
+    None when the scan was cut short before nmap wrote the tally.
+    """
+    try:
+        reject_hostile_xml(xml_text)
+        node = ET.fromstring(xml_text).find("runstats/hosts")  # noqa: S314
+    except (ValueError, ET.ParseError):
+        return None
+    if node is None:
+        return None
+    try:
+        return {k: max(0, int(node.get(k, "0"))) for k in ("up", "down", "total")}
+    except ValueError:
+        return None
+
+
+_RETRANSMIT_RE = re.compile(
+    r"^Warning: (\S+) giving up on port because retransmission cap hit", re.M)
+_HOST_TIMEOUT_RE = re.compile(r"^Skipping host (.+?) due to host timeout", re.M)
+_NAME_IP_RE = re.compile(r"\(([0-9A-Fa-f:.]+)\)$")
+
+
+def accuracy_warnings(stdout: str, xml_text: str = "",
+                      scope: Scope | None = None) -> dict[str, list[str]]:
+    """Hosts nmap says it scanned less thoroughly than asked.
+
+    `retransmission`: nmap stopped retrying some ports on the host
+    (stdout only). `host_timeout`: nmap abandoned the host (stdout, and
+    `<host timedout="true">` in the XML). The text comes from a scan of the
+    target, so a host is kept only if it is an address in scope.
+    """
+    found: dict[str, set[str]] = {"retransmission": set(), "host_timeout": set()}
+    found["retransmission"].update(_RETRANSMIT_RE.findall(stdout or ""))
+    for name in _HOST_TIMEOUT_RE.findall(stdout or ""):
+        inner = _NAME_IP_RE.search(name.strip())     # "name (ip)" or just "ip"
+        found["host_timeout"].add(inner.group(1) if inner else name.strip())
+    if xml_text:
+        try:
+            reject_hostile_xml(xml_text)
+            root = ET.fromstring(xml_text)  # noqa: S314
+        except (ValueError, ET.ParseError):
+            root = None
+        for hnode in (root.findall("host") if root is not None else []):
+            if hnode.get("timedout") == "true":
+                for anode in hnode.findall("address"):
+                    if anode.get("addrtype") in ("ipv4", "ipv6"):
+                        found["host_timeout"].add(anode.get("addr") or "")
+    out: dict[str, list[str]] = {}
+    for kind, hosts in found.items():
+        kept = []
+        for h in hosts:
+            try:
+                ipaddress.ip_address(h)
+            except ValueError:
+                continue
+            if scope is None or scope.contains(h):
+                kept.append(h)
+        out[kind] = sorted(kept, key=lambda h: (len(h), h))
+    return out
+
+
+def split_hosts(hosts: list[str], size: int) -> list[list[str]]:
+    if size <= 0 or len(hosts) <= size:
+        return [hosts] if hosts else []
+    return [hosts[i:i + size] for i in range(0, len(hosts), size)]
+
+
 def chunk_targets(scope: Scope, chunk_size: int) -> list[list[str]]:
     """Split the scope into batches of individual hosts.
 
@@ -341,14 +500,35 @@ def _read_xml(base: Path) -> tuple[str, bool]:
     return salvage_partial_xml(xml_file.read_text(errors="replace"))
 
 
+def run_sweep(runner: Runner, scope: Scope, policy: Policy,
+              targets: list[str] | None = None,
+              label: str = "sweep-tcp") -> tuple[Result, str, bool]:
+    """Run one port sweep. Returns (result, xml_text, was_salvaged).
+
+    The files are `raw/<label>.*`, deliberately not `nmap-*.xml`: a sweep is
+    an intermediate result, and anything that re-reads `nmap-*.xml` as
+    findings (evals/score.py) must not pick it up.
+    """
+    if not runner.dry_run:
+        require("nmap")
+    base = runner.store.raw_path(label)
+    argv = sweep_argv(scope, policy, str(base), targets=targets)
+    res = runner.run(argv, stage=f"discover:{label}", timeout=policy.nmap.timeout_sec,
+                     stdout_name=label)
+    xml, salvaged = _read_xml(base)
+    return res, xml, salvaged
+
+
 def run_tcp(runner: Runner, scope: Scope, policy: Policy,
             targets: list[str] | None = None,
-            label: str = "tcp") -> tuple[Result, str, bool]:
+            label: str = "tcp", ports: str | None = None,
+            assume_up: bool = False) -> tuple[Result, str, bool]:
     """Run the TCP pass. Returns (result, xml_text, was_salvaged)."""
     if not runner.dry_run:
         require("nmap")
     base = runner.store.raw_path(f"nmap-{label}")
-    argv = tcp_argv(scope, policy, str(base), targets=targets)
+    argv = tcp_argv(scope, policy, str(base), targets=targets,
+                    ports=ports, assume_up=assume_up)
     res = runner.run(argv, stage=f"discover:{label}", timeout=policy.nmap.timeout_sec,
                      stdout_name=f"nmap-{label}")
     xml, salvaged = _read_xml(base)

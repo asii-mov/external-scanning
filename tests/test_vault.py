@@ -19,7 +19,7 @@ from extscan import pipeline, vault
 from extscan.models import Finding
 from extscan.resilience import Degradation
 from extscan.scope import Scope
-from extscan.screenshots import SHOTS_FILE, Shot, plan, save
+from extscan.screenshots import SHOTS_FILE, Shot, load, plan, save
 from extscan.store import Store
 
 ROOT = Path(__file__).parent.parent
@@ -48,7 +48,7 @@ class _VaultCase(unittest.TestCase):
             (self.store.path / s.file).parent.mkdir(parents=True, exist_ok=True)
             (self.store.path / s.file).write_bytes(PNG)
             s.status, s.http_status, s.page_title = "captured", 200, "Lab page"
-        save(self.store.path, shots)
+        save(self.store, shots)
         return shots
 
     def render(self):
@@ -193,7 +193,7 @@ class TestHostileText(_VaultCase):
             evidence=f"GET http://127.0.0.2:8080 -> 200 OK\ntitle: {hostile}")])
         shots = self.fake_screenshots()
         shots[0].page_title = hostile
-        save(self.store.path, shots)
+        save(self.store, shots)
         root = self.render()
         live = [r"(?<!\\)!\[\[\.\./", r"(?<!\\)<img", r"(?<!\\)%%", r"(?<!\\)\]\(http"]
         for name, text in self.notes(root).items():
@@ -266,6 +266,7 @@ class TestScreenshotStage(_VaultCase):
         self.assertEqual(len(gaps), 1)
         self.assertEqual(gaps[0].stage, "screenshot")
         self.assertIn("text only", gaps[0].impact)
+        self.assertEqual(load(self.store), [])
         self.assertFalse((self.store.path / SHOTS_FILE).exists())
 
     def test_failed_root_is_a_gap_and_a_retry_clears_it(self):

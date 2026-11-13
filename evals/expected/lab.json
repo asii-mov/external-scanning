@@ -1,0 +1,40 @@
+{
+  "about": "Ground truth for a run against the lab (tests/lab.py on 127.0.0.2), scored by evals/score.py. Titles are regular expressions; source is a prefix. `needs` names the stage an item depends on: when that stage has a recorded coverage gap the item is reported as not assessed instead of missed.",
+  "must_find": [
+    {"id": "docker-api", "port": 2375, "source": "extscan:exposure", "title": "^Docker API \\(plaintext\\) reachable", "severity": "critical", "review": true},
+    {"id": "mysql", "port": 3306, "source": "extscan:exposure", "title": "^MySQL reachable", "severity": "high", "review": true},
+    {"id": "redis", "port": 6379, "source": "extscan:exposure", "title": "^Redis reachable", "severity": "critical", "review": true},
+    {"id": "redis-nuclei", "port": 6379, "source": "nuclei:exposed-redis", "title": "Unauthenticated Access", "severity": "high", "needs": "probe:nuclei"},
+    {"id": "elasticsearch", "port": 9200, "source": "extscan:exposure", "title": "^Elasticsearch reachable", "severity": "critical", "review": true},
+    {"id": "ssh", "port": 2222, "source": "extscan:ssh", "title": "^SSH service", "severity": "info", "review": true},
+    {"id": "env-8080", "port": 8080, "source": "extscan:paths", "title": "^Exposed /\\.env ", "severity": "high", "review": true},
+    {"id": "env-credentials-8080", "port": 8080, "source": "extscan:secret_file", "title": "^Credential-bearing file readable", "severity": "critical", "review": true},
+    {"id": "env-nuclei-8080", "port": 8080, "source": "nuclei:generic-env", "title": "Env File Disclosure", "severity": "high", "needs": "probe:nuclei"},
+    {"id": "unauth-writes-8080", "port": 8080, "source": "extscan:openapi", "title": "declare no authentication, including 2 that modify data", "severity": "high", "review": true, "confidence": "tentative"},
+    {"id": "admin-endpoint-8080", "port": 8080, "source": "extscan:api", "title": "confirmed reachable: .*/api/admin/users$", "severity": "high", "review": true},
+    {"id": "off-scope-server-8080", "port": 8080, "source": "extscan:openapi", "title": "references hosts outside the engagement scope", "severity": "info", "review": true},
+    {"id": "graphql-8080", "port": 8080, "source": "extscan:graphql", "title": "^GraphQL introspection enabled", "severity": "medium", "review": true},
+    {"id": "metrics-8080", "port": 8080, "source": "extscan:paths", "title": "^Exposed /metrics ", "severity": "medium"},
+    {"id": "trace-axd", "port": 8081, "source": "extscan:iis", "title": "/trace\\.axd", "severity": "high", "review": true},
+    {"id": "elmah-axd", "port": 8081, "source": "extscan:iis", "title": "/elmah\\.axd", "severity": "high", "review": true},
+    {"id": "webdav", "port": 8081, "source": "extscan:iis", "title": "^WebDAV appears enabled .* write verbs", "severity": "high", "review": true, "confidence": "tentative"},
+    {"id": "shortname", "port": 8081, "source": "extscan:iis", "title": "8\\.3 short-name", "severity": "medium", "review": true},
+    {"id": "verbose-errors", "port": 8081, "source": "extscan:iis", "title": "^Verbose ASP\\.NET error page", "severity": "medium"},
+    {"id": "env-8443", "port": 8443, "source": "extscan:paths", "title": "^Exposed /\\.env ", "severity": "high", "review": true},
+    {"id": "self-signed", "port": 8443, "source": "extscan:tls", "title": "^Self-signed TLS certificate", "severity": "low", "review": true},
+    {"id": "snmp-public", "port": 10161, "source": "extscan:snmp", "title": "community string `public`", "severity": "high", "needs": "discover:udp"}
+  ],
+  "known_false_positives": [
+    {"id": "rocketmq", "title": "RocketMQ", "why": "The lab's fake Docker and Elasticsearch listeners answer the template's raw TCP probe. A real one would not."},
+    {"id": "redis-on-http", "source": "nuclei:redis-require-auth", "ports": [2375, 9200], "why": "Same cause: the fake HTTP listeners answer a Redis probe."}
+  ],
+  "known_misses": [
+    {"id": "snmp-walk", "source": "extscan:snmp_walk", "why": "The lab agent echoes the requested OID on GETNEXT, so the walk ends empty. The snmp_walk chase handler has no end-to-end coverage until the agent serves a table."}
+  ],
+  "thresholds": {
+    "recall": 1.0,
+    "max_review_noise": 0.22,
+    "max_duplication": 2.0,
+    "max_open_leads": 0
+  }
+}

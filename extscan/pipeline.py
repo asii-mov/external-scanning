@@ -11,8 +11,9 @@ from __future__ import annotations
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import __version__, vault
+from . import __version__, discovery, vault
 from . import chase as chase_mod
+from . import enrich as enrich_mod
 from . import probes as probes_mod
 from . import report as report_mod
 from . import screenshots as shots_mod
@@ -31,7 +32,7 @@ from .resilience import (
 from .runner import Runner, ToolMissing, doctor, udp_rerun_command
 from .scope import Scope
 from .store import Store
-from .tools import dns, nmap, nuclei, subdomains
+from .tools import dns, nmap, nuclei, subdomains, webid
 from .triage import triage
 
 
@@ -74,102 +75,15 @@ def _warn(store: Store, message: str) -> None:
 
 def _run_nmap_pass(store: Store, scope: Scope, policy: Policy, runner: Runner,
                    kind: str, resume: bool) -> dict | None:
-    """Run one nmap pass (tcp or udp) in checkpointed chunks.
+    """Run one nmap pass (tcp or udp) in checkpointed batches.
 
-    Chunking is what makes this survivable. A /22 scanned in one invocation is
+    Batching is what makes this survivable. A /22 scanned in one invocation is
     all-or-nothing: a timeout two hours in leaves nothing usable. In batches,
     each completed batch is checkpointed and parsed, a timeout costs only the
     batch in flight, and `--resume`/`extscan resume` picks up from there.
+    The batching, and the gaps each batch can leave, live in `discovery.py`.
     """
-    runner_fn = nmap.run_tcp if kind == "tcp" else nmap.run_udp
-    chunks = nmap.chunk_targets(scope, policy.nmap.chunk_size)
-    if not chunks:
-        return None
-
-    stage_key = f"discover:{kind}"
-    done = store.checkpoints(stage_key) if resume else set()
-    if not resume:
-        store.clear_checkpoints(stage_key)
-
-    totals = {"hosts": 0, "services": 0, "chunks": len(chunks),
-              "chunks_done": 0, "chunks_failed": 0, "salvaged": 0, "skipped": len(done)}
-    aborter = AbortThreshold(min_samples=max(4, len(chunks) // 2), failure_ratio=1.0)
-
-    for index, targets in enumerate(chunks, start=1):
-        key = f"chunk-{index:04d}"
-        if key in done:
-            continue
-        label = f"{kind}-{index:04d}"
-        print(f"  [{index}/{len(chunks)}] {len(targets)} host(s)")
-
-        try:
-            res, xml, salvaged = runner_fn(runner, scope, policy,
-                                           targets=targets, label=label)
-        except ToolMissing as exc:
-            store.add_degradation(Degradation(
-                stage=stage_key, component="nmap", reason=str(exc),
-                impact=f"No {kind.upper()} discovery was performed at all. Every "
-                       f"{kind.upper()} finding is absent from this report because "
-                       "the scanner was missing, not because nothing is exposed.",
-                severity="serious", recoverable=True,
-                remedy="Install nmap and re-run `extscan discover <run> --resume`.",
-            ))
-            _warn(store, str(exc))
-            return None
-
-        if res.skipped:
-            print("    (dry run)")
-            continue
-
-        try:
-            parsed = nmap.parse_xml(xml, scope=scope, source=f"nmap-{kind}") if xml else None
-        except ValueError:
-            parsed = None
-        if parsed:
-            hosts, services, findings = parsed
-            store.save_hosts(hosts)
-            store.save_services(services)
-            store.add_findings(findings)
-            totals["hosts"] += len(hosts)
-            totals["services"] += len(services)
-            totals["chunks_done"] += 1
-            store.checkpoint(stage_key, key)
-            aborter.record(ok=True)
-            store.remove_degradations(lambda d, label=label: d.stage == stage_key and (
-                d.reason.startswith(f"{label} ") or d.reason == NMAP_MISSING))
-
-            if salvaged:
-                totals["salvaged"] += 1
-                store.add_degradation(Degradation(
-                    stage=stage_key, component="nmap",
-                    reason=f"{label} did not finish ({'timeout' if res.timed_out else 'exit ' + str(res.returncode)})",
-                    impact=f"Results for this batch are partial. {len(hosts)} host(s) "
-                           "completed and were recovered from the interrupted scan "
-                           "file; any host after that point was not scanned.",
-                    severity="serious", hosts=targets,
-                    remedy=f"Re-run with a longer nmap.host_timeout, or resume with "
-                           f"`nmap --resume {store.raw_path('nmap-' + label)}.gnmap`.",
-                ))
-                print(f"    ! partial: recovered {len(hosts)} host(s) from an "
-                      "interrupted scan")
-        else:
-            totals["chunks_failed"] += 1
-            aborter.record(ok=False)
-            store.add_degradation(Degradation(
-                stage=stage_key, component="nmap",
-                reason=f"{label} produced no parseable output "
-                       f"({'timed out' if res.timed_out else 'exit ' + str(res.returncode)})",
-                impact=f"{len(targets)} host(s) in this batch were not scanned for "
-                       f"{kind.upper()} services and are absent from the inventory.",
-                severity="serious", hosts=targets,
-                remedy="Inspect commands.jsonl for the error, then "
-                       "`extscan discover <run> --resume`.",
-            ))
-            print(f"    ! batch failed; {len(targets)} host(s) not covered")
-
-        aborter.check(context=f"{kind} discovery")
-
-    return totals
+    return discovery.run_pass(store, scope, policy, runner, kind, resume)
 
 
 def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
@@ -210,7 +124,8 @@ def discover(store: Store, scope: Scope, policy: Policy, runner: Runner,
             print(f"  {summary['udp']['services']} open/responding UDP port(s)")
 
     _check_host_names(store, scope, policy, runner)
-    store.mark_stage("discover", **{k: v for k, v in summary.items() if v})
+    if not runner.dry_run:      # a plan is not a completed stage
+        store.mark_stage("discover", **{k: v for k, v in summary.items() if v})
     return summary
 
 
@@ -247,6 +162,16 @@ def recon(store: Store, scope: Scope, policy: Policy, runner: Runner) -> dict:
 
     totals = {"domains": len(scope.domains), "names": 0,
               "in_scope": 0, "out_of_scope": 0, "sources_failed": 0, "dns_findings": 0}
+
+    if runner.dry_run:
+        # crt.sh and the resolver are queried in-process, so there is no
+        # command to withhold: a dry run says what it would do, asks nothing
+        # and stores nothing.
+        for domain in scope.domains:
+            print(f"  [dry-run] would enumerate {domain} via "
+                  f"{', '.join(policy.recon.sources)} and resolve the names found")
+            _audit_dns(store, scope, policy, runner, domain, [])
+        return {**totals, "dry_run": True}
 
     for domain in scope.domains:
         print(f"→ enumerating {domain} via {', '.join(policy.recon.sources)}")
@@ -326,12 +251,15 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
         return {"probed": 0}
 
     ctx = ProbeContext(scope=scope, policy=policy, runner=runner)
-    all_findings: list[Finding] = []
-    all_leads: list[Lead] = []
+    nuclei_f = nuclei_l = 0     # stored per batch, so counted as they land
+
+    # Before anything picks its targets: a web application on a port nmap
+    # could not name is relabelled here, so nuclei and the probes below see it.
+    webid.run(store, scope, policy, services, dry_run=runner.dry_run, only=only, force=force)
 
     web = [s for s in services if s.is_http]
     unchecked = [s for s in web if "nuclei" not in s.probed_by]
-    if skip_nuclei and unchecked:
+    if skip_nuclei and unchecked and not runner.dry_run:
         _coverage_lost(store, Degradation(
             stage="probe:nuclei", component="nuclei",
             reason="nuclei skipped by the operator (--skip-nuclei)",
@@ -341,29 +269,52 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
             remedy="`extscan probe <run> --only nuclei`, or `extscan resume <run>`.",
         ))
     elif web and not skip_nuclei and (only is None or "nuclei" in only):
-        print(f"→ nuclei against {len(web)} web service(s)")
-        try:
-            res, findings, leads = nuclei.run(runner, scope, policy, services)
-            failure = res.failure if res else ""
-            ran = res is not None and not res.skipped
-        except ToolMissing as exc:
-            findings, leads, failure, ran = [], [], str(exc), False
-        all_findings += findings
-        all_leads += leads
-        print(f"  {len(findings)} result(s), {len(leads)} lead(s)")
-        if failure:
-            _coverage_lost(store, Degradation(
-                stage="probe:nuclei", component="nuclei", reason=f"nuclei {failure}",
-                impact=f"Templated web checks did not complete against {len(web)} web "
-                       "service(s). Any nuclei finding may be missing from this report.",
-                severity="serious", hosts=sorted({w.host for w in web}),
-                remedy="Run nuclei by hand against raw/nuclei-targets.txt to see why, "
-                       "then `extscan probe <run> --only nuclei`.",
-            ))
-        elif ran:
-            store.remove_degradations(lambda d: d.stage == "probe:nuclei")
-            for w in web:
-                store.mark_probed(w.id, "nuclei")
+        # One nuclei run per batch, each stored and marked as it finishes, so
+        # a timeout costs one batch and a re-run does only what is left.
+        todo = web if force else unchecked
+        batches = nuclei.batches(todo, policy.nuclei.batch_size)
+        print(f"→ nuclei against {len(todo)} web service(s) in {len(batches)} batch(es)"
+              + (f"; {len(web) - len(todo)} already checked" if len(todo) < len(web) else ""))
+        still_failing: set[str] = set()
+        for number, batch in enumerate(batches, start=1):
+            label = nuclei.batch_label(batch, everything=len(batch) == len(web))
+            affected = batch
+            targets = f"nuclei-targets-{label}.txt" if label else "nuclei-targets.txt"
+            try:
+                res, findings, leads = nuclei.run(runner, scope, policy, batch, label)
+                failure = res.failure if res else ""
+                ran = res is not None and not res.skipped
+                reason = f"nuclei batch {label} {failure}" if label else f"nuclei {failure}"
+            except ToolMissing as exc:
+                # Every remaining batch would fail the same way: one gap for them all.
+                findings, leads, failure, ran = [], [], str(exc), False
+                reason = f"nuclei {failure}"
+                affected = [w for later in batches[number - 1:] for w in later]
+            print(f"  [{number}/{len(batches)}] {len(findings)} result(s), {len(leads)} lead(s)")
+            if failure:
+                still_failing.add(reason)
+                _coverage_lost(store, Degradation(
+                    stage="probe:nuclei", component="nuclei", reason=reason,
+                    impact=f"Templated web checks did not complete against {len(affected)} "
+                           "web service(s). Any nuclei finding may be missing from this "
+                           "report.",
+                    severity="serious", hosts=sorted({w.host for w in affected}),
+                    remedy=f"Run nuclei by hand against raw/{targets} to see why, "
+                           "then `extscan probe <run> --only nuclei`.",
+                ))
+                if len(affected) > len(batch):
+                    break
+            elif ran:
+                # Stored before the batch is marked, so a crash in between
+                # re-runs the batch instead of losing its results.
+                nuclei_f += store.add_findings(findings)
+                nuclei_l += store.add_leads(leads, max_total=policy.max_leads_per_run)
+                store.mark_probed_many((w.id, "nuclei") for w in batch)
+        if not runner.dry_run:
+            # Every unchecked service was in a batch just now, so the only
+            # nuclei gaps still true are the ones this pass recorded.
+            store.remove_degradations(
+                lambda d: d.stage == "probe:nuclei" and d.reason not in still_failing)
 
     jobs: list[tuple[probes_mod.Probe, object]] = []
     for svc in services:
@@ -374,10 +325,21 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 continue
             jobs.append((p, svc))
 
-    failed: set[tuple[str, str]] = set()
+    if runner.dry_run:
+        # The probes speak HTTP, TLS and SNMP in-process, so there is no
+        # command to withhold: a dry run lists them and sends nothing.
+        for p, svc in jobs:
+            print(f"  [dry-run] would run {p.name} on {svc.id}")
+        return {"probed": 0, "planned": len(jobs), "dry_run": True}
+
+    added_f, added_l = nuclei_f, nuclei_l
     if jobs:
         print(f"→ {len(jobs)} per-service probe(s) across {len(services)} service(s)")
-        with ThreadPoolExecutor(max_workers=max(1, policy.max_workers)) as pool:
+        # Each probe's result is stored as it completes, on this thread, so a
+        # run killed partway keeps what finished and the next run does only
+        # the remainder.
+        pool = ThreadPoolExecutor(max_workers=max(1, policy.max_workers))
+        try:
             futures = {pool.submit(_run_one_probe, ctx, p, svc): (p, svc)
                        for p, svc in jobs}
             for fut in as_completed(futures):
@@ -385,29 +347,23 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 try:
                     findings, leads = fut.result()
                 except Exception as exc:
-                    failed.add((p.name, svc.id))
-                    store.remove_degradations(lambda d, p=p, svc=svc: (
-                        d.stage == f"probe:{p.name}" and d.reason.startswith(f"{svc.id}: ")))
-                    _coverage_lost(store, Degradation(
-                        stage=f"probe:{p.name}", component=p.name,
-                        reason=f"{svc.id}: {type(exc).__name__}: {exc}"[:300],
-                        impact=f"The {p.name} check did not run on {svc.id}.",
-                        hosts=[svc.host],
-                        remedy=f"Fix the cause, then `extscan probe <run> --only {p.name}`.",
-                    ))
+                    with store.transaction():
+                        _clear_probe_gaps(store, p.name, svc.id)
+                        _coverage_lost(store, Degradation(
+                            stage=f"probe:{p.name}", component=p.name,
+                            reason=f"{svc.id}: {type(exc).__name__}: {exc}"[:300],
+                            impact=f"The {p.name} check did not run on {svc.id}.",
+                            hosts=[svc.host],
+                            remedy=f"Fix the cause, then `extscan probe <run> --only {p.name}`.",
+                        ))
                     continue
-                all_findings += findings
-                all_leads += leads
-
-    added_f = store.add_findings(all_findings)
-    added_l = store.add_leads(all_leads, max_total=policy.max_leads_per_run)
-    covered = {(f"probe:{p.name}", f"{svc.id}: ") for p, svc in jobs
-               if (p.name, svc.id) not in failed}
-    store.remove_degradations(lambda d: any(
-        d.stage == stage and d.reason.startswith(prefix) for stage, prefix in covered))
-    for p, svc in jobs:
-        if (p.name, svc.id) not in failed:
-            store.mark_probed(svc.id, p.name)
+                new_f, new_l = _store_probe_result(store, ctx, policy, p, svc, findings, leads)
+                added_f += new_f
+                added_l += new_l
+        finally:
+            # On Ctrl-C (or any other way out): drop what has not started and
+            # wait for what has. Nothing unfinished was marked as done.
+            pool.shutdown(wait=True, cancel_futures=True)
 
     store.mark_stage("probe", findings=added_f, leads=added_l, probes_run=len(jobs))
     print(f"  {added_f} new finding(s), {added_l} new lead(s)")
@@ -416,6 +372,38 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
 
 def _run_one_probe(ctx: ProbeContext, p: probes_mod.Probe, svc):
     return p.run(ctx, svc)
+
+
+def _clear_probe_gaps(store: Store, probe: str, service_id: str) -> None:
+    store.remove_degradations(lambda d: (
+        d.stage == f"probe:{probe}" and d.reason.startswith(f"{service_id}: ")))
+
+
+def _store_probe_result(store: Store, ctx: ProbeContext, policy: Policy,
+                        p: probes_mod.Probe, svc, findings: list[Finding],
+                        leads: list[Lead]) -> tuple[int, int]:
+    """Store one finished probe: its findings and leads, and either the gaps
+    it reported about itself (`ProbeContext.report_gap`) or the mark that
+    says the service is covered. One transaction, so a kill leaves the probe
+    either fully recorded or not recorded and due to run again.
+
+    A probe that reported a gap keeps its findings but is not marked: the
+    next run tries again, and a clean pass clears the gap.
+    """
+    gaps = [g for g in list(ctx.gaps) if (g.probe, g.service_id) == (p.name, svc.id)]
+    with store.transaction():
+        new_f = store.add_findings(findings)
+        new_l = store.add_leads(leads, max_total=policy.max_leads_per_run)
+        _clear_probe_gaps(store, p.name, svc.id)
+        for g in gaps:
+            _coverage_lost(store, Degradation(
+                stage=f"probe:{g.probe}", component=g.probe,
+                reason=f"{g.service_id}: {g.reason}"[:300], impact=g.impact,
+                hosts=[g.host], remedy=g.remedy,
+            ))
+        if not gaps:
+            store.mark_probed(svc.id, p.name)
+    return new_f, new_l
 
 
 def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
@@ -446,6 +434,11 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
         open_leads = [ld for ld in open_leads if ld.depth <= policy.max_lead_depth]
         if not open_leads:
             break
+
+        if runner.dry_run:
+            for lead in open_leads:
+                print(f"  [dry-run] would chase {lead.kind} {lead.url or lead.host}")
+            return {"handled": 0, "planned": len(open_leads), "dry_run": True}
 
         print(f"→ chase round {round_no}: {len(open_leads)} lead(s)")
         for lead in open_leads:
@@ -485,7 +478,7 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
                            "around them are unaffected.",
                     severity="serious",
                     remedy="Restore the model endpoint and run "
-                           "`extscan chase <run> --resume`, or work the open leads by hand.",
+                           "`extscan chase <run>` again, or work the open leads by hand.",
                 ))
                 print(f"  [{lead.kind}] deferred: {str(exc)[:110]}")
                 break
@@ -544,7 +537,7 @@ def screenshot(store: Store, scope: Scope, policy: Policy, force: bool = False,
         return {"captured": 0, "disabled": True}
 
     planned = shots_mod.plan(store.services(), store.findings(), sp.max_pages)
-    previous = {s.url: s for s in shots_mod.load(store.path)}
+    previous = {s.url: s for s in shots_mod.load(store)}
     todo = [s for s in planned
             if force or previous.get(s.url) is None or previous[s.url].status != "captured"]
     if not planned:
@@ -581,7 +574,7 @@ def screenshot(store: Store, scope: Scope, policy: Policy, force: bool = False,
 
     done = {s.url: s for s in todo}
     merged = [done.get(s.url) or previous.get(s.url) or s for s in planned]
-    shots_mod.save(store.path, merged)
+    shots_mod.save(store, merged)
 
     failed_roots = [s for s in merged if s.kind == "service" and s.status != "captured"]
     store.remove_degradations(lambda d: d.stage == "screenshot" and d.reason == SHOTS_FAILED)
@@ -598,6 +591,15 @@ def screenshot(store: Store, scope: Scope, policy: Policy, force: bool = False,
     store.mark_stage("screenshot", captured=captured, failed=len(merged) - captured)
     print(f"  {captured} of {len(merged)} page(s) captured")
     return {"captured": captured, "failed": len(merged) - captured}
+
+
+def enrich(store: Store, scope: Scope, policy: Policy, runner: Runner | None = None,
+           fetcher=None) -> dict:
+    """Rank findings by known exploitation (CISA KEV, EPSS) and tag hosts
+    that sit in published CDN ranges. Downloads public lists only; a dry run
+    downloads nothing. `fetcher` replaces the download, for tests."""
+    return enrich_mod.run_stage(store, scope, policy,
+                                dry_run=bool(runner and runner.dry_run), fetcher=fetcher)
 
 
 def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dict:
@@ -620,7 +622,7 @@ def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dic
                                      meta, store.commands(), store.degradations())
     paths["vault"] = vault.write_vault(store.path, scope, triaged, hosts, services, meta,
                                        store.commands(), store.degradations(), leads,
-                                       shots_mod.load(store.path))
+                                       shots_mod.load(store))
     store.mark_stage("report", **{k: str(v) for k, v in paths.items()})
     return {"paths": {k: str(v) for k, v in paths.items()}, "stats": triaged.stats,
             "review_items": len(triaged.review_queue)}
@@ -635,5 +637,6 @@ def run_all(store: Store, scope: Scope, policy: Policy, runner: Runner,
     out["probe"] = probe(store, scope, policy, runner)
     out["chase"] = chase_leads(store, scope, policy, runner, rounds=rounds, llm=llm)
     out["screenshot"] = screenshot(store, scope, policy, dry_run=runner.dry_run)
+    out["enrich"] = enrich(store, scope, policy, runner)
     out["report"] = make_report(store, scope, runner)
     return out

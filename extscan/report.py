@@ -16,6 +16,7 @@ import json
 import time
 from pathlib import Path
 
+from . import enrich
 from .models import Finding, Host, Service
 from .resilience import Degradation
 from .scope import Scope
@@ -49,6 +50,48 @@ def _fence(text: str, limit: int = 2500) -> str:
 def _esc(text: str) -> str:
     """Escape pipes and newlines for Markdown table cells."""
     return (text or "").replace("|", "\\|").replace("\n", " ").strip()
+
+
+def _exploited(kev: bool, epss: float | None, version_match: bool = False) -> str:
+    parts = []
+    if kev:
+        parts.append("**KEV**" + (" (version match)" if version_match else ""))
+    if epss is not None:
+        parts.append(f"EPSS {epss:.2f}")
+    return ", ".join(parts) or "-"
+
+
+def _enrichment_lines(stage: dict | None) -> list[str]:
+    """What the exploitation ranking in this report rests on."""
+    if not stage:
+        return ["Findings were not checked against CISA KEV or EPSS, and hosts were not "
+                "checked against CDN ranges: the `enrich` stage did not run.", ""]
+    if stage.get("disabled"):
+        return ["Findings were not checked against CISA KEV or EPSS, and hosts were not "
+                f"checked against CDN ranges: {_esc(str(stage.get('reason', 'disabled')))}.",
+                ""]
+    out = ["Exploitation data used for ranking (severity is never changed by it):", ""]
+    kev, epss = stage.get("kev"), stage.get("epss")
+    if stage.get("skipped"):
+        out.append(f"- KEV and EPSS were not fetched: {_esc(str(stage['skipped']))}.")
+    if kev:
+        out.append(f"- CISA Known Exploited Vulnerabilities catalogue, version "
+                   f"{_esc(str(kev.get('catalog_version') or '?'))}, released "
+                   f"{_esc(str(kev.get('date_released') or '?'))}, "
+                   f"{kev.get('count', '?')} entries, fetched {_esc(str(kev.get('fetched')))}.")
+    if epss:
+        out.append(f"- EPSS model {_esc(str(epss.get('model_version') or '?'))}, scores of "
+                   f"{_esc(str(epss.get('score_date') or '?'))}, fetched "
+                   f"{_esc(str(epss.get('fetched')))}. {enrich.EPSS_ATTRIBUTION}")
+    ranges = (stage.get("networks") or {}).get("ranges") or {}
+    if ranges:
+        out.append("- CDN and cloud address ranges published by: "
+                   + ", ".join(f"{_esc(p)} ({r.get('networks', '?')} ranges)"
+                               for p, r in ranges.items()) + ".")
+    if not (kev or epss) and not stage.get("skipped"):
+        out.append("- Neither KEV nor EPSS could be loaded; see Coverage gaps.")
+    out.append("")
+    return out
 
 
 def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
@@ -128,13 +171,19 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
           "whether it is acceptable for this client. Each item below names the "
           "specific question an auditor needs to answer. Work top to bottom.")
         w("")
-        w("| # | Severity | Item | Target | An auditor must decide |")
-        w("|---|---|---|---|---|")
+        if any(item.kev for item in triaged.review_queue):
+            w("Items marked **KEV** concern a CVE in CISA's Known Exploited "
+              "Vulnerabilities catalogue. They are listed ahead of items one severity "
+              "level higher, because exploitation is known and not predicted.")
+            w("")
+        w("| # | Severity | Exploited | Item | Target | An auditor must decide |")
+        w("|---|---|---|---|---|---|")
         for item in triaged.review_queue:
             label = _esc(item.title)
             if item.instances:
                 label += f" _(+{len(item.instances) - 1} related, listed below)_"
             w(f"| {item.priority} | {SEV_LABEL.get(item.severity, item.severity)} "
+              f"| {_exploited(item.kev, item.epss, item.version_match)} "
               f"| {label} | `{_esc(item.target)}` | {_esc(item.question)} |")
         w("")
         grouped_items = [i for i in triaged.review_queue if i.instances]
@@ -190,6 +239,9 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
             w(f"- **Finding id:** `{f.id}`")
             if f.tags:
                 w("- **Tags:** " + ", ".join(f"`{t}`" for t in f.tags))
+            for line in enrich.cve_lines(f):
+                head, _, rest = line.partition(": ")
+                w(f"- **{head}:** {_esc(rest)}" if rest else f"- {_esc(line)}")
             w("")
             if f.description:
                 w(f.description)
@@ -228,16 +280,21 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
               f"| {_esc(product) or '-'} | {', '.join(s.probed_by) or '-'} |")
         w("")
 
-    hostnames = [h for h in hosts if h.hostnames or h.os_guess]
+    hostnames = [h for h in hosts if h.hostnames or h.os_guess or h.network]
     if hostnames:
         w("### Host detail")
         w("")
-        w("| Host | Hostnames | OS guess |")
-        w("|---|---|---|")
+        w("| Host | Hostnames | OS guess | Network |")
+        w("|---|---|---|---|")
         for h in hostnames:
             w(f"| `{h.ip}` | {_esc(', '.join(h.hostnames)) or '-'} "
-              f"| {_esc(h.os_guess or '-')} |")
+              f"| {_esc(h.os_guess or '-')} | {_esc(enrich.host_network_label(h)) or '-'} |")
         w("")
+        if any(h.network for h in hosts):
+            w("A host with a network named above sits in that provider's published "
+              "address ranges. Its ports and services may be the provider's shared "
+              "edge and not the client's own server.")
+            w("")
 
     if degradations:
         serious = [d for d in degradations if d.severity == "serious"]
@@ -292,6 +349,8 @@ def render_markdown(scope: Scope, triaged: TriageResult, hosts: list[Host],
     w("- UDP results are less reliable than TCP by nature: silence is ambiguous.")
     w("- Absence of a finding is not evidence of absence of a vulnerability.")
     w("")
+    for line in _enrichment_lines(stages.get("enrich")):
+        w(line)
 
     if meta.get("tool_versions"):
         w("### Tool versions")

@@ -3,7 +3,8 @@
   "nmap": {
     "timing": "-T2",
     "max_retries": 1,
-    "host_timeout": "20m"
+    "host_timeout": "20m",
+    "parallel": 1
   },
   "nuclei": {
     "rate_limit": 10,

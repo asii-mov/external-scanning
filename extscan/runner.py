@@ -13,12 +13,14 @@ Every external command the pipeline runs goes through here so that:
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import shlex
 import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,6 +84,19 @@ class Runner:
         self.store = store
         self.dry_run = dry_run
         self.verbose = verbose
+        # Commands in flight, so a stage running several at once can stop them.
+        self._live: set[subprocess.Popen] = set()
+        self._live_lock = threading.Lock()
+
+    def terminate_running(self) -> int:
+        """Ask every command still running to stop (SIGTERM). Returns how
+        many. Each `run` call concerned then returns a failed Result."""
+        with self._live_lock:
+            procs = list(self._live)
+        for proc in procs:
+            with contextlib.suppress(OSError):
+                proc.terminate()
+        return len(procs)
 
     def run(
         self,
@@ -95,7 +110,10 @@ class Runner:
     ) -> Result:
         argv = [str(a) for a in argv]
         if self.verbose or self.dry_run:
-            print(f"  $ {' '.join(argv)}", flush=True)
+            # One write, so lines from commands started on different threads
+            # never run into each other.
+            sys.stdout.write(f"  $ {' '.join(argv)}\n")
+            sys.stdout.flush()
 
         if self.dry_run:
             self.store.log_command(CommandRecord(
@@ -108,21 +126,10 @@ class Runner:
         timed_out = False
         error = ""
         try:
-            proc = subprocess.run(
-                argv,
-                capture_output=True,
-                text=True,
-                errors="replace",
-                timeout=timeout,
-                input=input_text,
-                shell=False,
-            )
-            rc, out, err = proc.returncode, proc.stdout, proc.stderr
-        except subprocess.TimeoutExpired as exc:
+            rc, out, err = self._execute(argv, timeout, input_text)
+        except subprocess.TimeoutExpired:
             timed_out = True
-            rc = None
-            out = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-            err = (exc.stderr or "") if isinstance(exc.stderr, str) else ""
+            rc, out, err = None, "", ""
             error = f"timed out after {timeout}s"
         except FileNotFoundError:
             raise ToolMissing(argv[0]) from None
@@ -153,6 +160,28 @@ class Runner:
                 f"{' '.join(argv)}\n{err.strip()[:800]}"
             )
         return result
+
+    def _execute(self, argv: list[str], timeout: int,
+                 input_text: str | None) -> tuple[int, str, str]:
+        """`subprocess.run`, with the process on record while it runs so
+        `terminate_running` can reach it."""
+        proc = subprocess.Popen(
+            argv, stdin=subprocess.PIPE if input_text is not None else None,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, errors="replace", shell=False,
+        )
+        with self._live_lock:
+            self._live.add(proc)
+        try:
+            out, err = proc.communicate(input_text, timeout=timeout)
+        except BaseException:       # timeout, Ctrl-C: never leave it running
+            proc.kill()
+            proc.communicate()
+            raise
+        finally:
+            with self._live_lock:
+                self._live.discard(proc)
+        return proc.returncode, out, err
 
     def tool_version(self, tool: str, *args: str) -> str:
         """Best-effort version string for the report appendix."""

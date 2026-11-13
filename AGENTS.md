@@ -33,6 +33,7 @@ truth.
 | What extscan does, safety properties, failure handling | `README.md` |
 | Local lab: ports, expected findings, UDP, troubleshooting | `docs/LAB.md` |
 | Claude Code skill for driving extscan on an engagement | `.claude/skills/extscan/SKILL.md` |
+| The same skill for Codex (untracked; differs only in the `--source` label) | `.agents/skills/extscan/SKILL.md` |
 
 ## Code
 
@@ -40,11 +41,15 @@ truth.
 |---|---|
 | CLI entry point | `extscan/cli.py` |
 | Stages: discover, probe, chase, report | `extscan/pipeline.py` |
+| nmap passes: batching, sweep-then-fingerprint, discovery gaps | `extscan/discovery.py` |
 | Per-service probes (one function per service family) | `extscan/probes.py` |
+| Naming web services nmap could not, virtual hosts, CDN/WAF signatures | `extscan/tools/webid.py`, `vhost.py`, `waf.py` |
+| KEV and EPSS ranking, CDN range tagging | `extscan/enrich.py` |
+| Run-to-run diff and its "not re-checked" rules | `extscan/diff.py` |
 | Tool adapters (nmap, nuclei, sslscan, SNMP, IIS, subdomains) | `extscan/tools/` |
 | Defaults, profiles, excluded NSE scripts and nuclei tags | `extscan/policy.py` |
 | Scope loading and per-request scope checks | `extscan/scope.py` |
-| Run directory state (`runs/<run-id>/`) | `extscan/store.py` |
+| Run directory state (`runs/<run-id>/state.db`, SQLite), legacy JSON import, export | `extscan/store.py` |
 | Retries, circuit breaker, coverage gaps (`Degradation`) | `extscan/resilience.py` |
 | Report rendering (`report.md`, `report.json`) | `extscan/report.py` |
 | Obsidian vault: the pentest narrative, host and finding notes | `extscan/vault.py` |
@@ -59,6 +64,12 @@ truth.
 | Failed and missing tools must be gaps, never clean passes | `tests/test_coverage_gaps.py` |
 | Safety properties (no DoS, no credential testing, screenshots in scope) | `tests/test_safety_invariants.py` |
 | Vault links, ordering, unredacted evidence, hostile text, screenshot stage | `tests/test_vault.py` |
+| Evals: detection, false positives, cost, agent behaviour | `evals/` (`evals/README.md`), run by `tests/test_evals.py` |
+| CLI flags, policy loading, `--dry-run` sending nothing | `tests/test_agent_interface.py` |
+| Store semantics, crash safety, threads, legacy runs, export | `tests/test_store.py` |
+| Discovery gaps, two-phase discovery, nuclei batches | `tests/test_discovery_accuracy.py` |
+| Unnamed web ports, virtual hosts, WAF and throttling | `tests/test_web_coverage.py` |
+| KEV/EPSS, CDN tags; the diff states | `tests/test_enrich.py`, `tests/test_diff.py` |
 | Failure-state fuzzer (opt-in, several minutes) | `tests/fuzz_failures.py` |
 | Minimized fuzzer counterexamples, replayed every fuzz run | `tests/fuzz_corpus.json` |
 | Captured scanner output for parser tests | `tests/fixtures/*.xml`, `tests/fixtures/*.jsonl` |

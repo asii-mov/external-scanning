@@ -11,12 +11,13 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from extscan import pipeline, probes, runner
-from extscan.models import Host, Service
+from extscan.models import Finding, Host, Lead, Service
 from extscan.policy import Policy
 from extscan.runner import Runner
 from extscan.scope import Scope
@@ -181,6 +182,112 @@ class TestProbeFailure(_Stage):
         self.assertNotIn("sslscan", after.probed_by)
         record = json.loads((self.store.path / "commands.jsonl").read_text().splitlines()[-1])
         self.assertEqual(record["error"], "timed out after 1s")
+
+
+class _Killed(BaseException):
+    """Stands in for Ctrl-C or a kill: not an Exception, so nothing handles it."""
+
+
+class TestProbeResultsSurviveAKill(_Stage):
+    """Each probe's result is stored when it completes, not when the whole
+    pool has finished. A stage that dies partway keeps what it had."""
+
+    def setUp(self):
+        super().setUp()
+        self.services = [Service(host="127.0.0.1", port=2200 + i, proto="tcp", name="ssh")
+                         for i in range(6)]
+        self.store.save_services(self.services)
+        self.policy.max_workers = 1          # one probe at a time, in service order
+        self.ssh = next(p for p in probes.REGISTRY if p.name == "ssh")
+        self.ran: list[int] = []
+        self.die_on: int | None = 2203
+        self.report_gap_on: int | None = None
+
+    def fake_ssh(self, ctx, svc):
+        self.ran.append(svc.port)
+        if svc.port == self.die_on:
+            # The kill lands once the three results before it are on disk.
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline and len(self.on_disk().findings()) < 3:
+                time.sleep(0.01)
+            raise _Killed
+        if self.die_on and svc.port > self.die_on:
+            time.sleep(0.5)     # a probe in flight when the kill lands
+        if svc.port == self.report_gap_on:
+            ctx.report_gap("ssh", svc, reason="cut short", impact="not covered")
+        return ([Finding(title=f"SSH on {svc.port}", host=svc.host, port=svc.port,
+                         source="extscan:ssh")],
+                [Lead(kind="web_paths", host=svc.host, port=svc.port)])
+
+    def on_disk(self) -> Store:
+        """What another process would read from the run directory right now."""
+        return Store(self.store.path)
+
+    def run_probe(self):
+        with mock.patch.object(self.ssh, "run", side_effect=self.fake_ssh), \
+                contextlib.redirect_stdout(io.StringIO()):
+            return pipeline.probe(self.store, self.scope, self.policy, self.runner,
+                                  only=["ssh"])
+
+    def marked(self) -> list[int]:
+        return [s.port for s in self.on_disk().services() if "ssh" in s.probed_by]
+
+    def test_killed_partway_keeps_finished_probes_and_a_rerun_does_the_rest(self):
+        with self.assertRaises(_Killed):
+            self.run_probe()
+        disk = self.on_disk()
+        self.assertEqual(sorted(f.port for f in disk.findings()), [2200, 2201, 2202])
+        self.assertEqual(sorted(ld.port for ld in disk.leads()), [2200, 2201, 2202])
+        self.assertEqual(self.marked(), [2200, 2201, 2202])
+        self.assertEqual(disk.degradations(), [])
+        self.assertNotIn("probe", disk.meta().get("stages", {}))
+        self.assertEqual(self.ran[:4], [2200, 2201, 2202, 2203])
+
+        self.ran.clear()
+        self.die_on = None
+        result = self.run_probe()
+        self.assertEqual(self.ran, [2203, 2204, 2205])
+        self.assertEqual((result["probed"], result["findings"], result["leads"]), (3, 3, 3))
+        self.assertEqual(self.marked(), [2200 + i for i in range(6)])
+        self.assertEqual(len(self.on_disk().findings()), 6)
+        self.assertIn("probe", self.on_disk().meta()["stages"])
+
+    def test_nothing_queued_behind_the_kill_is_marked_or_left_running(self):
+        with self.assertRaises(_Killed):
+            self.run_probe()
+        # At most the one probe the worker had already picked up ran after it.
+        self.assertLessEqual(len(self.ran), 5)
+        self.assertNotIn(2205, self.ran)
+        self.assertEqual(self.marked(), [2200, 2201, 2202])
+
+    def test_gap_rules_hold_when_results_are_stored_one_by_one(self):
+        """A probe that raised or reported a gap is not marked, its findings
+        are kept, and a clean re-run clears the gap."""
+        self.die_on = None
+        self.report_gap_on = 2201
+
+        def flaky(ctx, svc):
+            if svc.port == 2204:
+                self.ran.append(svc.port)
+                raise RuntimeError("boom")
+            return self.fake_ssh(ctx, svc)
+
+        with mock.patch.object(self.ssh, "run", side_effect=flaky), \
+                contextlib.redirect_stdout(io.StringIO()):
+            pipeline.probe(self.store, self.scope, self.policy, self.runner, only=["ssh"])
+        self.assertEqual(self.marked(), [2200, 2202, 2203, 2205])
+        self.assertEqual(sorted(d.reason for d in self.store.degradations()),
+                         ["127.0.0.1/tcp/2201: cut short",
+                          "127.0.0.1/tcp/2204: RuntimeError: boom"])
+        self.assertEqual(sorted(f.port for f in self.store.findings()),
+                         [2200, 2201, 2202, 2203, 2205])       # 2201's finding is kept
+
+        self.ran.clear()
+        self.report_gap_on = None
+        self.run_probe()
+        self.assertEqual(self.ran, [2201, 2204])
+        self.assertEqual(self.store.degradations(), [])
+        self.assertEqual(self.marked(), [2200 + i for i in range(6)])
 
 
 class TestGapsClearWhenRetrySucceeds(_Stage):

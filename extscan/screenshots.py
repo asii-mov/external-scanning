@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import contextlib
 import html
-import json
 import re
 import time
 from collections.abc import Callable, Generator
@@ -33,8 +32,9 @@ from urllib.parse import urljoin, urlsplit
 from .models import Finding, Service, severity_rank
 from .policy import ScreenshotPolicy
 from .scope import Scope, ScopeError
+from .store import STATE_FILES, Store
 
-SHOTS_FILE = "screenshots.json"
+SHOTS_FILE = STATE_FILES["screenshots"]     # the file name in old runs and in exports
 SHOTS_DIR = "screenshots"
 MAX_HOPS = 5
 
@@ -111,20 +111,20 @@ def plan(services: list[Service], findings: list[Finding], limit: int) -> list[S
     return (roots + extra)[:max(limit, len(roots))]
 
 
-def load(run_dir: Path) -> list[Shot]:
-    p = run_dir / SHOTS_FILE
-    if not p.exists():
-        return []
+def _store(run: Store | Path) -> Store:
+    return run if isinstance(run, Store) else Store(run)
+
+
+def load(run: Store | Path) -> list[Shot]:
+    """The screenshot records of a run, given its Store or its directory."""
     try:
-        return [Shot.from_dict(d) for d in json.loads(p.read_text())]
-    except (json.JSONDecodeError, TypeError):
+        return [Shot.from_dict(d) for d in _store(run).screenshots()]
+    except TypeError:
         return []
 
 
-def save(run_dir: Path, shots: list[Shot]) -> None:
-    tmp = run_dir / f".{SHOTS_FILE}.tmp"
-    tmp.write_text(json.dumps([s.to_dict() for s in shots], indent=2))
-    tmp.replace(run_dir / SHOTS_FILE)
+def save(run: Store | Path, shots: list[Shot]) -> None:
+    _store(run).save_screenshots(s.to_dict() for s in shots)
 
 
 # A shooter takes (url, output path) and returns what the page said about

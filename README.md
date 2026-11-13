@@ -15,7 +15,7 @@ automation proved are exposed but cannot judge, each with the specific question
 an auditor needs to answer.
 
 ```
-scope → discover (nmap TCP+UDP) → probe (per-service) → chase (follow-ups) → triage → report
+scope → discover (nmap TCP+UDP) → probe (per-service) → chase (follow-ups) → enrich → triage → report
                                          ↑_______________________|  bounded loop
 ```
 
@@ -25,6 +25,13 @@ scope → discover (nmap TCP+UDP) → probe (per-service) → chase (follow-ups)
 directory, so you can stop after discovery, look at what is open, change the
 policy, and carry on. That is how audit work actually goes. It also means a
 dropped SSH session costs you nothing.
+
+State is a SQLite database, `runs/<run-id>/state.db` (standard library, one
+transaction per change), beside `run.json`, the command log `commands.jsonl`
+and `raw/`. Read it with the CLI (`extscan hosts|services|findings|leads|gaps|status
+<run> --json`) or write plain JSON copies with `extscan export <run>`. Runs
+made before the database existed still open, render and diff; the first
+write converts them and keeps the old files in `legacy-json/`.
 
 **Findings are separate from judgement.** A tool can establish that Swagger UI
 is published. It cannot decide whether that is acceptable for this client.
@@ -143,21 +150,27 @@ extscan probe latest                 # nuclei + per-service probes
 extscan leads latest                 # what is worth a closer look
 extscan chase latest --rounds 2      # resolve the follow-ups
 extscan screenshot latest            # headless Chromium, every request scope-checked
+extscan enrich latest                # KEV and EPSS ranking, CDN tagging (public feeds only)
 extscan report latest                # report.md, report.json, report/ (Obsidian vault)
 extscan gaps latest                  # what did NOT get checked
+extscan diff <old-run> latest        # what changed since the last assessment
 ```
 
 Interrupted? `extscan resume latest` continues from the last checkpoint.
 
 Or unattended: `extscan run --scope scope.json`
 
-`--dry-run` prints every command without sending a packet. Worth doing on a new
-engagement before the real thing.
+`--dry-run` prints every command, probe and follow-up that would run, sends
+nothing and marks nothing as done. Worth doing on a new engagement
+before the real thing. `--json`, `--dry-run` and the other global flags work
+before or after the subcommand.
 
 Profiles: `quick`, `standard`, `thorough` (all 65535 TCP ports — hours on a
 wide range). To choose the TCP ports on their own, pass `--tcp-ports` to
 `init` or `run`: `all` (1-65535), `top` (the standard list), `quick` (25
-common ports), or a list such as `22,80,8000-8100`. Override anything else
+common ports), or a list such as `22,80,8000-8100`. `nmap.parallel` runs that
+many discovery batches at once (default 1); it multiplies the load on the
+target network, so agree the rate first. Override anything else
 with a policy file; see
 `examples/policy.gentle.json` for a rate-limited configuration suitable for
 fragile infrastructure.
@@ -167,9 +180,14 @@ fragile infrastructure.
 | Stage | Covers |
 |---|---|
 | `discover` | nmap TCP (SYN when privileged, connect otherwise) + UDP, service/version detection, `default,safe,vuln` NSE categories, OS fingerprint |
+| `discover` on large scopes | when the scope has more hosts than `nmap.chunk_size`, discovery runs in two phases: a port sweep of every address with no version detection, then the full scan only on hosts that had an open port, on the union of those ports. On a sparse /24 the lab eval goes from 8 nmap runs to 2 for the same services. `nmap.sweep` is `auto`, `always` or `never` |
+| `discover` → host discovery | wider than nmap's default, which unprivileged is a connect to ports 80 and 443 only: ICMP echo and timestamp, SYN to 22 common ports, ACK and UDP probes (`nmap.discovery_probes`; unprivileged runs send the SYN probes only) |
 | `discover` → dns | the host names nmap reported for each live in-scope address, checked one by one for dangling CNAME and MX records, with findings on that address. Names under no scope domain are listed in one info finding, so the reviewer can add the client's domains and get the zone checks. Skip with `dns.skip: ["host-names"]` |
-| `probe` → `nuclei` | templated web checks across every discovered HTTP service at once |
-| `probe` → `http_fingerprint` | root page, fingerprint and security headers, ~23 disclosure paths with soft-404 filtering |
+| `probe` → `web_identify` | open TCP ports nmap could not name (`unknown`, `tcpwrapped`, or only guessed from its port table) are asked one TLS handshake and one GET, so an application on an odd port still gets the web checks |
+| `probe` → `nuclei` | templated web checks across every discovered HTTP service, in batches of `nuclei.batch_size`, each checkpointed. A re-run covers only services not yet done; `--force` repeats all |
+| `probe` → `http_fingerprint` | root page, fingerprint and security headers, ~23 disclosure paths with soft-404 filtering (each answer is compared with the server's answer for a path that cannot exist) |
+| `probe` → `http_fingerprint` (edge) | names the CDN or WAF in front of a service from its headers and cookies, and notices being throttled or blocked (a 429, a challenge header, a run of dropped requests, one block page for every path). Blocked path checks are a coverage gap, not a clean result |
+| `probe` → `vhosts` | requests `/` once for each name tied to the address (reverse DNS, in-scope names from recon, certificate SANs), sending the name as Host header and SNI to the in-scope IP. A name counts only if its page differs from both the by-address page and the page for a name that cannot exist. Reported for review: the application was not otherwise tested |
 | `probe` → `tls` | certificate detail, expiry, self-signing, which TLS versions are actually offered |
 | `probe` → `snmp` | default/guessable community strings, read-only, built-in SNMP client |
 | `probe` → `exposure` | databases, management interfaces and legacy services that should not face the internet |
@@ -178,6 +196,8 @@ fragile infrastructure.
 | `probe` → `sslscan` | cipher-level TLS audit — RC4/3DES/export suites, CRIME, insecure renegotiation (needs `sslscan`) |
 | `recon` → subdomains | certificate transparency + `subfinder`/`amass`, resolved and split into in-scope (scannable) and out-of-scope (reported, never touched) |
 | `recon` → dns | per scope domain, built-in DNS client: zone transfer (AXFR) against each nameserver, NSEC zone walking (NSEC3 recognised, not cracked), and takeover candidates from dangling CNAME, MX and NS records and lame delegations. Report only. Tune or skip checks with the policy's `dns` section (`resolvers`, `skip`, bounds). `subzones: true` also transfers and walks each delegated sub-zone, up to `max_subzones` |
+| `enrich` | downloads the CISA KEV catalogue and FIRST's EPSS scores (cached for a day, no client data sent) and attaches them to findings that carry a CVE. A KEV-listed finding moves up the manual review queue, above unlisted findings one severity level higher. Also tags addresses inside Cloudflare, CloudFront, Fastly and Google ranges, where port results describe a shared edge and not the client's server. `enrich.enabled: false` or `EXTSCAN_OFFLINE=1` turns it off |
+| `diff` | compares two runs: new, changed, gone and **not re-checked**. A finding absent from the new run is only "gone" if the new run looked: if the host left scope, discovery or the check had a gap, or the stage never ran, it is "not re-checked" with the reason |
 | `chase` → `openapi` | finds the spec, enumerates operations, flags those declaring no authentication (writes especially), notes out-of-scope servers |
 | `chase` → `graphql` | introspection, schema size, whether mutations are exposed |
 | `chase` → `api_endpoint` | confirms one documented-as-open **GET** really is open |
@@ -200,15 +220,21 @@ loud abort. Never a silent pass.
 | Failure | What happens |
 |---|---|
 | **nmap times out or is killed** | Partial XML is salvaged — completed hosts are recovered from the truncated file instead of the whole batch being lost. The gap names which hosts went unscanned. `-oA` output means `nmap --resume` also works. |
+| **A stage after `sudo ... --udp-only` cannot write** | extscan hands files it creates as root back to the run directory's owner. If something is still root-owned it stops and prints the exact `chown` to run. |
 | **Scope is large** | Discovery runs in batches of `nmap.chunk_size` hosts, each checkpointed. A timeout costs one batch; `extscan resume` skips what finished. |
 | **nmap/nuclei/sslscan not installed** | Recorded as a coverage gap naming what was not checked, and the run continues. `doctor` tells you up front. |
 | **nuclei or a probe fails** | A killed, timed-out or crashing tool is a coverage gap naming the services it did not finish, and those services stay unmarked so `extscan probe <run> --only <probe>` retries them. |
+| **Addresses do not answer host discovery** | Counted, and recorded as one coverage gap per pass ("412 of 1024 addresses did not answer"), because they were never port-scanned. `nmap.skip_host_discovery` scans them anyway. |
+| **nmap gives up on a port or times a host out** | nmap says so only in its text output. extscan reads it and records a gap naming the hosts, with the setting to change. |
+| **A UDP port is `open\|filtered`** | Kept in the inventory so the SNMP check still tries it, and recorded as unconfirmed: nmap got no answer, so it may be open or silently dropped. |
+| **A WAF or rate limit blocks the path checks** | A gap naming the service; findings made before the block are kept and the service is retried on the next `probe`. |
+| **A KEV or EPSS feed cannot be fetched** | A gap saying findings are not ranked by exploitation. An older cached copy is used if there is one. |
 | **UDP needs root** | A TCP-only notice before discovery starts, plus a *serious* coverage gap, because "no SNMP findings" and "SNMP was never checked" must never look alike. |
 | **Model endpoint is down** | Retried with jittered backoff, then a circuit breaker opens and stops trying. 100 leads against a dead endpoint cost ~6 HTTP attempts, not 200. Findings keep their deterministic evidence and get a human-review flag. |
 | **Model returns garbage** | Not retried — it answered, just not usefully. Counted separately from an outage. |
 | **A lead keeps failing** | Retried up to `max_lead_attempts` *across runs*, then abandoned with its error recorded, so one unreachable host cannot block the stage on every resume. |
 | **Nearly everything fails** | The abort threshold decides the fault is local (egress, VPN, DNS), stops, and says so — rather than producing a report saying the client's estate is dark. |
-| **Process killed** | All state is on disk after every step. `extscan resume <run>` continues. |
+| **Process killed** | Every change is its own database transaction, and results are stored as each discovery batch, nuclei batch and per-service probe finishes. `extscan resume <run>` does only what is left. |
 
 `extscan gaps <run>` lists them; the report carries them in the summary *and*
 their own section, above the inventory.
@@ -222,6 +248,10 @@ Off by default. Enable per-engagement in a policy file:
          "model": "anthropic.claude-opus-5-5",
          "aws_region": "eu-west-2", "effort": "medium"}}
 ```
+
+Top-level policy keys (`max_workers`, `max_lead_depth`, `max_lead_attempts`,
+`max_leads_per_run`) and every section reject names they do not know, so a
+typo cannot silently leave a default in force.
 
 `provider` is `anthropic` (direct API) or `bedrock`. Bedrock model IDs carry an
 `anthropic.` prefix, accept cross-region (`us.anthropic.…`) and
@@ -352,8 +382,12 @@ the loop — the branching logic is not frozen into the tool.
 ## Tests
 
 ```bash
-uv run python -m unittest discover -s tests -t .   # ~415 tests, ~10s, no network
+uv run python -m unittest discover -s tests -t .   # ~730 tests, ~50s, no network
 ```
+
+`evals/` measures what tests do not: recall against planted issues, false
+positives on clean targets, requests sent per target, time per stage, and
+how an agent using the skill behaves. See `evals/README.md`.
 
 Fixture-driven, so no scanners are needed: captured nmap/sslscan XML and
 nuclei JSONL for the parsers, a fake SNMP agent over a real UDP socket for the
@@ -391,8 +425,8 @@ optional `anthropic` extra installed.
 ## Further work
 
 `docs/ROADMAP.md` has a prioritised list of what else is worth adding, with
-the catch for each. The top of it: virtual-host enumeration and run-to-run
-diffing.
+the catch for each. `reports/External scanning gap analysis.md` rates a
+longer list and names two safety questions to settle first.
 
 ## Legal
 
