@@ -68,8 +68,9 @@ extscan leads <run> --json          # read the follow-ups
 extscan chase <run> --rounds 2      # resolve them
 extscan screenshot <run>            # web services, for the report (optional extra)
 extscan enrich <run>                # KEV and EPSS ranking, CDN tags (public feeds, no client data)
+extscan analyse <run>               # model-written notes, only if llm.enabled is set in the policy
 extscan gaps <run> --json           # what did NOT get checked
-extscan report <run>
+extscan report <run>                # --template FILE for a team's own layout (docs/REPORT_TEMPLATE.md)
 ```
 
 `--json` goes before or after the subcommand.

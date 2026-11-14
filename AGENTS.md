@@ -31,7 +31,9 @@ truth.
 | What | Where |
 |---|---|
 | What extscan does, safety properties, failure handling | `README.md` |
+| Every scope key, policy key, command, flag, environment variable and exit code | `docs/CONFIGURATION.md` |
 | Local lab: ports, expected findings, UDP, troubleshooting | `docs/LAB.md` |
+| Changing the report layout: template syntax and every value | `docs/REPORT_TEMPLATE.md` |
 | Claude Code skill for driving extscan on an engagement | `.claude/skills/extscan/SKILL.md` |
 | The same skill for Codex (untracked; differs only in the `--source` label) | `.agents/skills/extscan/SKILL.md` |
 
@@ -51,10 +53,11 @@ truth.
 | Scope loading and per-request scope checks | `extscan/scope.py` |
 | Run directory state (`runs/<run-id>/state.db`, SQLite), legacy JSON import, export | `extscan/store.py` |
 | Retries, circuit breaker, coverage gaps (`Degradation`) | `extscan/resilience.py` |
-| Report rendering (`report.md`, `report.json`) | `extscan/report.py` |
+| Report rendering (`report.md`, `report.json`), notes for the security team | `extscan/report.py` |
+| Report layout (the editable template) and its small template language | `extscan/templates/report.md`, `extscan/template.py` |
 | Obsidian vault: the pentest narrative, host and finding notes | `extscan/vault.py` |
 | Web screenshots (optional Playwright), per-request scope guard | `extscan/screenshots.py` |
-| Optional model-assisted analysis | `extscan/llm/` |
+| Optional model-assisted analysis: Anthropic API, Bedrock, Azure | `extscan/llm/` (`providers.py`) |
 
 ## Tests and test data
 
@@ -63,6 +66,9 @@ truth.
 | Unit and integration tests | `tests/test_*.py` |
 | Failed and missing tools must be gaps, never clean passes | `tests/test_coverage_gaps.py` |
 | Safety properties (no DoS, no credential testing, screenshots in scope) | `tests/test_safety_invariants.py` |
+| Staying on scope, no quiet fallbacks, exit codes, the analyse stage | `tests/test_failsafes.py` |
+| Report template language, custom layouts, required sections | `tests/test_report_template.py` |
+| `docs/CONFIGURATION.md` matches the code; README names only files and commands that exist | `tests/test_docs.py` |
 | Vault links, ordering, unredacted evidence, hostile text, screenshot stage | `tests/test_vault.py` |
 | Evals: detection, false positives, cost, agent behaviour | `evals/` (`evals/README.md`), run by `tests/test_evals.py` |
 | CLI flags, policy loading, `--dry-run` sending nothing | `tests/test_agent_interface.py` |

@@ -15,8 +15,11 @@ dependencies = []
 [project.optional-dependencies]
 llm = ["anthropic>=0.69"]
 bedrock = ["anthropic[bedrock]>=0.69"]
+# Claude in Microsoft Foundry. azure-identity is only used for Entra ID
+# sign-in (llm.azure_auth "entra"); an API key needs the SDK alone.
+azure = ["anthropic>=0.69", "azure-identity>=1.17"]
 screenshots = ["playwright>=1.49"]
-all = ["anthropic[bedrock]>=0.69", "playwright>=1.49"]
+all = ["anthropic[bedrock]>=0.69", "azure-identity>=1.17", "playwright>=1.49"]
 
 [project.scripts]
 extscan = "extscan.cli:main"
@@ -39,6 +42,9 @@ version = { attr = "extscan.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["extscan*"]
+
+[tool.setuptools.package-data]
+extscan = ["templates/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

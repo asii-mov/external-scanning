@@ -21,7 +21,7 @@ chromium`; without them the browser scope test skips.
 ## Commands
 
 ```bash
-uv run python -m unittest discover -s tests -t .    # ~730 tests, ~50s, no network
+uv run python -m unittest discover -s tests -t .    # ~800 tests, ~50s, no network
 uv run ruff check .
 uv run python -m evals.local                        # detection, false positives, request counts (~1s)
 uv run python -m evals.score [runs/<id>]            # scorecard for a lab run (default: the fixture)
@@ -76,4 +76,22 @@ A full lab scan takes about 8 minutes with nuclei, or 70 seconds with
   because root and the user both write a run). Never read or write state
   files by path; `tests/fixtures/lab-run` stays in the old JSON layout on
   purpose, as the legacy-compatibility test.
+- Targets come from the scope file only. Anything a policy file can set
+  that reaches a scanner's command line is checked in `extscan/policy.py`
+  (`check_nmap_extra_args`, `check_nuclei_extra_args`); a new pass-through
+  setting needs the same check and a test in `tests/test_failsafes.py`.
+- No quiet fallbacks. A setting that cannot be read, a file that is damaged
+  or a model that did not answer is an error or a `Degradation`, never a
+  default. Do not catch an exception to return an empty result unless the
+  caller records why.
+- A new report section is a value in `report.build_context`, a line in
+  `extscan/templates/report.md` and a row in `docs/REPORT_TEMPLATE.md`
+  (a test compares the last two). Do not write report text straight from
+  Python.
+- A new policy key, scope key, command, flag or environment variable gets a
+  row in `docs/CONFIGURATION.md`; `tests/test_docs.py` fails without one. A
+  setting that is accepted has to do something, or be refused when set.
+- Model providers go through the `anthropic` SDK's own client classes
+  (`extscan/llm/providers.py`). Credentials come from the environment and
+  never from a policy file.
 - Open work is in `todo.md` and `docs/ROADMAP.md`.

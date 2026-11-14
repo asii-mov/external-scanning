@@ -17,7 +17,7 @@ from . import enrich as enrich_mod
 from . import probes as probes_mod
 from . import report as report_mod
 from . import screenshots as shots_mod
-from .models import Finding, Lead
+from .models import Finding, Lead, severity_rank
 from .policy import Policy
 from .probes import ProbeContext
 from .resilience import (
@@ -40,6 +40,9 @@ def init_run(runs_dir: str, scope: Scope, policy: Policy,
              run_id: str | None = None) -> Store:
     """Create a run directory and record what we are about to do, and why."""
     scope.assert_window()
+    policy.validate()
+    # A template that cannot render stops the run here, not after the scan.
+    report_mod.load_template(policy.report.template)
     store = Store.create(runs_dir, scope.engagement, run_id=run_id)
     store.write_meta({
         "run_id": store.run_id,
@@ -277,6 +280,7 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
               + (f"; {len(web) - len(todo)} already checked" if len(todo) < len(web) else ""))
         still_failing: set[str] = set()
         for number, batch in enumerate(batches, start=1):
+            scope.assert_window()
             label = nuclei.batch_label(batch, everything=len(batch) == len(web))
             affected = batch
             targets = f"nuclei-targets-{label}.txt" if label else "nuclei-targets.txt"
@@ -310,6 +314,7 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
                 nuclei_f += store.add_findings(findings)
                 nuclei_l += store.add_leads(leads, max_total=policy.max_leads_per_run)
                 store.mark_probed_many((w.id, "nuclei") for w in batch)
+                _nuclei_output_gap(store, label, batch, res.output_problem)
         if not runner.dry_run:
             # Every unchecked service was in a batch just now, so the only
             # nuclei gaps still true are the ones this pass recorded.
@@ -368,6 +373,27 @@ def probe(store: Store, scope: Scope, policy: Policy, runner: Runner,
     store.mark_stage("probe", findings=added_f, leads=added_l, probes_run=len(jobs))
     print(f"  {added_f} new finding(s), {added_l} new lead(s)")
     return {"probed": len(jobs), "findings": added_f, "leads": added_l}
+
+
+NUCLEI_OUTPUT = "probe:nuclei-output"
+
+
+def _nuclei_output_gap(store: Store, label: str, batch: list, problem: str) -> None:
+    """nuclei finished, but some of its result lines could not be read: the
+    results that were read are kept, and the ones that were not are a gap.
+    A clean re-run of the same batch clears it."""
+    component = f"nuclei-output:{label or 'all'}"
+    store.remove_degradations(
+        lambda d: d.stage == NUCLEI_OUTPUT and d.component == component)
+    if problem:
+        _coverage_lost(store, Degradation(
+            stage=NUCLEI_OUTPUT, component=component, reason=problem,
+            impact=f"Some nuclei results for {len(batch)} web service(s) were dropped "
+                   "because their output lines were damaged. Findings may be missing.",
+            hosts=sorted({w.host for w in batch}),
+            remedy="Read the file under raw/ by hand, then "
+                   "`extscan probe <run> --only nuclei --force`.",
+        ))
 
 
 def _run_one_probe(ctx: ProbeContext, p: probes_mod.Probe, svc):
@@ -442,6 +468,7 @@ def chase_leads(store: Store, scope: Scope, policy: Policy, runner: Runner,
 
         print(f"→ chase round {round_no}: {len(open_leads)} lead(s)")
         for lead in open_leads:
+            scope.assert_window()
             if lead.attempts >= policy.max_lead_attempts:
                 store.update_lead(
                     lead.id, status="abandoned",
@@ -602,7 +629,87 @@ def enrich(store: Store, scope: Scope, policy: Policy, runner: Runner | None = N
                                 dry_run=bool(runner and runner.dry_run), fetcher=fetcher)
 
 
-def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dict:
+ANALYSE = "analyse"
+
+
+def analyse(store: Store, scope: Scope, policy: Policy, llm=None,
+            dry_run: bool = False) -> dict:
+    """Ask the model for a note on each finding at or above
+    `llm.analyse_findings_above`, for the people who read the report.
+
+    Each note is its own finding, sourced to `llm-analysis`, informational
+    and flagged for review. Nothing here sends a packet to a target, picks
+    what gets scanned or changes a severity. A finding the model did not
+    get to, for any reason, is counted in one coverage gap: a report must
+    not look as if the model had nothing to say about it.
+    """
+    lp = policy.llm
+    if llm is None or lp.analyse_findings_above == "off":
+        return {"analysed": 0, "disabled": True}
+
+    from .llm.analyst import LLM_SOURCE, analyse_finding, analysis_title
+
+    floor = severity_rank(lp.analyse_findings_above)
+    findings = store.findings()
+    have = {(f.host, f.port, f.proto, f.title) for f in findings if f.source == LLM_SOURCE}
+    wanted = [f for f in findings
+              if f.source != LLM_SOURCE and severity_rank(f.severity) >= floor
+              and (f.host, f.port, f.proto, analysis_title(f.title)) not in have]
+    wanted.sort(key=lambda f: (-severity_rank(f.severity), not f.kev, f.host, f.port or 0))
+    todo, over = wanted[:max(0, int(lp.max_findings))], wanted[max(0, int(lp.max_findings)):]
+
+    if dry_run:
+        for f in todo:
+            print(f"  [dry-run] would ask the model about {f.id} {f.title[:80]}")
+        return {"analysed": 0, "planned": len(todo), "dry_run": True}
+
+    if wanted:
+        print(f"→ model notes on {len(todo)} finding(s) at or above "
+              f"{lp.analyse_findings_above}"
+              + (f"; {len(over)} more are over llm.max_findings" if over else ""))
+    done, missed = 0, list(over)
+    for index, f in enumerate(todo):
+        if not llm.healthy:
+            # The circuit is open: the endpoint is down, stop asking.
+            missed.extend(todo[index:])
+            break
+        note = analyse_finding(llm, f)
+        if note is None:
+            missed.append(f)
+            print(f"  ! no note for {f.id}: {llm.stats.last_error[:120] or 'no answer'}")
+            continue
+        done += store.add_findings([note])
+
+    store.remove_degradations(lambda d: d.stage == ANALYSE)
+    if missed:
+        cause = llm.stats.last_error or "the model did not answer"
+        if over and len(over) == len(missed):
+            cause = f"llm.max_findings is {lp.max_findings}"
+        _coverage_lost(store, Degradation(
+            stage=ANALYSE, component=f"llm:{llm.provider.name}",
+            reason=f"{len(missed)} of {len(wanted)} finding(s) got no model note: {cause}"[:300],
+            impact=f"{len(missed)} finding(s) at or above {lp.analyse_findings_above} carry "
+                   "no model-written note. Their evidence is complete; read it by hand: "
+                   + ", ".join(f.id for f in missed[:12])
+                   + (f" (+{len(missed) - 12} more)" if len(missed) > 12 else ""),
+            hosts=sorted({f.host for f in missed if f.host}),
+            remedy="Check `extscan providers`, raise llm.max_findings if that was the "
+                   "limit, then `extscan analyse <run>`.",
+        ))
+    stats = llm.stats.to_dict()
+    store.mark_stage(ANALYSE, analysed=done, not_analysed=len(missed), **stats)
+    if wanted:
+        print(f"  {done} note(s) written, {len(missed)} finding(s) without one")
+    return {"analysed": done, "not_analysed": len(missed), "llm": stats}
+
+
+def make_report(store: Store, scope: Scope, runner: Runner | None = None,
+                template: str | None = None) -> dict:
+    """Triage and render. `template` is a report template path; None uses
+    the one named in the run's saved policy, and "" the built-in one."""
+    if template is None:
+        template = ((store.meta().get("policy") or {}).get("report") or {}).get("template", "")
+    layout = report_mod.load_template(template)
     findings = store.findings()
     leads = store.leads()
     services = store.services()
@@ -618,8 +725,13 @@ def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dic
         }
         store.write_meta(meta)
 
+    commands = store.commands()
+    if store.commands_unreadable:
+        _warn(store, f"{store.commands_unreadable} line(s) of commands.jsonl could not be "
+                     "read, so the command log in this report is incomplete.")
+        meta = store.meta()
     paths = report_mod.write_reports(store.path, scope, triaged, hosts, services,
-                                     meta, store.commands(), store.degradations())
+                                     meta, commands, store.degradations(), leads, layout)
     paths["vault"] = vault.write_vault(store.path, scope, triaged, hosts, services, meta,
                                        store.commands(), store.degradations(), leads,
                                        shots_mod.load(store))
@@ -629,7 +741,7 @@ def make_report(store: Store, scope: Scope, runner: Runner | None = None) -> dic
 
 
 def run_all(store: Store, scope: Scope, policy: Policy, runner: Runner,
-            rounds: int = 2, llm=None) -> dict:
+            rounds: int = 2, llm=None, template: str | None = None) -> dict:
     out = {"doctor": doctor()}
     if scope.domains:
         out["recon"] = recon(store, scope, policy, runner)
@@ -638,5 +750,8 @@ def run_all(store: Store, scope: Scope, policy: Policy, runner: Runner,
     out["chase"] = chase_leads(store, scope, policy, runner, rounds=rounds, llm=llm)
     out["screenshot"] = screenshot(store, scope, policy, dry_run=runner.dry_run)
     out["enrich"] = enrich(store, scope, policy, runner)
-    out["report"] = make_report(store, scope, runner)
+    out["analyse"] = analyse(store, scope, policy, llm, dry_run=runner.dry_run)
+    out["report"] = make_report(store, scope, runner,
+                                template=policy.report.template if template is None
+                                else template)
     return out

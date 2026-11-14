@@ -22,6 +22,12 @@ from .base import Analysis
 LLM_SOURCE = "llm-analysis"
 
 
+def analysis_title(subject: str) -> str:
+    """Title of the note written about `subject`; also how a later run
+    recognises that the note already exists."""
+    return f"Model analysis: {subject}"
+
+
 def _provenance(analysis: Analysis) -> str:
     return (f"Written by {analysis.model or 'a language model'} via "
             f"{analysis.provider or 'an API'}"
@@ -68,7 +74,7 @@ def analysis_to_finding(
     ]
 
     return Finding(
-        title=f"Model analysis: {subject}",
+        title=analysis_title(subject),
         severity="info",
         host=host, port=port, proto=proto,
         source=LLM_SOURCE,
@@ -167,7 +173,11 @@ false positive or a non-issue, say so -- that is a useful answer."""
 
 
 def analyse_finding(client, finding: Finding) -> Finding | None:
-    """Model commentary on one deterministic finding."""
+    """Model commentary on one deterministic finding.
+
+    None means no note was written; `client.stats.last_error` says why. The
+    caller (the analyse stage) counts those and records them as one gap.
+    """
     if client is None:
         return None
     analysis = client.analyse(

@@ -130,7 +130,8 @@ def fetch(url: str, scope: Scope, policy: HttpPolicy, *, method: str = "GET",
 
     for hop in range(policy.max_redirects + 1):
         try:
-            scope.assert_url(current, context=f"http fetch hop {hop}")
+            host = scope.assert_url(current, context=f"http fetch hop {hop}")
+            scope.assert_resolves_in_bounds(host, context=f"http fetch hop {hop}")
         except ScopeError as exc:
             return Response(url=current, status=0, redirect_chain=chain,
                             error=f"scope refusal: {exc}")

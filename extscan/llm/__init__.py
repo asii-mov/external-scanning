@@ -40,6 +40,7 @@ from .base import (
 )
 from .providers import (
     AnthropicAPIProvider,
+    AzureFoundryProvider,
     BedrockProvider,
     build_provider,
     classify_sdk_error,
@@ -49,6 +50,7 @@ from .providers import (
 __all__ = [
     "Analysis",
     "AnthropicAPIProvider",
+    "AzureFoundryProvider",
     "BedrockProvider",
     "LLMBadOutput",
     "LLMClient",
@@ -103,9 +105,9 @@ class LLMClient:
     """A provider wrapped in retries, a circuit breaker and accounting."""
 
     provider: Provider
-    max_tokens: int = 1500
+    max_tokens: int = 8000
     effort: str = "medium"
-    timeout: float = 60.0
+    timeout: float = 120.0
     max_input_chars: int = 40_000
     stats: LLMStats = field(default_factory=LLMStats)
     breaker: CircuitBreaker = field(default_factory=lambda: CircuitBreaker(
@@ -176,6 +178,15 @@ class LLMClient:
             self.stats.total_seconds += time.monotonic() - started
             self.stats.circuit_trips = self.breaker.trips
 
+        if getattr(self.provider, "last_stop_reason", "") == "max_tokens":
+            # Thinking and the answer share max_tokens, so a low limit ends
+            # the reply mid-answer. Named for what it is: the fix is a
+            # setting, not a retry.
+            self.stats.bad_output += 1
+            self.stats.last_error = (
+                f"the reply was cut off at llm.max_tokens ({self.max_tokens}); "
+                "raise llm.max_tokens or lower llm.effort")
+            return None
         try:
             analysis = parse_analysis(text)
         except LLMBadOutput as exc:
@@ -193,8 +204,10 @@ class LLMClient:
 def build_client(policy) -> LLMClient | None:
     """Build a client from an LLMPolicy, or None when analysis is disabled.
 
-    Returns None rather than raising when the provider is unusable, so a
-    misconfigured model never stops a scan.
+    Raises LLMUnavailable (or ValueError for a provider name that does not
+    exist) when analysis is enabled but cannot work. The CLI turns that into
+    a recorded coverage gap and carries on without a model, so a
+    misconfigured model never stops a scan and never goes unmentioned.
     """
     provider = build_provider(policy)
     if provider is None:

@@ -18,7 +18,7 @@ import hashlib
 import json
 
 from extscan.models import Finding, Lead, Service
-from extscan.policy import Policy
+from extscan.policy import Policy, check_nuclei_extra_args
 from extscan.runner import Result, Runner, require
 from extscan.scope import Scope
 
@@ -47,6 +47,11 @@ def argv(policy: Policy, targets_file: str, jsonl_out: str) -> list[str]:
         cmd.append("-no-interactsh")
     elif p.interactsh_server:
         cmd += ["-interactsh-server", p.interactsh_server]
+    if not p.follow_redirects:
+        # A redirect can point anywhere. Unfollowed, nuclei only ever
+        # requests the in-scope URLs it was given.
+        cmd.append("-disable-redirects")
+    check_nuclei_extra_args(p.extra_args)
     cmd += p.extra_args
     return cmd
 
@@ -141,6 +146,21 @@ REVIEW_TRIGGERS: list[tuple[tuple[str, ...], str]] = [
 
 def _matches(needles: tuple[str, ...], haystack: str) -> bool:
     return any(n in haystack for n in needles)
+
+
+def unparseable_lines(text: str) -> int:
+    """How many non-empty lines of nuclei output are not a JSON object.
+    `parse_jsonl` skips them, so the caller has to say that it did."""
+    bad = 0
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            if not isinstance(json.loads(line), dict):
+                bad += 1
+        except json.JSONDecodeError:
+            bad += 1
+    return bad
 
 
 def parse_jsonl(text: str, scope: Scope | None = None,
@@ -277,4 +297,8 @@ def run(runner: Runner, scope: Scope, policy: Policy,
         return res, [], []
     text = out_path.read_text(errors="replace") if out_path.exists() else ""
     findings, leads = parse_jsonl(text, scope=scope)
+    bad = unparseable_lines(text)
+    if bad:
+        res.output_problem = (f"{bad} line(s) of {out_path.name} could not be read as "
+                              "nuclei results")
     return res, findings, leads

@@ -347,8 +347,9 @@ class TestChunkingAndCheckpoints(unittest.TestCase):
         self.assertEqual(sorted(flat), sorted(self.scope.hosts()))
         self.assertEqual(len(flat), len(set(flat)))
 
-    def test_chunk_size_zero_disables_chunking(self):
-        self.assertEqual(nmap.chunk_targets(self.scope, 0), [self.scope.targets])
+    def test_chunk_size_zero_is_one_batch_of_hosts_not_raw_cidrs(self):
+        # Raw CIDRs would reach nmap without the scope's --exclude.
+        self.assertEqual(nmap.chunk_targets(self.scope, 0), [self.scope.hosts()])
 
     def test_small_scope_is_one_chunk(self):
         self.assertEqual(len(nmap.chunk_targets(self.scope, 100)), 1)

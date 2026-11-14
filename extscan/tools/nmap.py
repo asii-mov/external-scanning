@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from extscan.models import Finding, Host, Service
-from extscan.policy import Policy
+from extscan.policy import Policy, check_nmap_extra_args
 from extscan.runner import Result, Runner, require
 from extscan.scope import Scope
 
@@ -95,6 +95,7 @@ def sweep_argv(scope: Scope, policy: Policy, out_base: str,
     if p.min_rate:
         argv += ["--min-rate", str(p.min_rate)]
     argv += discovery_args(policy)
+    check_nmap_extra_args(p.extra_args)
     argv += p.extra_args
     argv += _targets_for(scope, targets)
     return argv
@@ -130,6 +131,7 @@ def tcp_argv(scope: Scope, policy: Policy, out_base: str,
     argv += ["-Pn"] if assume_up else discovery_args(policy)
     if _is_root():
         argv.append("-O")               # OS fingerprint; needs raw sockets
+    check_nmap_extra_args(p.extra_args)
     argv += p.extra_args
     argv += _targets_for(scope, targets)
     return argv
@@ -145,7 +147,13 @@ def udp_argv(scope: Scope, policy: Policy, out_base: str,
             "--open", "-oA", out_base]
     if p.scripts:
         argv += ["--script", _script_selection("default,safe", p.exclude_scripts)]
+    if p.min_rate:
+        argv += ["--min-rate", str(p.min_rate)]
     argv += discovery_args(policy)
+    # The same tuning as the TCP pass: a rate cap that applied to TCP only
+    # would leave the UDP pass unthrottled without saying so.
+    check_nmap_extra_args(p.extra_args)
+    argv += p.extra_args
     argv += _targets_for(scope, targets)
     return argv
 
@@ -475,9 +483,11 @@ def chunk_targets(scope: Scope, chunk_size: int) -> list[list[str]]:
     chunk, not the entire engagement. It also gives the run natural checkpoints
     to resume from.
     """
-    if chunk_size <= 0:
-        return [scope.targets]
     hosts = scope.hosts()
+    if chunk_size <= 0:
+        # One batch, still as the expanded host list: handing nmap the raw
+        # CIDRs here would scan the addresses the scope file excludes.
+        return [hosts] if hosts else []
     if len(hosts) <= chunk_size:
         return [hosts] if hosts else []
     return [hosts[i:i + chunk_size] for i in range(0, len(hosts), chunk_size)]

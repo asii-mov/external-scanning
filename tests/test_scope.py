@@ -184,9 +184,15 @@ class TestTestingWindow(unittest.TestCase):
         self.assertTrue(scope.in_window()[0])
 
     def test_unparseable_window_fails_closed(self):
-        scope = Scope.load(write_scope(authorization={
-            **BASE["authorization"], "window_end": "next tuesday",
-        }))
+        # Refused when the file is loaded, before a run can start on it.
+        with self.assertRaises(ScopeError) as cm:
+            Scope.load(write_scope(authorization={
+                **BASE["authorization"], "window_end": "next tuesday",
+            }))
+        self.assertIn("window_end", str(cm.exception))
+        # And a scope built in code with a bad window still fails closed.
+        scope = Scope.load(write_scope())
+        scope.authorization.window_end = "next tuesday"
         ok, why = scope.in_window()
         self.assertFalse(ok)
         self.assertIn("unparseable", why)

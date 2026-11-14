@@ -122,6 +122,7 @@ class Store:
         # database's data_version (which moves when anyone else commits).
         self._gaps: list[tuple[int, Degradation]] | None = None
         self._gaps_version = -1
+        self.commands_unreadable = 0            # set by `commands()`
 
     def __del__(self):
         with contextlib.suppress(Exception):
@@ -396,7 +397,21 @@ class Store:
     # --- run.json ------------------------------------------------------------
 
     def meta(self) -> dict:
-        return self._read("run.json", {})
+        p = self.path / "run.json"
+        if not p.exists():
+            return {}
+        try:
+            data = json.loads(p.read_text())
+        except json.JSONDecodeError as exc:
+            # Never read as "empty": that would drop the run's saved policy
+            # (rate limits included) and its scope path without a word.
+            raise ValueError(
+                f"{p} is damaged and cannot be read ({exc}). It records this run's "
+                "scope and policy, so extscan will not guess them. Restore the file, "
+                "or start a new run with `extscan init`.") from exc
+        if not isinstance(data, dict):
+            raise ValueError(f"{p} is damaged: it does not hold a JSON object")
+        return data
 
     def write_meta(self, meta: dict) -> None:
         with self._lock:
@@ -765,13 +780,16 @@ class Store:
         if not p.exists():
             return []
         out = []
+        self.commands_unreadable = 0
         for line in p.read_text().splitlines():
             line = line.strip()
             if line:
                 try:
                     out.append(json.loads(line))
                 except json.JSONDecodeError:
-                    continue
+                    # Counted, and reported by the report stage: a command
+                    # missing from the audit trail must not go unmentioned.
+                    self.commands_unreadable += 1
         return out
 
     def raw_path(self, name: str) -> Path:

@@ -200,7 +200,12 @@ def _parse_reply(data: bytes) -> SnmpReply | None:
 def snmp_get(host: str, community: str, oid: str, *, version: int = 2,
              port: int = 161, timeout: float = 2.0, retries: int = 1,
              pdu_tag: int = TAG_GET) -> SnmpReply | None:
-    """One SNMP GET (or GETNEXT). Returns None on timeout or unparseable reply."""
+    """One SNMP GET (or GETNEXT). Returns None on timeout or unparseable reply.
+
+    Any other socket error (no route, a local firewall refusing the send)
+    is raised: the request never left, which is not the same as no answer,
+    and the caller records it as a check that did not run.
+    """
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     for _attempt in range(retries + 1):
         request_id = int.from_bytes(os.urandom(3), "big") + 1
@@ -218,8 +223,8 @@ def snmp_get(host: str, community: str, oid: str, *, version: int = 2,
                     return reply
         except TimeoutError:
             continue
-        except OSError:
-            return None
+        except ConnectionRefusedError:
+            return None         # the port answered "closed": a real negative
         finally:
             sock.close()
     return None
@@ -267,8 +272,8 @@ def snmp_sweep(host: str, communities: list[str], versions: list[int], oid: str,
                         replies[ids[reply.request_id]] = reply
             except TimeoutError:
                 pass
-            except OSError:
-                break
+            except ConnectionRefusedError:
+                break           # the port answered "closed": a real negative
             pending = [key for key in pending if key not in replies]
     return replies
 

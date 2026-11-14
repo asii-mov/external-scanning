@@ -318,7 +318,11 @@ class TestAnalystOutputHandling(unittest.TestCase):
 class TestProviderSelection(unittest.TestCase):
     def test_disabled_policy_yields_no_provider(self):
         self.assertIsNone(build_provider(LLMPolicy(enabled=False)))
-        self.assertIsNone(build_provider(LLMPolicy(enabled=True, provider="none")))
+
+    def test_enabled_with_no_provider_is_an_error_not_a_silent_off(self):
+        with self.assertRaises(ValueError) as cm:
+            build_provider(LLMPolicy(enabled=True, provider="none"))
+        self.assertIn("llm.provider is not set", str(cm.exception))
 
     def test_unknown_provider_rejected(self):
         with self.assertRaises(ValueError) as cm:
@@ -403,3 +407,161 @@ class TestPolicyDefaults(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _FakeSDK:
+    """Stands in for the `anthropic` package, so the provider wiring is
+    tested whether or not the optional extra is installed."""
+
+    class AnthropicError(Exception):
+        pass
+
+    class _Messages:
+        def __init__(self, outer):
+            self.outer = outer
+
+        def create(self, **kwargs):
+            self.outer.requests.append(kwargs)
+            block = type("Block", (), {"type": "text", "text": '{"summary": "ok"}'})()
+            return type("Response", (), {"stop_reason": "end_turn", "content": [block],
+                                         "model": kwargs["model"]})()
+
+    def __init__(self):
+        self.built: list[tuple[str, dict]] = []
+        self.requests: list[dict] = []
+        sdk = self
+
+        def client(name):
+            def build(**kwargs):
+                sdk.built.append((name, kwargs))
+                return type("Client", (), {"messages": _FakeSDK._Messages(sdk)})()
+            build.__name__ = name
+            return build
+
+        self.Anthropic = client("Anthropic")
+        self.AnthropicBedrockMantle = client("AnthropicBedrockMantle")
+        self.AnthropicFoundry = client("AnthropicFoundry")
+        for name in ("AuthenticationError", "PermissionDeniedError", "NotFoundError",
+                     "BadRequestError"):
+            setattr(self, name, type(name, (Exception,), {}))
+
+
+class TestAllThreeProviders(unittest.TestCase):
+    """Anthropic API, Bedrock and Azure: each builds the right SDK client,
+    sends the same request, and keeps credentials out of the policy."""
+
+    def setUp(self):
+        import os
+        import sys
+        from unittest import mock
+
+        self.sdk = _FakeSDK()
+        patches = [
+            mock.patch.dict(sys.modules, {"anthropic": self.sdk}),
+            mock.patch.dict(os.environ, {"ANTHROPIC_FOUNDRY_API_KEY": "test-key"}),
+        ]
+        for name in ("ANTHROPIC_FOUNDRY_RESOURCE", "ANTHROPIC_FOUNDRY_BASE_URL"):
+            os.environ.pop(name, None)
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def complete(self, **policy):
+        provider = build_provider(LLMPolicy(enabled=True, **policy))
+        text, model = provider.complete("sys", "user", max_tokens=100, effort="low",
+                                        timeout=5)
+        return provider, text, model
+
+    def test_anthropic_api(self):
+        provider, text, model = self.complete(provider="anthropic")
+        self.assertEqual(self.sdk.built, [("Anthropic", {"max_retries": 0})])
+        self.assertEqual((provider.name, model), ("anthropic", "claude-opus-5-5"))
+        self.assertEqual(text, '{"summary": "ok"}')
+
+    def test_bedrock(self):
+        provider, _, model = self.complete(provider="bedrock", aws_region="eu-west-2",
+                                           aws_profile="audit")
+        self.assertEqual(self.sdk.built, [("AnthropicBedrockMantle", {
+            "aws_region": "eu-west-2", "max_retries": 0, "aws_profile": "audit"})])
+        self.assertEqual((provider.name, model), ("bedrock", "anthropic.claude-opus-5-5"))
+
+    def test_bedrock_never_drops_the_profile_to_make_a_client(self):
+        def strict(**kwargs):
+            raise TypeError("unexpected keyword argument 'aws_profile'")
+        strict.__name__ = "AnthropicBedrockMantle"
+        self.sdk.AnthropicBedrockMantle = strict
+        with self.assertRaises(LLMUnavailable) as cm:
+            self.complete(provider="bedrock", aws_region="eu-west-2", aws_profile="audit")
+        self.assertIn("aws_profile", str(cm.exception))
+
+    def test_azure_with_a_resource_and_an_api_key(self):
+        provider, _, model = self.complete(provider="azure", azure_resource="our-foundry",
+                                           model="our-opus-deployment")
+        # The key is read from the environment by the SDK, never passed on.
+        self.assertEqual(self.sdk.built, [("AnthropicFoundry", {
+            "max_retries": 0, "resource": "our-foundry"})])
+        self.assertEqual((provider.name, model), ("azure", "our-opus-deployment"))
+        usable, reason = provider.available()
+        self.assertTrue(usable, reason)
+        self.assertIn("API key", reason)
+
+    def test_azure_with_a_base_url_does_not_also_send_a_resource(self):
+        self.complete(provider="foundry", azure_resource="ignored",
+                      base_url="https://private.example/anthropic/")
+        self.assertEqual(self.sdk.built[0][1], {
+            "max_retries": 0, "base_url": "https://private.example/anthropic/"})
+
+    def test_azure_entra_id_uses_a_token_provider(self):
+        import sys
+        from unittest import mock
+
+        identity = type("identity", (), {
+            "DefaultAzureCredential": staticmethod(lambda: "credential"),
+            "get_bearer_token_provider": staticmethod(lambda cred, scope: (cred, scope)),
+        })
+        azure = type("azure", (), {"identity": identity})
+        with mock.patch.dict(sys.modules, {"azure": azure, "azure.identity": identity}):
+            self.complete(provider="azure", azure_resource="our-foundry",
+                          azure_auth="entra")
+        self.assertEqual(self.sdk.built[0][1]["azure_ad_token_provider"],
+                         ("credential", "https://ai.azure.com/.default"))
+
+    def test_azure_says_everything_that_is_missing(self):
+        import os
+        from unittest import mock
+
+        from extscan.llm.providers import AzureFoundryProvider
+        with mock.patch.dict(os.environ):
+            os.environ.pop("ANTHROPIC_FOUNDRY_API_KEY")
+            usable, reason = AzureFoundryProvider(auth="api_key").available()
+        self.assertFalse(usable)
+        self.assertIn("azure_resource", reason)
+        self.assertIn("ANTHROPIC_FOUNDRY_API_KEY", reason)
+
+    def test_a_client_that_cannot_be_built_is_unavailable_not_a_crash(self):
+        def broken(**kwargs):
+            raise self.sdk.AnthropicError("Missing credentials")
+        self.sdk.AnthropicFoundry = broken
+        with self.assertRaises(LLMUnavailable) as cm:
+            self.complete(provider="azure", azure_resource="our-foundry")
+        self.assertIn("Missing credentials", str(cm.exception))
+
+    def test_every_provider_sends_effort_and_no_thinking_budget(self):
+        for policy in ({"provider": "anthropic"},
+                       {"provider": "bedrock", "aws_region": "eu-west-2"},
+                       {"provider": "azure", "azure_resource": "r"}):
+            self.complete(**policy)
+        for request in self.sdk.requests:
+            self.assertEqual(request["output_config"], {"effort": "low"})
+            self.assertNotIn("thinking", request)
+
+    def test_providers_command_lists_all_three(self):
+        from extscan.llm import describe_providers
+        rows = describe_providers(LLMPolicy(enabled=True, provider="azure",
+                                            azure_resource="our-foundry"))
+        self.assertEqual([r["provider"] for r in rows], ["anthropic", "bedrock", "azure"])
+
+    def test_no_credential_can_be_put_in_a_policy_file(self):
+        fields = set(LLMPolicy.__dataclass_fields__)
+        self.assertFalse({f for f in fields if "key" in f or "secret" in f or "token" in f}
+                         - {"max_tokens"})

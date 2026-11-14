@@ -255,6 +255,9 @@ def _scan_serial(store: Store, scope: Scope, policy: Policy, runner: Runner, kin
                  totals: dict, aborter: AbortThreshold) -> bool:
     """One batch after another. False when nmap is missing."""
     for index, batch in todo:
+        # Checked per batch: a long pass must not run on past the end of the
+        # authorised window because it started inside it.
+        scope.assert_window()
         print(f"  [{index}/{len(batches)}] {len(batch.targets)} host(s)")
         try:
             outcome = _run_batch(runner, scope, policy, kind, batch)
@@ -304,6 +307,7 @@ def _scan_parallel(store: Store, scope: Scope, policy: Policy, runner: Runner, k
                 if item is None:
                     break
                 index, batch = item
+                scope.assert_window()
                 print(f"  [{index}/{len(batches)}] {batch.label}: "
                       f"{len(batch.targets)} host(s), started")
                 running[pool.submit(work, batch)] = item

@@ -14,8 +14,10 @@ competitor's netblock must not drag the scan along with it.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import ipaddress
 import json
+import socket
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -43,6 +45,24 @@ _INTERNAL_NETS = [
         "fe80::/10",
     )
 ]
+
+
+SCOPE_KEYS = frozenset({
+    "engagement", "client", "authorization", "targets", "exclude",
+    "allow_hostnames", "domains", "max_hosts", "allow_private",
+})
+AUTHORIZATION_KEYS = frozenset({
+    "reference", "authorized_by", "window_start", "window_end", "notes",
+})
+
+
+def _reject_unknown(data: dict, known: frozenset, where: str) -> None:
+    unknown = sorted(k for k in data if k not in known and not str(k).startswith("//"))
+    if unknown:
+        raise ScopeError(
+            f"{where}: unknown key(s) {', '.join(repr(k) for k in unknown)}. "
+            f"Known keys: {', '.join(sorted(known))}. A misspelt key is refused "
+            "because it would otherwise be ignored without a word.")
 
 
 def _is_internal(net: ipaddress._BaseNetwork) -> bool:
@@ -106,6 +126,7 @@ class Scope:
     max_hosts: int = 1024
     allow_private: bool = False
     source_path: str = ""
+    sha256: str = ""            # of the scope file as loaded; "" when built in code
 
     @classmethod
     def load(cls, path: str | Path) -> Scope:
@@ -113,9 +134,20 @@ class Scope:
         if not p.exists():
             raise ScopeError(f"scope file not found: {p}")
         try:
-            data = json.loads(p.read_text())
+            raw = p.read_text()
+            data = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise ScopeError(f"scope file {p} is not valid JSON: {exc}") from exc
+        if not isinstance(data, dict):
+            raise ScopeError(f"scope file {p} must hold a JSON object")
+        # A misspelt key must not be read as "not set": `exlude` would scan
+        # the hosts someone asked to leave alone. Keys starting with // are
+        # comments.
+        _reject_unknown(data, SCOPE_KEYS, f"scope file {p}")
+        for key in ("targets", "exclude", "allow_hostnames", "domains"):
+            value = data.get(key, [])
+            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                raise ScopeError(f"scope file {p}: `{key}` must be a list of strings")
         if "authorization" not in data:
             raise ScopeError(
                 f"{p} has no `authorization` block. extscan will not scan a "
@@ -123,6 +155,10 @@ class Scope:
             )
         if not data.get("targets"):
             raise ScopeError(f"{p} lists no targets")
+        if not isinstance(data["authorization"], dict):
+            raise ScopeError(f"scope file {p}: `authorization` must be an object")
+        _reject_unknown(data["authorization"], AUTHORIZATION_KEYS,
+                        f"scope file {p}, authorization")
         scope = cls(
             engagement=str(data.get("engagement", "unnamed engagement")),
             client=str(data.get("client", "")),
@@ -134,6 +170,7 @@ class Scope:
             max_hosts=int(data.get("max_hosts", 1024)),
             allow_private=bool(data.get("allow_private", False)),
             source_path=str(p),
+            sha256=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
         )
         scope.validate()
         return scope
@@ -154,6 +191,22 @@ class Scope:
                         "engagement really covers internal space -- on an external "
                         "audit this usually means a typo in the target list."
                     )
+        for label, text in (("window_start", self.authorization.window_start),
+                            ("window_end", self.authorization.window_end)):
+            if text:
+                try:
+                    _parse_ts(text)
+                except ValueError as exc:
+                    raise ScopeError(f"authorization.{label} {text!r} is not a date and "
+                                     f"time such as 2026-11-01T00:00:00Z: {exc}") from exc
+        # Counted from the network sizes first: walking a mistyped /8 or an
+        # IPv6 /64 address by address would hang before it could be refused.
+        upper = sum(net.num_addresses for net in self._networks(self.targets))
+        if upper > max(self.max_hosts, 0) + sum(
+                net.num_addresses for net in self._networks(self.exclude)) + 2 * len(self.targets):
+            raise ScopeError(
+                f"scope expands to about {upper} addresses, over max_hosts="
+                f"{self.max_hosts}. Raise max_hosts deliberately or narrow the targets.")
         n = self.host_count()
         if n > self.max_hosts:
             raise ScopeError(
@@ -216,6 +269,40 @@ class Scope:
                 "If this came from scanner output or a redirect, treat it as a "
                 "finding to report, not a target to follow."
             )
+
+    def assert_resolves_in_bounds(self, host: str, context: str = "",
+                                  resolve=None) -> None:
+        """Check where an allowed host name points before connecting to it.
+
+        `allow_hostnames` passes a name, and the connection then goes to
+        whatever DNS answers, which the scope file never saw. So the answer
+        is checked: an excluded address is refused, and so is internal
+        address space (loopback, RFC 1918, link-local and with it the cloud
+        metadata service) unless the scope allows private targets. A name
+        that points outside `targets` is allowed, because that is what
+        `allow_hostnames` is for. A name that does not resolve is left for
+        the request itself to fail on. IP literals pass straight through.
+        """
+        host = (host or "").strip().strip("[]")
+        try:
+            ipaddress.ip_address(host)
+            return
+        except ValueError:
+            pass
+        try:
+            infos = (resolve or socket.getaddrinfo)(host, None)
+        except OSError:
+            return
+        where = f" ({context})" if context else ""
+        for info in infos:
+            address = str(info[4][0]).split("%")[0]
+            if self.is_excluded(address):
+                raise ScopeError(f"refusing {host!r}{where}: it resolves to {address}, "
+                                 "which the scope file excludes")
+            if not self.allow_private and is_internal_address(address):
+                raise ScopeError(
+                    f"refusing {host!r}{where}: it resolves to {address}, which is "
+                    "internal address space, and scope.allow_private is false")
 
     def assert_dns_name(self, name: str, context: str = "") -> str:
         """Gate a DNS query name. Returns the name normalised, or raises.
@@ -289,4 +376,32 @@ class Scope:
             "window_ok": ok,
             "window_note": why,
             "source_path": self.source_path,
+            "sha256": self.sha256,
+            "allow_hostnames": self.allow_hostnames,
+            "allow_private": self.allow_private,
         }
+
+    def changes_since(self, recorded: dict) -> list[str]:
+        """What differs between this scope and the summary stored when the
+        run was created, in words. Empty when nothing that decides what may
+        be touched has changed."""
+        if not recorded:
+            return []
+        out = []
+        for key, label in (("targets", "targets"), ("exclude", "exclusions"),
+                           ("domains", "domains"), ("allow_hostnames", "allowed host names")):
+            if key not in recorded:
+                continue        # a run made before this field was stored
+            before, now = set(recorded[key] or []), set(getattr(self, key))
+            if now - before:
+                out.append(f"{label} added: {', '.join(sorted(now - before))}")
+            if before - now:
+                out.append(f"{label} removed: {', '.join(sorted(before - now))}")
+        if "allow_private" in recorded and bool(recorded["allow_private"]) != self.allow_private:
+            out.append(f"allow_private is now {str(self.allow_private).lower()}")
+        old_auth = recorded.get("authorization") or {}
+        for key in ("reference", "authorized_by", "window_start", "window_end"):
+            if key in old_auth and old_auth[key] != getattr(self.authorization, key):
+                out.append(f"authorization.{key} changed from {old_auth[key]!r} to "
+                           f"{getattr(self.authorization, key)!r}")
+        return out

@@ -1,0 +1,15 @@
+{
+  "profile": "standard",
+
+  "llm": {
+    "enabled": true,
+    "provider": "azure",
+    "azure_resource": "my-foundry-resource",
+    "model": "claude-opus-5-5",
+    "azure_auth": "auto",
+    "effort": "medium",
+
+    "analyse_findings_above": "medium",
+    "max_findings": 40
+  }
+}

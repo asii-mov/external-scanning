@@ -27,7 +27,8 @@ else
     (uv run --locked python -m tests.lab > /out/lab.log 2>&1 &)
     sleep 5
     uv run --locked extscan --runs-dir /out/runs run \
-      --scope examples/lab/scope.json --policy examples/lab/policy.json > /out/run.log 2>&1
+      --scope examples/lab/scope.json --policy examples/lab/policy.json > /out/run.log 2>&1 \
+      || [ $? -eq 3 ]   # 3 = finished with serious coverage gaps, which the fixture records
     { echo "nmap: $(nmap --version | head -1)"
       echo "sslscan: $(sslscan --version 2>&1 | head -1)"
       echo "nuclei: $(nuclei -version 2>&1 | grep -i "engine version")"

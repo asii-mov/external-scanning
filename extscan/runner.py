@@ -48,6 +48,9 @@ class Result:
     timed_out: bool = False
     skipped: bool = False
     stdout_path: str = ""
+    # Set by an adapter when the tool exited cleanly but part of what it
+    # wrote could not be read.
+    output_problem: str = ""
 
     @property
     def ok(self) -> bool:

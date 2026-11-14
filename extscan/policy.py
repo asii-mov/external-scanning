@@ -33,6 +33,93 @@ def tcp_port_spec(choice: str) -> str:
     return choice
 
 
+SEVERITIES = ("info", "low", "medium", "high", "critical")
+
+# nmap flags a policy may add through `nmap.extra_args`. It is a list of what
+# is allowed, not of what is banned, because the flags that matter here are
+# the ones that choose targets (-iL, -iR, a bare address), spoof or bounce
+# (-S, -D, -sI, -b, --proxies), pick scripts past `exclude_scripts`
+# (--script), drop the scope's exclusions (--exclude) or move the output the
+# parser reads (-oA). Each of those would let a policy file send packets the
+# scope file never authorised. Targets come from the scope file only.
+NMAP_EXTRA_FLAGS = frozenset({
+    "-n", "-R", "-v", "-vv", "-d", "-6", "-r", "--reason", "--traceroute",
+    "--version-light", "--version-all", "--defeat-rst-ratelimit",
+    "--defeat-icmp-ratelimit", "--unprivileged", "--privileged",
+    "-T0", "-T1", "-T2", "-T3", "-T4", "-T5",
+})
+NMAP_EXTRA_VALUE_FLAGS = frozenset({
+    "--max-rate", "--min-rate", "--max-parallelism", "--min-parallelism",
+    "--scan-delay", "--max-scan-delay", "--min-rtt-timeout", "--max-rtt-timeout",
+    "--initial-rtt-timeout", "--max-hostgroup", "--min-hostgroup", "--ttl",
+    "--data-length", "--source-port", "-g", "--script-timeout", "--max-os-tries",
+    "--stats-every",
+})
+_NMAP_VALUE_RE = re.compile(r"\d+(\.\d+)?(ms|s|m|h)?")
+
+# nuclei flags `nuclei.extra_args` may not carry: ones that add targets, send
+# traffic or results somewhere else, run code, follow redirects, or bring
+# excluded templates back.
+NUCLEI_FORBIDDEN_FLAGS = frozenset({
+    "u", "target", "l", "list", "resume", "eh", "exclude-hosts",
+    "proxy", "p", "interactsh-server", "iserver", "interactions-cache-size",
+    "cloud-upload", "cup", "dashboard", "pd", "pdu", "dashboard-upload", "auth",
+    "code", "headless", "dast", "fuzz", "fuzzing-type", "fuzzing-mode",
+    "fr", "follow-redirects", "fhr", "follow-host-redirects",
+    "itags", "include-tags", "it", "include-templates",
+    "o", "output", "j", "jsonl", "je", "json-export", "jle", "jsonl-export",
+    "lfa", "allow-local-file-access", "sni", "i", "interface", "sip", "source-ip",
+    "resolvers", "r", "sr", "system-resolvers",
+})
+
+
+def check_nmap_extra_args(args: list[str]) -> None:
+    """Raise ValueError unless every entry is an allowed tuning flag."""
+    if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+        raise ValueError("nmap.extra_args must be a list of strings")
+    expect_value = ""
+    for arg in args:
+        if expect_value:
+            if not _NMAP_VALUE_RE.fullmatch(arg):
+                raise ValueError(f"nmap.extra_args: {expect_value} takes a number or a "
+                                 f"time such as 100 or 500ms, not {arg!r}")
+            expect_value = ""
+            continue
+        flag, sep, value = arg.partition("=")
+        if flag in NMAP_EXTRA_VALUE_FLAGS:
+            if sep and not _NMAP_VALUE_RE.fullmatch(value):
+                raise ValueError(f"nmap.extra_args: {flag} takes a number or a time, "
+                                 f"not {value!r}")
+            expect_value = "" if sep else flag
+            continue
+        if arg in NMAP_EXTRA_FLAGS:
+            continue
+        raise ValueError(
+            f"nmap.extra_args: {arg!r} is not allowed. Extra arguments may only tune "
+            "timing and verbosity; targets come from the scope file, and scripts, "
+            "ports and output from their own policy settings. Allowed: "
+            + ", ".join(sorted(NMAP_EXTRA_FLAGS | NMAP_EXTRA_VALUE_FLAGS)))
+    if expect_value:
+        raise ValueError(f"nmap.extra_args: {expect_value} is missing its value")
+
+
+def check_nuclei_extra_args(args: list[str]) -> None:
+    """Raise ValueError if an entry would add targets or send data elsewhere."""
+    if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+        raise ValueError("nuclei.extra_args must be a list of strings")
+    for arg in args:
+        if not arg.startswith("-"):
+            continue
+        name = arg.lstrip("-").partition("=")[0]
+        if name in NUCLEI_FORBIDDEN_FLAGS:
+            raise ValueError(
+                f"nuclei.extra_args: {arg!r} is not allowed. It would add targets, "
+                "follow redirects, bring back excluded templates, or send traffic or "
+                "results somewhere the scope file does not cover. Use the matching "
+                "policy setting if there is one (nuclei.follow_redirects, "
+                "nuclei.interactsh, nuclei.templates).")
+
+
 @dataclass
 class NmapPolicy:
     tcp_ports: str = TCP_TOP
@@ -98,6 +185,12 @@ class NucleiPolicy:
     allow_intrusive: bool = False
     interactsh: bool = False
     interactsh_server: str = ""
+    # nuclei follows a redirect wherever it points, so a target that answers
+    # 302 to another organisation's host gets that host requested from the
+    # scanning box. Off by default: a redirect is judged by its status and
+    # Location header and never followed. Turning it on trades that guarantee
+    # for the templates that only match after a redirect.
+    follow_redirects: bool = False
 
 
 DISCLOSURE_PATHS = [
@@ -251,15 +344,24 @@ class LLMPolicy:
     """
 
     enabled: bool = False
-    provider: str = "none"
+    provider: str = "none"          # anthropic | bedrock | azure
     model: str = ""
     effort: str = "medium"
-    max_tokens: int = 1500
-    timeout_sec: int = 60
+    # Thinking counts against this on current models, so a small value cuts
+    # the reply off before the answer. A cut-off reply is reported as such.
+    max_tokens: int = 8000
+    timeout_sec: int = 120
 
     aws_region: str = ""
     aws_profile: str = ""
     base_url: str = ""
+    # Azure (Claude in Microsoft Foundry). The resource is the name in
+    # https://<resource>.services.ai.azure.com; `base_url` replaces it for a
+    # private endpoint. `model` is the deployment name. Credentials never go
+    # in a policy file, which is copied into every run: the key is read from
+    # ANTHROPIC_FOUNDRY_API_KEY, and "entra" uses the Azure credential chain.
+    azure_resource: str = ""
+    azure_auth: str = "auto"        # auto | api_key | entra
 
     max_input_chars: int = 40_000
 
@@ -271,7 +373,22 @@ class LLMPolicy:
     circuit_cooldown_sec: int = 120
 
     analyse_openapi: bool = True
+    # The analyse stage asks the model for a note on each finding at or above
+    # this severity ("off" asks for none), up to `max_findings` per run. What
+    # the cap leaves out is recorded as a coverage gap.
     analyse_findings_above: str = "medium"
+    max_findings: int = 40
+
+
+@dataclass
+class ReportPolicy:
+    """How report.md is laid out.
+
+    `template` is the path of a Markdown template; "" uses the one shipped
+    in `extscan/templates/report.md`. See docs/REPORT_TEMPLATE.md.
+    """
+
+    template: str = ""
 
 
 @dataclass
@@ -287,6 +404,7 @@ class Policy:
     dns: DnsPolicy = field(default_factory=DnsPolicy)
     enrich: EnrichPolicy = field(default_factory=EnrichPolicy)
     llm: LLMPolicy = field(default_factory=LLMPolicy)
+    report: ReportPolicy = field(default_factory=ReportPolicy)
     max_lead_depth: int = 3
     max_leads_per_run: int = 500
     stop_on_tool_error: bool = False
@@ -321,7 +439,13 @@ class Policy:
         """Start from a profile, then overlay any JSON file given."""
         if not path:
             return cls.for_profile(profile)
-        return cls.from_dict(json.loads(Path(path).read_text()), profile)
+        try:
+            data = json.loads(Path(path).read_text())
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"policy file {path} is not valid JSON: {exc}") from exc
+        if not isinstance(data, dict):
+            raise ValueError(f"policy file {path} must hold a JSON object")
+        return cls.from_dict(data, profile)
 
     @classmethod
     def from_dict(cls, data: dict, profile: str = "standard") -> Policy:
@@ -334,8 +458,10 @@ class Policy:
                               ("sslscan", SslscanPolicy),
                               ("recon", ReconPolicy), ("screenshots", ScreenshotPolicy),
                               ("dns", DnsPolicy), ("enrich", EnrichPolicy),
-                              ("llm", LLMPolicy)):
+                              ("llm", LLMPolicy), ("report", ReportPolicy)):
             if section in data:
+                if not isinstance(data[section], dict):
+                    raise ValueError(f"policy section {section!r} must be an object")
                 current = asdict(getattr(p, section))
                 unknown = set(data[section]) - set(current)
                 if unknown:
@@ -349,7 +475,35 @@ class Policy:
                     "max_lead_attempts", "max_workers"):
             if key in data:
                 setattr(p, key, data[key])
+        p.validate()
         return p
+
+    def validate(self) -> None:
+        """Refuse settings that would let a policy file widen what is
+        scanned, or that cannot mean what they say."""
+        check_nmap_extra_args(self.nmap.extra_args)
+        check_nuclei_extra_args(self.nuclei.extra_args)
+        # Two settings exist in saved runs and have never done anything.
+        # Turning one on is refused, because a setting that is accepted and
+        # ignored reads as if it were in force.
+        if self.stop_on_tool_error:
+            raise ValueError(
+                "stop_on_tool_error is not implemented: a failed tool is recorded as "
+                "a coverage gap and the run carries on. Leave it false, and use the "
+                "exit code of `extscan run` (3 on a serious gap) to stop a pipeline.")
+        if self.recon.allow_bruteforce:
+            raise ValueError(
+                "recon.allow_bruteforce is not implemented: recon uses passive "
+                "sources only. Leave it false.")
+        if int(self.nmap.chunk_size) < 1:
+            raise ValueError(f"nmap.chunk_size is {self.nmap.chunk_size!r}: use 1 or more")
+        if self.llm.analyse_findings_above not in ("off", *SEVERITIES):
+            raise ValueError(
+                f"llm.analyse_findings_above is {self.llm.analyse_findings_above!r}: "
+                f"use one of off, {', '.join(SEVERITIES)}")
+        if self.llm.azure_auth not in ("auto", "api_key", "entra"):
+            raise ValueError(f"llm.azure_auth is {self.llm.azure_auth!r}: "
+                             "use auto, api_key or entra")
 
     def to_dict(self) -> dict:
         return asdict(self)

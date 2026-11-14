@@ -7,7 +7,7 @@
     "model": "anthropic.claude-opus-5-5",
     "aws_region": "eu-west-2",
     "effort": "medium",
-    "max_tokens": 1500,
+    "max_tokens": 8000,
 
     "max_input_chars": 40000,
 
