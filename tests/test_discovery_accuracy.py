@@ -774,7 +774,10 @@ class TestParallelBatches(_Case):
         self.assertNotIn("discover", self.store.meta().get("stages", {}))
         # Started: batch 1, the three beside it, and perhaps the one that
         # took its place. Each was stopped (SIGTERM), not left running.
-        self.assertIn(len(self.new_calls()), (4, 5))
+        # Counted from extscan's own command log: a fake nmap stopped while
+        # it was still starting up never wrote its line in the call log.
+        self.assertIn(len(self.store.commands()), (4, 5))
+        self.new_calls()
         stopped = [c for c in self.store.commands() if c["returncode"] != 0]
         self.assertGreaterEqual(len(stopped), 3)
         self.assertEqual({c["returncode"] for c in stopped}, {-15})

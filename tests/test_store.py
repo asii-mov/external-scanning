@@ -530,7 +530,12 @@ class TestLegacyRuns(_Case):
         old, imported = self.legacy("old"), self.legacy("imported")
         imported.checkpoint("discover:tcp", "chunk-0099")
         scope = Scope.load(ROOT / "examples" / "lab" / "scope.json")
-        with contextlib.redirect_stdout(io.StringIO()):
+        # Both reports carry the time they were written, so the clock is held
+        # still: the two renders must not straddle a second.
+        real = time.gmtime
+        frozen = mock.patch("time.gmtime",
+                            side_effect=lambda epoch=None: real(0 if epoch is None else epoch))
+        with contextlib.redirect_stdout(io.StringIO()), frozen:
             pipeline.make_report(old, scope)
             pipeline.make_report(imported, scope)
         self.assertEqual(old.layout, "legacy-json")     # a report is not a state write
@@ -713,7 +718,8 @@ class TestRootAndUser(_Case):
         self.store.log_command(CommandRecord(argv=["nmap"], started=0.0, duration=0.0,
                                              returncode=0))
         self.assertIn((STATE_DB, *owner), chowned)
-        self.assertIn((".run.json.tmp", *owner), chowned)
+        self.assertTrue(any(name.startswith(".run.json.") and name.endswith(".tmp")
+                            and (uid, gid) == owner for name, uid, gid in chowned), chowned)
         self.assertIn(("commands.jsonl", *owner), chowned)
 
     def test_root_importing_an_old_run_hands_over_the_database_and_the_json(self):

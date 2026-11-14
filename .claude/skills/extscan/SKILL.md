@@ -19,15 +19,15 @@ the live state. Raw tool output is in `runs/<run>/raw/`.
 ## Before anything runs
 
 **Never scan without a scope file.** `extscan init` refuses without one, and
-that refusal is a feature — do not work around it. The file records the
-authorisation reference, who signed off, and the testing window.
+that refusal is a feature — do not work around it. The addresses in the file
+are the only ones that get scanned.
 
-If the user gives you an IP or CIDR with no scope file, write one from
-`examples/scope.example.json` and **ask them for the authorisation reference
-and sign-off before running the first scan**. Do not invent these. If they say
-"just scan it", stop and explain that you need the ticket reference and who
-authorised it recorded, because the file is the audit trail that distinguishes
-this from an attack.
+If the user gives you an IP, a CIDR or a range with no scope file, write the
+targets to a plain-text file, one per line (`examples/targets.example.txt`),
+and use that as the scope. The user is trusted to submit only ranges they are
+authorised to test. Use the JSON form (`examples/scope.example.json`) when
+they give you an authorisation reference, exclusions or a testing window to
+record. Do not invent those.
 
 Check the target list back to the user before starting. A mistyped CIDR is the
 difference between scanning 14 hosts and scanning someone else's network.

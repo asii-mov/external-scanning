@@ -196,7 +196,10 @@ class Store:
     def _write(self, name: str, data) -> None:
         """Atomic write: a killed scan must not leave truncated state behind."""
         self.path.mkdir(parents=True, exist_ok=True)
-        tmp = self.path / f".{name}.tmp"
+        # Named per process and thread: two Stores on one run (root and the
+        # user, or one per thread) would otherwise share a temporary file,
+        # and the slower one would find it already renamed away.
+        tmp = self.path / f".{name}.{os.getpid()}.{threading.get_ident()}.tmp"
         tmp.write_text(json.dumps(data, indent=2, sort_keys=False, default=str))
         self._hand_over(tmp)
         tmp.replace(self.path / name)
