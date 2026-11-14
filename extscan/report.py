@@ -109,6 +109,9 @@ def _enrichment_lines(stage: dict | None) -> list[str]:
 
 def _authorisation_block(scope: Scope) -> str:
     a = scope.authorization
+    if not a.reference:
+        return ("- Not recorded. The scope was a plain list of targets, which "
+                "carries no sign-off.")
     out = [f"- **Reference:** {a.reference}", f"- **Authorised by:** {a.authorized_by}"]
     if a.window_start or a.window_end:
         out.append(f"- **Testing window:** {a.window_start or 'open'} to "

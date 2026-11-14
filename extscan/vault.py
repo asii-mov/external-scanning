@@ -492,8 +492,12 @@ class _Vault:
         if a.window_start or a.window_end:
             window = (f" The agreed testing window ran from {_text(a.window_start or 'open')} "
                       f"to {_text(a.window_end or 'open')}.")
-        w(f"{_text(a.authorized_by)} authorised this assessment under reference "
-          f"{_code(a.reference)}.{window} The agreed scope was:")
+        if a.reference:
+            w(f"{_text(a.authorized_by)} authorised this assessment under reference "
+              f"{_code(a.reference)}.{window} The agreed scope was:")
+        else:
+            w("No authorisation was recorded: the scope was a plain list of targets. "
+              "The scope was:")
         w("")
         for t in self.scope.targets:
             w(f"- {_code(t)}")

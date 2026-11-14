@@ -104,18 +104,22 @@ troubleshooting for the lab.
 
 ## Scanning a real target
 
-1. Copy the scope template and fill it in. extscan scans nothing without a
-   scope file that names the targets and who authorised the test.
-   [The scope file](#the-scope-file) explains each part.
+1. Write the ranges you are authorised to test in a file, one per line:
 
-   ```bash
-   cp examples/scope.example.json scope.json
    ```
+   1.1.1.1/25
+   12.2.2.2/24
+   12.1.1.1-100
+   ```
+
+   An entry is an address, a CIDR range, or a range (`12.1.1.1-100` is
+   `12.1.1.1` to `12.1.1.100`). `#` starts a comment.
+   `examples/targets.example.txt` is a template.
 
 2. Run the scan.
 
    ```bash
-   extscan run --scope scope.json
+   extscan run --scope targets.txt
    ```
 
 3. Read the results.
@@ -147,9 +151,19 @@ An unprivileged run has no UDP pass. That is a serious gap, so it exits 3.
 
 ## The scope file
 
-extscan scans nothing without a scope file that says what may be touched and
-who agreed to it. If someone's SOC asks what hit them, this is the record
-you point to.
+extscan scans nothing without a scope file. The addresses in it are the only
+ones that get scanned.
+
+The short form is the plain list of targets shown above. It records no
+authorisation: you are trusted to list only ranges you may test, and the
+report says no sign-off was recorded. It refuses internal address space and
+lists that expand to more than 1024 hosts.
+
+The full form is JSON. Use it when the run should record who agreed to the
+test, or when you need exclusions, a testing window, host names, domains to
+enumerate, internal targets or a higher host limit. If someone's SOC asks
+what hit them, this is the record you point to. Copy
+`examples/scope.example.json` to start.
 
 ```jsonc
 {
@@ -168,9 +182,9 @@ you point to.
 }
 ```
 
-`targets` are the only addresses that get scanned. The other keys are
-`allow_hostnames`, `domains` and `allow_private`; `docs/CONFIGURATION.md`
-describes each, and `examples/scope.example.json` is a template to copy.
+`targets` are the only addresses that get scanned, written the same way as
+in the plain list. The other keys are `allow_hostnames`, `domains` and
+`allow_private`; `docs/CONFIGURATION.md` describes each.
 
 What is checked when the file is loaded:
 
@@ -609,5 +623,6 @@ longer list and names two safety questions to settle first.
 ## Legal
 
 For authorised testing only. Scanning systems you do not own, or do not have
-written permission to test, is illegal in most jurisdictions. Record that
-permission in the scope file before the first packet.
+written permission to test, is illegal in most jurisdictions. Put only
+ranges you are authorised to test in the scope file, and use the JSON form
+when the permission should be on record with the run.

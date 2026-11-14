@@ -1,0 +1,6 @@
+# A plain-text scope: one target per line. Lines starting with # are comments.
+# List only ranges you are authorised to test.
+
+203.0.113.0/27          # a CIDR range
+198.51.100.14           # one address
+198.51.100.20-40        # a range of the last octet, both ends included

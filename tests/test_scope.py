@@ -27,6 +27,78 @@ def write_scope(**overrides) -> str:
     return str(path)
 
 
+def write_targets(text: str) -> str:
+    path = Path(tempfile.mkdtemp()) / "targets.txt"
+    path.write_text(text)
+    return str(path)
+
+
+class TestPlainTargetList(unittest.TestCase):
+    def test_one_target_per_line_with_comments_and_blank_lines(self):
+        scope = Scope.load(write_targets(
+            "# perimeter\n203.0.113.1/29\n\n198.51.100.14  # the VPN\n"))
+        self.assertEqual(scope.targets, ["203.0.113.1/29", "198.51.100.14"])
+        self.assertTrue(scope.contains("203.0.113.6"))
+        self.assertTrue(scope.contains("198.51.100.14"))
+        self.assertFalse(scope.contains("198.51.100.15"))
+
+    def test_no_authorisation_is_needed_and_none_is_recorded(self):
+        scope = Scope.load(write_targets("203.0.113.1\n"))
+        self.assertEqual(scope.authorization.reference, "")
+        self.assertEqual(scope.engagement, "targets")
+        self.assertEqual(scope.in_window()[0], True)
+
+    def test_a_last_octet_range_includes_both_ends(self):
+        scope = Scope.load(write_targets("203.0.113.1-100\n"))
+        self.assertEqual(scope.host_count(), 100)
+        self.assertEqual(scope.hosts()[0], "203.0.113.1")
+        self.assertEqual(scope.hosts()[-1], "203.0.113.100")
+        self.assertFalse(scope.contains("203.0.113.101"))
+
+    def test_a_full_range_crosses_an_octet(self):
+        scope = Scope.load(write_targets("203.0.113.254-203.0.114.1\n"))
+        self.assertEqual(scope.hosts(), ["203.0.113.254", "203.0.113.255",
+                                         "203.0.114.0", "203.0.114.1"])
+
+    def test_a_line_that_is_not_a_target_is_refused_with_its_line_number(self):
+        for bad in ("www.example.com", "203.0.113.1-999", "203.0.113.9-1", "203.0.113.0/33"):
+            with self.assertRaises(ScopeError) as cm:
+                Scope.load(write_targets(f"203.0.113.1\n{bad}\n"))
+            self.assertIn("line 2", str(cm.exception), bad)
+
+    def test_an_empty_list_is_refused(self):
+        with self.assertRaises(ScopeError):
+            Scope.load(write_targets("# nothing yet\n\n"))
+
+    def test_internal_space_and_oversized_lists_are_still_refused(self):
+        for text in ("10.0.0.1\n", "127.0.0.2\n", "203.0.0.0/16\n"):
+            with self.assertRaises(ScopeError) as cm:
+                Scope.load(write_targets(text))
+            self.assertIn("JSON scope file", str(cm.exception), text)
+
+    def test_a_huge_range_is_refused_before_it_is_expanded(self):
+        with self.assertRaises(ScopeError) as cm:
+            Scope.load(write_targets("11.0.0.1-12.0.0.1\n"))
+        self.assertIn("CIDR", str(cm.exception))
+
+    def test_a_json_scope_takes_ranges_in_targets_and_exclude(self):
+        scope = Scope.load(write_scope(targets=["203.0.113.1-10"], exclude=["203.0.113.4-5"]))
+        self.assertEqual(scope.host_count(), 8)
+        self.assertFalse(scope.contains("203.0.113.4"))
+
+    def test_broken_json_is_not_read_as_a_target_list(self):
+        path = Path(tempfile.mkdtemp()) / "scope.json"
+        path.write_text('{"targets": ["203.0.113.1"]')
+        with self.assertRaises(ScopeError) as cm:
+            Scope.load(path)
+        self.assertIn("not valid JSON", str(cm.exception))
+
+    def test_the_report_says_no_authorisation_was_recorded(self):
+        from extscan.report import _authorisation_block
+        block = _authorisation_block(Scope.load(write_targets("203.0.113.1\n")))
+        self.assertIn("Not recorded", block)
+
+
 class TestScopeLoading(unittest.TestCase):
     def test_loads_valid_scope(self):
         scope = Scope.load(write_scope())

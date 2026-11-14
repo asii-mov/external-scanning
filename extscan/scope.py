@@ -1,9 +1,11 @@
 """Engagement scope: who authorised this, what may be touched, what may not.
 
 Two jobs here, and the second is the one that matters once the pipeline starts
-looping. First, refuse to run at all without a scope file that records written
-authorisation. Second, re-check every single target immediately before it is
-touched -- including targets derived from tool output.
+looping. First, refuse to run at all without a scope file: either JSON, which
+records the written authorisation, or a plain list of targets, one per line,
+where the person running the scan is trusted to hold it. Second, re-check
+every single target immediately before it is touched -- including targets
+derived from tool output.
 
 That second check is not paranoia. Leads come from scanner results, HTTP
 redirects and OpenAPI `servers` blocks, all of which are controlled by the
@@ -63,6 +65,45 @@ def _reject_unknown(data: dict, known: frozenset, where: str) -> None:
             f"{where}: unknown key(s) {', '.join(repr(k) for k in unknown)}. "
             f"Known keys: {', '.join(sorted(known))}. A misspelt key is refused "
             "because it would otherwise be ignored without a word.")
+
+
+# A range is refused above this size whatever max_hosts says: it is expanded
+# address by address, and a slip such as 10.0.0.1-11.0.0.1 must fail at once.
+_MAX_RANGE = 65536
+
+
+def expand_target(spec: str) -> list[str]:
+    """One target as written -> the entries `Scope` works with.
+
+    An address or a CIDR range passes through. A range, `12.1.1.1-100` (the
+    last octet) or `12.1.1.1-12.1.2.20`, becomes its addresses one by one,
+    because both ends of a range are meant, and a CIDR block would drop its
+    network and broadcast addresses.
+    """
+    spec = spec.strip()
+    if "-" not in spec:
+        return [spec]
+    first_text, _, last_text = (part.strip() for part in spec.partition("-"))
+    try:
+        first = ipaddress.ip_address(first_text)
+        if last_text.isdigit() and first.version == 4:
+            last = ipaddress.ip_address(first_text.rsplit(".", 1)[0] + "." + last_text)
+        else:
+            last = ipaddress.ip_address(last_text)
+    except ValueError as exc:
+        raise ScopeError(f"bad target/exclude entry {spec!r}: {exc}. A range is written "
+                         "12.1.1.1-100 or 12.1.1.1-12.1.2.20") from exc
+    if first.version != last.version or int(last) < int(first):
+        raise ScopeError(f"bad target/exclude entry {spec!r}: the range ends before it starts")
+    size = int(last) - int(first) + 1
+    if size > _MAX_RANGE:
+        raise ScopeError(f"range {spec!r} holds {size} addresses; write a range "
+                         f"over {_MAX_RANGE} as CIDR blocks")
+    return [str(first + i) for i in range(size)]
+
+
+def _expand_all(specs: list[str]) -> list[str]:
+    return [entry for spec in specs for entry in expand_target(str(spec))]
 
 
 def _is_internal(net: ipaddress._BaseNetwork) -> bool:
@@ -133,8 +174,10 @@ class Scope:
         p = Path(path)
         if not p.exists():
             raise ScopeError(f"scope file not found: {p}")
+        raw = p.read_text()
+        if not raw.lstrip().startswith("{"):
+            return cls._load_target_list(p, raw)
         try:
-            raw = p.read_text()
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise ScopeError(f"scope file {p} is not valid JSON: {exc}") from exc
@@ -163,8 +206,8 @@ class Scope:
             engagement=str(data.get("engagement", "unnamed engagement")),
             client=str(data.get("client", "")),
             authorization=Authorization.from_dict(data["authorization"]),
-            targets=[str(t) for t in data["targets"]],
-            exclude=[str(t) for t in data.get("exclude", [])],
+            targets=_expand_all(data["targets"]),
+            exclude=_expand_all(data.get("exclude", [])),
             allow_hostnames=[h.lower() for h in data.get("allow_hostnames", [])],
             domains=[d.lower().strip().rstrip(".") for d in data.get("domains", [])],
             max_hosts=int(data.get("max_hosts", 1024)),
@@ -173,6 +216,46 @@ class Scope:
             sha256=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
         )
         scope.validate()
+        return scope
+
+    @classmethod
+    def _load_target_list(cls, p: Path, raw: str) -> Scope:
+        """A plain-text scope: one address, CIDR range or range per line.
+
+        `#` starts a comment and blank lines are skipped. The file records
+        no authorisation: whoever runs the scan is trusted to list only
+        ranges they are authorised to test. Everything a JSON scope can set
+        beyond targets keeps its default, so internal address space and
+        more than 1024 hosts are still refused.
+        """
+        targets: list[str] = []
+        for number, line in enumerate(raw.splitlines(), 1):
+            for entry in line.split("#", 1)[0].replace(",", " ").split():
+                try:
+                    expanded = expand_target(entry)
+                    for spec in expanded:
+                        ipaddress.ip_network(spec, strict=False)
+                except (ScopeError, ValueError) as exc:
+                    raise ScopeError(
+                        f"scope file {p}, line {number}: {entry!r} is not an address, "
+                        f"a CIDR range or a range such as 12.1.1.1-100 ({exc})") from exc
+                targets += expanded
+        if not targets:
+            raise ScopeError(f"{p} lists no targets")
+        scope = cls(
+            engagement=p.stem,
+            client="",
+            authorization=Authorization(reference="", authorized_by=""),
+            targets=list(dict.fromkeys(targets)),
+            source_path=str(p),
+            sha256=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+        )
+        try:
+            scope.validate()
+        except ScopeError as exc:
+            raise ScopeError(
+                f"{exc} A plain list of targets cannot change that setting; use a "
+                "JSON scope file (examples/scope.example.json).") from exc
         return scope
 
     def validate(self) -> None:

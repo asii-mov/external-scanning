@@ -15,9 +15,23 @@ added without a row here fails the suite.
 
 ## Scope file
 
-JSON. It says what may be touched and who agreed to it. `--scope FILE` on
-`init` and `run`; later commands re-read the same path, or the one given with
-`--scope`. `examples/scope.example.json` is a template.
+It says what may be touched. `--scope FILE` on `init` and `run`; later
+commands re-read the same path, or the one given with `--scope`. The file is
+one of two things.
+
+A plain list of targets, one per line: an address, a CIDR range, or a range
+such as `12.1.1.1-100` (the last octet) or `12.1.1.1-12.1.2.20`, both ends
+included. `#` starts a comment. It records no authorisation, so the report
+says none was recorded, and the person running the scan is trusted to list
+only ranges they may test. Every other setting keeps its default: internal
+address space and more than 1024 hosts are refused. A range of more than
+65536 addresses has to be written as CIDR blocks. `examples/targets.example.txt`
+is a template.
+
+JSON, when the run should record who agreed to it, or needs exclusions, a
+testing window, host names, domains or a different `max_hosts`. A file whose
+first character is `{` is read as JSON. `examples/scope.example.json` is a
+template. The rest of this section describes the JSON keys.
 
 An unknown key is an error. A key whose name starts with `//` is a comment.
 
@@ -26,8 +40,8 @@ An unknown key is an error. A key whose name starts with `//` is a comment.
 | `engagement` | no | `unnamed engagement` | Name of the piece of work. Used in the report title and the run id |
 | `client` | no | empty | Who the systems belong to. Shown in the report header |
 | `authorization` | yes | | The sign-off. See the next table |
-| `targets` | yes | | IPv4 or IPv6 addresses and CIDR ranges. These are the only things that get scanned |
-| `exclude` | no | `[]` | Addresses and ranges inside `targets` to leave alone. Removed before nmap sees the list |
+| `targets` | yes | | IPv4 or IPv6 addresses, CIDR ranges, and ranges such as `12.1.1.1-100`. These are the only things that get scanned |
+| `exclude` | no | `[]` | Addresses and ranges inside `targets` to leave alone, written the same way. Removed before nmap sees the list |
 | `allow_hostnames` | no | `[]` | Host names that HTTP requests may be sent to by name. A name is refused if it resolves to an excluded address, or to internal address space while `allow_private` is false |
 | `domains` | no | `[]` | Domains whose names may be enumerated and whose DNS may be queried (`recon`). A name found this way is scanned only if its address is inside `targets` |
 | `max_hosts` | no | `1024` | The scope is refused if it expands to more hosts than this |

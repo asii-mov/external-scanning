@@ -6,6 +6,7 @@ out/
 # references. Only the examples/ templates belong in the repo.
 /scope*.json
 /policy*.json
+/targets*.txt
 
 # Loose tool output dropped in the working directory.
 /*.xml

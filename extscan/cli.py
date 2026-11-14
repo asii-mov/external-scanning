@@ -187,10 +187,16 @@ def cmd_init(args) -> int:
         s = d["scope"]
         print(f"Run {d['run_id']} created at {d['path']}")
         print(f"  engagement: {s['engagement']}  client: {s['client']}")
-        print(f"  authorisation: {s['authorization']['reference']} "
-              f"(by {s['authorization']['authorized_by']})")
+        if s["authorization"]["reference"]:
+            print(f"  authorisation: {s['authorization']['reference']} "
+                  f"(by {s['authorization']['authorized_by']})")
+        else:
+            print("  authorisation: not recorded (plain list of targets)")
         print(f"  window: {s['window_note']}")
-        print(f"  targets: {', '.join(s['targets'])}  -> {s['host_count']} host(s)")
+        shown = s["targets"][:8]
+        more = len(s["targets"]) - len(shown)
+        print(f"  targets: {', '.join(shown)}{f' and {more} more' if more else ''}"
+              f"  -> {s['host_count']} host(s)")
         print(f"\nNext: extscan discover {d['run_id']}")
 
     _emit(data, args.json, human)
@@ -747,7 +753,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_providers)
 
     p = add_cmd("init", help="create a run from a scope file")
-    p.add_argument("--scope", required=True, help="path to the scope/authorisation file")
+    p.add_argument("--scope", required=True,
+                   help="scope file: JSON with the authorisation, or a plain list of "
+                        "targets, one per line")
     p.add_argument("--policy", help="optional policy JSON overlay")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])
     p.add_argument("--tcp-ports", type=_tcp_ports, metavar="all|top|quick|LIST",
@@ -909,7 +917,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = add_cmd("run", help="init + recon + discover + probe + chase + screenshot + "
                             "enrich + report")
-    p.add_argument("--scope", required=True)
+    p.add_argument("--scope", required=True,
+                   help="scope file: JSON with the authorisation, or a plain list of "
+                        "targets, one per line")
     p.add_argument("--policy")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])
     p.add_argument("--tcp-ports", type=_tcp_ports, metavar="all|top|quick|LIST",
