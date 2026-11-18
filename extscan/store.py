@@ -95,9 +95,16 @@ _SERVICE_ORDER = ("host, CASE proto WHEN 'tcp' THEN 0 WHEN 'udp' THEN 1 ELSE 9 E
                   "port, proto")
 
 
-def _slug(text: str) -> str:
-    s = re.sub(r"[^A-Za-z0-9._-]+", "-", text.strip()).strip("-.")
-    return (s or "run")[:40]
+def new_run_id(runs_dir: str | Path) -> str:
+    """The scan's start time, `YYYYMMDD-HHMMSS`; `-2`, `-3`... if two
+    runs start in the same second."""
+    base = time.strftime("%Y%m%d-%H%M%S")
+    run_id, n = base, 1
+    while (Path(runs_dir) / run_id).exists():
+        n += 1
+        run_id = f"{base}-{n}"
+    return run_id
+
 
 
 def _dump(data) -> str:
@@ -141,7 +148,7 @@ class Store:
     def create(cls, runs_dir: str | Path, engagement: str, run_id: str | None = None) -> Store:
         runs_dir = Path(runs_dir)
         if run_id is None:
-            run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{_slug(engagement)}"
+            run_id = new_run_id(runs_dir)
         if not RUN_ID_RE.match(run_id):
             raise ValueError(f"invalid run id {run_id!r}")
         store = cls(runs_dir / run_id)

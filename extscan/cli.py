@@ -24,7 +24,7 @@ from .probes import REGISTRY
 from .resilience import Degradation, RunAborted
 from .runner import Runner, doctor
 from .scope import Scope, ScopeError
-from .store import Store
+from .store import Store, new_run_id
 
 DEFAULT_RUNS_DIR = "runs"
 
@@ -52,7 +52,8 @@ def _scope_for(store: Store, args) -> Scope:
     path = getattr(args, "scope", None) or recorded.get("source_path")
     if not path:
         raise SystemExit("cannot determine the scope file for this run; pass --scope")
-    scope = Scope.load(path)
+    # A target list run with --allow-private keeps that on every later stage.
+    scope = Scope.load(path, allow_private=bool(recorded.get("allow_private")))
     changes = scope.changes_since(recorded)
     if changes:
         # Following the current file is right. Doing it without a trace is
@@ -96,7 +97,9 @@ def _llm_for(store: Store, policy: Policy, args):
     try:
         from .llm import build_client
 
-        client = build_client(policy.llm)
+        client = build_client(
+            policy.llm,
+            redact_ips=False if getattr(args, "no_redact_ips", False) else None)
     except Exception as exc:
         store.add_degradation(Degradation(
             stage="llm", component=f"llm:{policy.llm.provider}",
@@ -111,7 +114,8 @@ def _llm_for(store: Store, policy: Policy, args):
     store.remove_degradations(lambda d: d.stage == "llm")
     if client is not None:
         print(f"  model: {client.provider.name} / "
-              f"{getattr(client.provider, 'model', '?')}")
+              f"{getattr(client.provider, 'model', '?')}, IP redaction "
+              f"{'on' if client.redact_ips else 'OFF'}")
     return client
 
 
@@ -623,14 +627,49 @@ def cmd_resume(args) -> int:
     return code
 
 
+def _run_scope(args) -> tuple[Scope, str | None]:
+    """The scope for `run`: targets on the command line, `-iL FILE`, or
+    `--scope FILE`. Returns the scope and the run id to create it under.
+
+    Targets on the command line are written to `<run>/targets.txt`, because
+    every later stage re-reads the scope from a file.
+    """
+    given = [bool(args.targets), bool(args.input_list), bool(args.scope)]
+    if sum(given) != 1:
+        raise ValueError("give the targets, -iL FILE or --scope FILE (exactly one): "
+                         "extscan 192.0.2.10 198.51.100.0/24, or extscan -iL targets.txt")
+    path = args.scope or args.input_list
+    if path:
+        scope_path = Path(path).resolve()
+        if args.allow_private and scope_path.read_text().lstrip().startswith("{"):
+            raise ValueError("--allow-private is for target lists; a JSON scope "
+                             "sets allow_private itself")
+        return Scope.load(scope_path, allow_private=args.allow_private), args.id
+    run_id = args.id or new_run_id(args.runs_dir)
+    run_dir = Path(args.runs_dir) / run_id
+    if run_dir.exists():
+        raise ValueError(f"run {run_id} already exists at {run_dir}")
+    run_dir.mkdir(parents=True)
+    scope_path = (run_dir / "targets.txt").resolve()
+    scope_path.write_text("# Targets given on the command line\n"
+                          + "\n".join(args.targets) + "\n")
+    try:
+        return Scope.load(scope_path, allow_private=args.allow_private), run_id
+    except ScopeError:
+        # Only the list was created. Do not leave an empty run behind.
+        scope_path.unlink()
+        run_dir.rmdir()
+        raise
+
+
 def cmd_run(args) -> int:
-    scope = Scope.load(args.scope)
+    scope, run_id = _run_scope(args)
     policy = Policy.load(args.policy, profile=args.profile)
     if args.tcp_ports:
         policy.nmap.tcp_ports = args.tcp_ports
     if args.template:
         policy.report.template = args.template
-    store = pipeline.init_run(args.runs_dir, scope, policy, run_id=args.id)
+    store = pipeline.init_run(args.runs_dir, scope, policy, run_id=run_id)
     print(f"Run {store.run_id}\n")
     runner = _runner(store, args)
     result = pipeline.run_all(store, scope, policy, runner, rounds=args.rounds,
@@ -723,6 +762,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="print the commands that would run, send no packets")
         p.add_argument("--no-llm", action="store_true", **default,
                        help="skip model-assisted analysis even if enabled in policy")
+        p.add_argument("--no-redact-ips", action="store_true", **default,
+                       help="send real IP addresses to the model, even if "
+                            "llm.redact_ips is true")
 
     # The global flags work on either side of the subcommand: `extscan --json
     # gaps <run>` and `extscan gaps <run> --json`. After the subcommand they
@@ -916,10 +958,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_resolve)
 
     p = add_cmd("run", help="init + recon + discover + probe + chase + screenshot + "
-                            "enrich + report")
-    p.add_argument("--scope", required=True,
+                            "enrich + report (the default: `extscan TARGET...`)")
+    p.add_argument("targets", nargs="*", metavar="TARGET",
+                   help="addresses, CIDR ranges or ranges such as 192.0.2.1-50")
+    p.add_argument("-iL", "--input-list", metavar="FILE",
+                   help="read targets from FILE, one per line, as nmap -iL does")
+    p.add_argument("--scope",
                    help="scope file: JSON with the authorisation, or a plain list of "
                         "targets, one per line")
+    p.add_argument("--allow-private", action="store_true",
+                   help="allow internal address space (RFC 1918, loopback) in a "
+                        "target list")
     p.add_argument("--policy")
     p.add_argument("--profile", default="standard", choices=["quick", "standard", "thorough"])
     p.add_argument("--tcp-ports", type=_tcp_ports, metavar="all|top|quick|LIST",
@@ -934,8 +983,39 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+# `run` options that take a value, so a value is not mistaken for a target
+# or a command when looking for the subcommand.
+_VALUE_OPTIONS = {"--runs-dir", "--policy", "--profile", "--tcp-ports", "--id",
+                  "--rounds", "--template", "--scope", "-iL", "--input-list"}
+
+
+def _default_to_run(argv: list[str], commands) -> list[str]:
+    """`extscan 192.0.2.10` and `extscan -iL hosts.txt` mean `extscan run ...`."""
+    skip = False
+    for arg in argv:
+        if skip:
+            skip = False
+            continue
+        if arg in ("-h", "--help", "--version"):
+            return argv
+        if arg.startswith("-"):
+            skip = arg in _VALUE_OPTIONS
+            if arg in ("-iL", "--input-list") or arg.startswith(("-iL=", "--input-list=")):
+                return ["run", *argv]
+            continue
+        return argv if arg in commands else ["run", *argv]
+    return argv
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv:
+        parser.print_help()
+        return 2
+    commands = next(a.choices for a in parser._actions
+                    if isinstance(a, argparse._SubParsersAction))
+    args = parser.parse_args(_default_to_run(argv, commands))
     try:
         return args.func(args)
     except ScopeError as exc:

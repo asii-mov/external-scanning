@@ -28,6 +28,7 @@ uv run python -m evals.score [runs/<id>]            # scorecard for a lab run (d
 uv run python -m evals.bench                        # bookkeeping and SNMP budgets
 uv run python -m evals.discovery                    # one-phase against two-phase discovery, fake nmap
 uv run python -m evals.diff                         # planted run-to-run transitions
+uv run python -m evals.redaction                    # no real IP reaches the model provider (needs --extra llm)
 uv run python -m unittest tests.fuzz_failures -v    # fuzzer, several minutes
 FUZZ_EXAMPLES=1 uv run python -m unittest tests.fuzz_failures   # corpus replay only, ~1 min
 uv run python -m tests.lab                          # lab on 127.0.0.2, Ctrl-C to stop

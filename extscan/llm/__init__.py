@@ -46,12 +46,14 @@ from .providers import (
     classify_sdk_error,
     describe_providers,
 )
+from .redact import SYSTEM_NOTE, IPRedactor, RedactionError
 
 __all__ = [
     "Analysis",
     "AnthropicAPIProvider",
     "AzureFoundryProvider",
     "BedrockProvider",
+    "IPRedactor",
     "LLMBadOutput",
     "LLMClient",
     "LLMRefused",
@@ -79,10 +81,14 @@ class LLMStats:
     circuit_trips: int = 0
     model: str = ""
     provider: str = ""
+    ip_redaction: bool = False
+    redacted_addresses: int = 0
 
     def to_dict(self) -> dict:
         return {
             "provider": self.provider, "model": self.model,
+            "ip_redaction": self.ip_redaction,
+            "redacted_addresses": self.redacted_addresses,
             "requested": self.requested, "succeeded": self.succeeded,
             "failed": self.failed, "refused": self.refused,
             "bad_output": self.bad_output,
@@ -109,6 +115,11 @@ class LLMClient:
     effort: str = "medium"
     timeout: float = 120.0
     max_input_chars: int = 40_000
+    # Pseudonymise IP addresses on the way out and restore them in the reply
+    # (extscan/llm/redact.py). One redactor per client, so every request in a
+    # run sees the same mapping.
+    redact_ips: bool = True
+    redactor: IPRedactor | None = None
     stats: LLMStats = field(default_factory=LLMStats)
     breaker: CircuitBreaker = field(default_factory=lambda: CircuitBreaker(
         name="llm", failure_threshold=3, cooldown=120.0))
@@ -118,6 +129,9 @@ class LLMClient:
     def __post_init__(self) -> None:
         self.stats.provider = self.provider.name
         self.stats.model = getattr(self.provider, "model", "")
+        self.stats.ip_redaction = self.redact_ips
+        if self.redact_ips and self.redactor is None:
+            self.redactor = IPRedactor()
 
     @property
     def healthy(self) -> bool:
@@ -141,6 +155,23 @@ class LLMClient:
             self.stats.skipped_circuit_open += 1
             return None
 
+        system = SYSTEM_PROMPT
+        if self.redact_ips:
+            # Every part, not just the evidence: the trusted context carries
+            # the host and URLs too. Before truncation, so a cut cannot leave
+            # the first octets of a real address that no pattern matches.
+            # Fail closed: text that could not be redacted is not sent.
+            try:
+                question = self.redactor.redact(question)
+                evidence = self.redactor.redact(evidence or "")
+                if context:
+                    context = {k: self.redactor.redact(v) if isinstance(v, str) else v
+                               for k, v in context.items()}
+            except RedactionError as exc:
+                self.stats.failed += 1
+                self.stats.last_error = str(exc)[:300]
+                return None
+            system = SYSTEM_PROMPT + SYSTEM_NOTE
         safe_evidence, truncated = sanitise_evidence(evidence, self.max_input_chars)
         if truncated:
             self.stats.truncated_inputs += 1
@@ -151,7 +182,7 @@ class LLMClient:
             text, model_id = self.breaker.call(
                 lambda: retry(
                     lambda: self.provider.complete(
-                        SYSTEM_PROMPT, prompt,
+                        system, prompt,
                         max_tokens=self.max_tokens,
                         effort=self.effort,
                         timeout=self.timeout,
@@ -177,6 +208,8 @@ class LLMClient:
         finally:
             self.stats.total_seconds += time.monotonic() - started
             self.stats.circuit_trips = self.breaker.trips
+            if self.redactor is not None:
+                self.stats.redacted_addresses = self.redactor.replaced
 
         if getattr(self.provider, "last_stop_reason", "") == "max_tokens":
             # Thinking and the answer share max_tokens, so a low limit ends
@@ -187,6 +220,8 @@ class LLMClient:
                 f"the reply was cut off at llm.max_tokens ({self.max_tokens}); "
                 "raise llm.max_tokens or lower llm.effort")
             return None
+        if self.redact_ips:
+            text = self.redactor.restore(text)
         try:
             analysis = parse_analysis(text)
         except LLMBadOutput as exc:
@@ -201,8 +236,10 @@ class LLMClient:
         return analysis
 
 
-def build_client(policy) -> LLMClient | None:
+def build_client(policy, *, redact_ips: bool | None = None) -> LLMClient | None:
     """Build a client from an LLMPolicy, or None when analysis is disabled.
+
+    `redact_ips` overrides `policy.redact_ips` (the `--no-redact-ips` flag).
 
     Raises LLMUnavailable (or ValueError for a provider name that does not
     exist) when analysis is enabled but cannot work. The CLI turns that into
@@ -223,6 +260,7 @@ def build_client(policy) -> LLMClient | None:
         effort=policy.effort,
         timeout=float(policy.timeout_sec),
         max_input_chars=policy.max_input_chars,
+        redact_ips=policy.redact_ips if redact_ips is None else redact_ips,
         breaker=CircuitBreaker(name=f"llm:{provider.name}",
                                failure_threshold=policy.circuit_failure_threshold,
                                cooldown=float(policy.circuit_cooldown_sec)),

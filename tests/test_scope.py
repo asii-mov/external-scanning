@@ -71,10 +71,17 @@ class TestPlainTargetList(unittest.TestCase):
             Scope.load(write_targets("# nothing yet\n\n"))
 
     def test_internal_space_and_oversized_lists_are_still_refused(self):
-        for text in ("10.0.0.1\n", "127.0.0.2\n", "203.0.0.0/16\n"):
+        for text, hint in (("10.0.0.1\n", "--allow-private"),
+                           ("127.0.0.2\n", "--allow-private"),
+                           ("203.0.0.0/16\n", "JSON scope file")):
             with self.assertRaises(ScopeError) as cm:
                 Scope.load(write_targets(text))
-            self.assertIn("JSON scope file", str(cm.exception), text)
+            self.assertIn(hint, str(cm.exception), text)
+
+    def test_allow_private_lets_a_list_hold_internal_space(self):
+        scope = Scope.load(write_targets("127.0.0.2\n10.0.0.0/30\n"), allow_private=True)
+        self.assertTrue(scope.allow_private)
+        self.assertTrue(scope.contains("127.0.0.2"))
 
     def test_a_huge_range_is_refused_before_it_is_expanded(self):
         with self.assertRaises(ScopeError) as cm:

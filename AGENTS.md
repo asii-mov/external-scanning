@@ -58,6 +58,7 @@ truth.
 | Obsidian vault: the pentest narrative, host and finding notes | `extscan/vault.py` |
 | Web screenshots (optional Playwright), per-request scope guard | `extscan/screenshots.py` |
 | Optional model-assisted analysis: Anthropic API, Bedrock, Azure | `extscan/llm/` (`providers.py`) |
+| IP pseudonymisation of everything sent to a model | `extscan/llm/redact.py` |
 
 ## Tests and test data
 
@@ -70,6 +71,7 @@ truth.
 | Report template language, custom layouts, required sections | `tests/test_report_template.py` |
 | `docs/CONFIGURATION.md` matches the code; README names only files and commands that exist | `tests/test_docs.py` |
 | Vault links, ordering, unredacted evidence, hostile text, screenshot stage | `tests/test_vault.py` |
+| IP redaction: mapping, false positives, toggle, fail-closed, end-to-end eval | `tests/test_redact.py` |
 | Evals: detection, false positives, cost, agent behaviour | `evals/` (`evals/README.md`), run by `tests/test_evals.py` |
 | CLI flags, policy loading, `--dry-run` sending nothing | `tests/test_agent_interface.py` |
 | Store semantics, crash safety, threads, legacy runs, export | `tests/test_store.py` |

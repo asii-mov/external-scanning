@@ -364,6 +364,10 @@ class LLMPolicy:
     azure_auth: str = "auto"        # auto | api_key | entra
 
     max_input_chars: int = 40_000
+    # Swap IP addresses for consistent fakes of the same kind before a prompt
+    # leaves the host, and swap them back in the reply. On by default: a
+    # provider does not need a client's real addresses to reason about them.
+    redact_ips: bool = True
 
     sdk_retries: int = 0
     retry_attempts: int = 3
@@ -501,6 +505,8 @@ class Policy:
             raise ValueError(
                 f"llm.analyse_findings_above is {self.llm.analyse_findings_above!r}: "
                 f"use one of off, {', '.join(SEVERITIES)}")
+        if not isinstance(self.llm.redact_ips, bool):
+            raise ValueError(f"llm.redact_ips is {self.llm.redact_ips!r}: use true or false")
         if self.llm.azure_auth not in ("auto", "api_key", "entra"):
             raise ValueError(f"llm.azure_auth is {self.llm.azure_auth!r}: "
                              "use auto, api_key or entra")

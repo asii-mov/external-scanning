@@ -60,6 +60,18 @@ The notes below are kept as the spec it was built to.
 
 ## Open
 
+- [ ] **IP redaction: run it against a real model once.** `evals/redaction.py`
+      proves no real address reaches the provider and the reply maps back,
+      using a capture server that echoes addresses. Whether a real model
+      reasons as well about pseudonymised addresses, and quotes them
+      exactly, is untested. Compare notes from one lab run with and without
+      `--no-redact-ips` on a live provider.
+- [ ] **IP redaction: forms not handled.** Hostnames and PTR names (the
+      scope can name hosts; `fcrdns` output carries names too), dashed
+      hostnames (`ip-10-0-0-1`), integer and hex forms (`0x0a000001`),
+      zero-padded octets, `ip.port` (tcpdump style `10.0.0.1.443`), and an
+      address as the tail of a numeric OID. The IPv6 interface identifier
+      is kept, so an EUI-64 address still carries its MAC.
 - [ ] **Test the unprivileged-then-sudo UDP flow on a real host.** Only a
       dry-run unit test covers the UDP pass clearing the gap. The full root
       scan has run only in a container. Run a TCP-only scan as yourself,

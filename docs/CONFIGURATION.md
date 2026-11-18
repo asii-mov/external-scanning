@@ -17,15 +17,19 @@ added without a row here fails the suite.
 
 It says what may be touched. `--scope FILE` on `init` and `run`; later
 commands re-read the same path, or the one given with `--scope`. The file is
-one of two things.
+one of two things. `run` also takes the targets on the command line
+(`extscan 192.0.2.10 198.51.100.0/24`, written to `<run>/targets.txt`) or
+`-iL FILE`, which is a plain list as below.
 
 A plain list of targets, one per line: an address, a CIDR range, or a range
 such as `12.1.1.1-100` (the last octet) or `12.1.1.1-12.1.2.20`, both ends
 included. `#` starts a comment. It records no authorisation, so the report
 says none was recorded, and the person running the scan is trusted to list
-only ranges they may test. Every other setting keeps its default: internal
-address space and more than 1024 hosts are refused. A range of more than
-65536 addresses has to be written as CIDR blocks. `examples/targets.example.txt`
+only ranges they may test. Every other setting keeps its default. Internal
+address space is refused unless `--allow-private` is given, and more than
+1024 hosts are refused. The run records `--allow-private`, so later stages
+read the list the same way. A range of more than 65536 addresses has to be
+written as CIDR blocks. `examples/targets.example.txt`
 is a template.
 
 JSON, when the run should record who agreed to it, or needs exclusions, a
@@ -37,7 +41,7 @@ An unknown key is an error. A key whose name starts with `//` is a comment.
 
 | Key | Required | Default | Meaning |
 |---|---|---|---|
-| `engagement` | no | `unnamed engagement` | Name of the piece of work. Used in the report title and the run id |
+| `engagement` | no | `unnamed engagement` | Name of the piece of work. Used in the report title |
 | `client` | no | empty | Who the systems belong to. Shown in the report header |
 | `authorization` | yes | | The sign-off. See the next table |
 | `targets` | yes | | IPv4 or IPv6 addresses, CIDR ranges, and ranges such as `12.1.1.1-100`. These are the only things that get scanned |
@@ -247,6 +251,7 @@ from this file.
 | `llm.azure_resource` | empty | Foundry resource name, the first label of `https://<resource>.services.ai.azure.com` |
 | `llm.azure_auth` | `auto` | `api_key`, `entra`, or `auto`: the key when `ANTHROPIC_FOUNDRY_API_KEY` is set, otherwise Entra ID |
 | `llm.max_input_chars` | `40000` | Evidence characters sent per request. Longer evidence is truncated and the note says so |
+| `llm.redact_ips` | `true` | Replace IP addresses with consistent fakes of the same kind (loopback, private, public; same /24, same /64 for IPv6) before a prompt is sent, and put the real ones back in the reply. The mapping stays in memory. Hostnames are not redacted |
 | `llm.sdk_retries` | `0` | Retries inside the SDK. 0 because extscan does the retrying |
 | `llm.retry_attempts` | `3` | Attempts per request |
 | `llm.retry_base_delay` | `2.0` | First backoff in seconds; it doubles |
@@ -276,6 +281,7 @@ Global options, accepted before or after the command:
 | `--verbose` | Print every command as it is run |
 | `--dry-run` | Print what would run. Sends nothing and marks nothing as done |
 | `--no-llm` | Do not use a model, even if the policy enables one |
+| `--no-redact-ips` | Send real IP addresses to the model, even if `llm.redact_ips` is `true` |
 | `--version` | Print the version |
 
 Every command that takes `<run>` also accepts these:
@@ -295,7 +301,7 @@ Setting up and running:
 | `providers` | `--policy`, `--profile` | Show which model providers are usable, without calling one |
 | `template` | `--out`, `--force`, `--check` | Print the built-in report template. `--out FILE` writes a copy (`--force` to overwrite), `--check FILE` tests an edited one |
 | `init` | `--scope` (required), `--policy`, `--profile`, `--tcp-ports`, `--id`, `--template` | Create a run. `--tcp-ports` is `all`, `top`, `quick` or a list such as `22,80,8000-8100`. `--id` names the run |
-| `run` | `--scope` (required), `--policy`, `--profile`, `--tcp-ports`, `--id`, `--rounds`, `--template` | `init`, then every stage, then the report |
+| `run` | `TARGET...`, `-iL`/`--input-list`, or `--scope` (exactly one), `--allow-private`, `--policy`, `--profile`, `--tcp-ports`, `--id`, `--rounds`, `--template` | `init`, then every stage, then the report. The default command: `extscan TARGET...` and `extscan -iL FILE` mean `extscan run ...`. `--allow-private` lets a target list hold internal address space. The run goes in `<runs-dir>/YYYYMMDD-HHMMSS`, the time it started |
 | `resume` | `--rounds`, `--template` | Carry on an interrupted run, skipping what finished |
 
 Stages:

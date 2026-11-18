@@ -170,13 +170,20 @@ class Scope:
     sha256: str = ""            # of the scope file as loaded; "" when built in code
 
     @classmethod
-    def load(cls, path: str | Path) -> Scope:
+    def load(cls, path: str | Path, *, allow_private: bool = False) -> Scope:
+        """Load a JSON scope or a plain target list.
+
+        `allow_private` lets a plain list hold internal address space. It
+        comes from the `--allow-private` flag, which the run records so
+        later stages reload the list the same way. A JSON scope sets
+        `allow_private` itself and ignores this.
+        """
         p = Path(path)
         if not p.exists():
             raise ScopeError(f"scope file not found: {p}")
         raw = p.read_text()
         if not raw.lstrip().startswith("{"):
-            return cls._load_target_list(p, raw)
+            return cls._load_target_list(p, raw, allow_private=allow_private)
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
@@ -219,14 +226,15 @@ class Scope:
         return scope
 
     @classmethod
-    def _load_target_list(cls, p: Path, raw: str) -> Scope:
+    def _load_target_list(cls, p: Path, raw: str, *, allow_private: bool = False) -> Scope:
         """A plain-text scope: one address, CIDR range or range per line.
 
         `#` starts a comment and blank lines are skipped. The file records
         no authorisation: whoever runs the scan is trusted to list only
         ranges they are authorised to test. Everything a JSON scope can set
-        beyond targets keeps its default, so internal address space and
-        more than 1024 hosts are still refused.
+        beyond targets keeps its default, so more than 1024 hosts are still
+        refused, and internal address space is refused unless
+        `allow_private` is given.
         """
         targets: list[str] = []
         for number, line in enumerate(raw.splitlines(), 1):
@@ -247,15 +255,18 @@ class Scope:
             client="",
             authorization=Authorization(reference="", authorized_by=""),
             targets=list(dict.fromkeys(targets)),
+            allow_private=allow_private,
             source_path=str(p),
             sha256=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
         )
         try:
             scope.validate()
         except ScopeError as exc:
-            raise ScopeError(
-                f"{exc} A plain list of targets cannot change that setting; use a "
-                "JSON scope file (examples/scope.example.json).") from exc
+            hint = (" Pass --allow-private if you are authorised to scan it."
+                    if "allow_private" in str(exc) else
+                    " A plain list of targets cannot change that setting; use a "
+                    "JSON scope file (examples/scope.example.json).")
+            raise ScopeError(f"{exc}{hint}") from exc
         return scope
 
     def validate(self) -> None:

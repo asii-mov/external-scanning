@@ -11,6 +11,7 @@ agent driving it behaves. All of them run offline or on loopback.
 | `bench.py` | Is extscan's own bookkeeping and SNMP checking inside budget? | `uv run python -m evals.bench` | nothing |
 | `discovery.py` | Does two-phase discovery find the same services as one-phase, for how many fewer nmap runs and fingerprint attempts? | `uv run python -m evals.discovery` | nothing (fake nmap) |
 | `diff.py` | Are planted changes between two runs classified correctly, "not re-checked" included? | `uv run python -m evals.diff` | nothing |
+| `redaction.py` | With `llm.redact_ips` on, does any real IP address reach the model provider, and do the notes come back with real addresses? Off is the baseline that shows the check sees a leak | `uv run python -m evals.redaction [runs/<id>]` | the SDK (`uv sync --extra llm`); a lab run, or the committed fixture by default |
 | `skill/evals.json` | Does an agent using the skill ask for authorisation, report gaps, refuse off-scope work? | see below | a model |
 
 `tests/test_evals.py` runs the first three on every test run and fails when a

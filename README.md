@@ -55,20 +55,18 @@ extscan itself has no runtime dependencies beyond the standard library.
 
 ```bash
 git clone git@github.com:asii-mov/external-scanning.git && cd external-scanning
-uv sync
-uv run extscan doctor     # lists the scanners it found, with install commands for the rest
+uv tool install --editable '.[llm]'   # puts `extscan` on PATH (~/.local/bin)
+extscan doctor     # lists the scanners it found, with install commands for the rest
 ```
+
+`--editable` means a `git pull` takes effect without reinstalling. Drop
+`[llm]` if you will not use a model. If `extscan` is not found afterwards,
+run `uv tool update-shell` and open a new shell.
 
 On a fresh Ubuntu or Debian box, `bash scripts/cloud-setup.sh` installs
 nmap, sslscan, uv and a pinned nuclei with its templates, then runs
-`uv sync`.
-
-The commands in this file are written as `extscan ...`. Either put `uv run`
-in front of each one, or activate the environment once per shell:
-
-```bash
-source .venv/bin/activate
-```
+`uv sync`. For working on extscan itself, `uv sync` and `uv run extscan ...`
+use the repo's own environment instead.
 
 ### Try it on the lab
 
@@ -116,11 +114,19 @@ troubleshooting for the lab.
    `12.1.1.1` to `12.1.1.100`). `#` starts a comment.
    `examples/targets.example.txt` is a template.
 
-2. Run the scan.
+2. Run the scan. As with nmap, give the targets directly or in a file:
 
    ```bash
-   extscan run --scope targets.txt
+   extscan 12.2.2.2/24 12.1.1.1-100     # targets on the command line
+   extscan -iL targets.txt              # one per line
    ```
+
+   Internal address space (RFC 1918, loopback) is refused unless you add
+   `--allow-private`. Each run's output goes in `runs/<start time>/`, for
+   example `runs/20261118-183015/`, under the directory you run it from.
+   `--runs-dir` puts it elsewhere. `extscan run --scope targets.txt`
+   still works, and a JSON scope file records the authorisation
+   ([The scope file](#the-scope-file)).
 
 3. Read the results.
 
@@ -130,7 +136,7 @@ troubleshooting for the lab.
    extscan gaps latest         # what did not get checked
    ```
 
-   The report is `runs/<run-id>/report.md`. [Reports](#reports) describes
+   The report is `runs/<start time>/report.md`. [Reports](#reports) describes
    its sections and the Obsidian vault written beside it.
 
 If the run is interrupted (Ctrl-C, a dropped SSH session, a reboot),
@@ -430,8 +436,18 @@ code holds to three rules because of that:
    what is scanned, widen the scope or move anything up the queue.
 3. Secrets stay here. Evidence is redacted before it is sent. An exposed
    `.env` shows that credentials are reachable, and that is no reason to
-   upload them to an API. This is the only redaction in extscan; reports
-   keep evidence as captured.
+   upload them to an API.
+4. Addresses stay here. With `llm.redact_ips` (on by default), every IP
+   address in a request is swapped for a fake of the same kind before it
+   leaves. Loopback stays loopback, private stays private, public stays
+   public, and hosts that share a /24 still share one. extscan translates
+   the model's reply back, so notes name the real hosts. The mapping is held in
+   memory only. `--no-redact-ips` turns it off for one command. Hostnames
+   are not redacted. `uv run python -m evals.redaction` checks the bytes the
+   SDK sends.
+
+Reports keep evidence as captured; redaction applies only to what is sent
+to a model.
 
 A run without a model produces the same findings without the notes, and the
 report says so.

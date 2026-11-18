@@ -23,3 +23,7 @@ dist/
 venv/
 .coverage
 .pytest_cache/
+
+# Local Claude Code settings and hook state
+.claude/settings.local.json
+.claude/hooks/state/

@@ -182,3 +182,69 @@ class TestReviewQueueStaysWorthReading(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTargetsLikeNmap(_RunCase):
+    """`extscan TARGET...` and `extscan -iL FILE`, the way nmap takes them."""
+
+    def only_run(self) -> Path:
+        runs = [p for p in self.runs.iterdir() if (p / "run.json").exists()]
+        self.assertEqual(len(runs), 1)
+        return runs[0]
+
+    def test_targets_on_the_command_line_are_a_run(self):
+        code, _ = self.cli("--dry-run", "127.0.0.1", "127.0.0.3/32", "--allow-private")
+        self.assertIn(code, (0, 3))
+        run = self.only_run()
+        self.assertRegex(run.name, r"^\d{8}-\d{6}$")
+        self.assertIn("127.0.0.3/32", (run / "targets.txt").read_text())
+        recorded = Store.open(self.runs, run.name).meta()["scope"]
+        self.assertTrue(recorded["allow_private"])
+        self.assertEqual(Path(recorded["source_path"]), (run / "targets.txt").resolve())
+
+    def test_input_list_is_read_like_nmap_iL(self):
+        targets = self.tmp / "hosts.txt"
+        targets.write_text("# lab\n127.0.0.1\n")
+        code, _ = self.cli("--dry-run", "-iL", str(targets), "--allow-private")
+        self.assertIn(code, (0, 3))
+        recorded = Store.open(self.runs, self.only_run().name).meta()["scope"]
+        self.assertEqual(recorded["source_path"], str(targets.resolve()))
+
+    def test_internal_targets_need_allow_private_and_leave_no_run(self):
+        code, _ = self.cli("--dry-run", "127.0.0.1")
+        self.assertEqual(code, 2)
+        self.assertFalse(self.runs.exists() and any(self.runs.iterdir()))
+
+    def test_exactly_one_source_of_targets(self):
+        code, _ = self.cli("run", "--dry-run", "127.0.0.1", "--scope", str(self.scope_path))
+        self.assertEqual(code, 2)
+        code, _ = self.cli("run", "--dry-run")
+        self.assertEqual(code, 2)
+
+    def test_allow_private_is_refused_with_a_json_scope(self):
+        code, _ = self.cli("run", "--dry-run", "--scope", str(self.scope_path),
+                           "--allow-private")
+        self.assertEqual(code, 2)
+
+    def test_later_stages_keep_allow_private(self):
+        self.cli("--dry-run", "127.0.0.1", "--allow-private", "--id", "t")
+        code, _ = self.cli("--dry-run", "status", "t")
+        self.assertEqual(code, 0)
+        code, _ = self.cli("--dry-run", "discover", "t")
+        self.assertIn(code, (0, 3))
+
+    def test_the_subcommand_is_found_past_option_values(self):
+        commands = {"run", "status"}
+        self.assertEqual(cli._default_to_run(["status", "x"], commands), ["status", "x"])
+        self.assertEqual(cli._default_to_run(["--runs-dir", "status", "1.2.3.4"], commands),
+                         ["run", "--runs-dir", "status", "1.2.3.4"])
+        self.assertEqual(cli._default_to_run(["--json", "-iL", "f"], commands),
+                         ["run", "--json", "-iL", "f"])
+        self.assertEqual(cli._default_to_run(["--version"], commands), ["--version"])
+
+    def test_two_runs_in_the_same_second_get_their_own_folders(self):
+        from extscan.store import new_run_id
+        self.runs.mkdir()
+        first = new_run_id(self.runs)
+        (self.runs / first).mkdir()
+        self.assertNotEqual(new_run_id(self.runs), first)
